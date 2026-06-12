@@ -59,6 +59,7 @@ import { MarketContextPanel } from "@/components/signals/market-context-panel";
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
 import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
 import { FullPriceChart, type ChartSignalOverlay } from "@/components/assistant/full-price-chart";
+import { ContentLoading } from "@/components/content-loading";
 import { ScenarioWhatIf } from "@/components/dashboard/trading-room/scenario-what-if";
 import { RiskStackPanel } from "@/components/signal-evidence/risk-stack-panel";
 import { isExecutionStageEligibleForScenarioAdjust } from "@/lib/scenario/scenario-variants";
@@ -727,7 +728,8 @@ export function DeepDive({
   // fall back to the card itself so its own lane is never shown as unavailable.
   const dayState: FeedState | null = dayLaneCard?.state ?? (card.lane === "day" ? card.state : null);
   const swingState: FeedState | null = swingLaneCard?.state ?? (card.lane === "swing" ? card.state : null);
-  const { composite, isInitialLoading } = useSignalComposite(card.symbol, activeLane);
+  const { composite, isInitialLoading, isRevalidating, transportError, fetchErrorMessage } =
+    useSignalComposite(card.symbol, activeLane);
 
   useEffect(() => {
     if (dataRefreshNonce <= 0) return;
@@ -749,7 +751,9 @@ export function DeepDive({
     () => deriveSetupBiasFromComposite(composite, layerRows),
     [composite, layerRows]
   );
-  const isInsufficient = !composite || isInsufficientCompositeResponse(composite);
+  const hasRenderableComposite =
+    composite != null && !isInsufficientCompositeResponse(composite);
+  const isInsufficient = !hasRenderableComposite;
 
   const compositeAlignmentRatio = useMemo(() => {
     if (isInsufficient) return null;
@@ -1078,7 +1082,7 @@ export function DeepDive({
       : displayDirection.direction === "short"
         ? colors.bearish
         : colors.textMuted;
-  const loading = isInitialLoading && !composite;
+  const loading = isInitialLoading || (isRevalidating && !hasRenderableComposite);
 
   const evalTime = useMemo(() => {
     const raw = (composite as Record<string, unknown> | null)?.generated_at;
@@ -1352,7 +1356,26 @@ export function DeepDive({
       <SegTabs value={tab} onSelect={setTab} chartsDot={chartsDot} colors={colors} />
 
       {/* ── Tab panels — identical to the Signals page ──────────────────── */}
-      <div style={{ minHeight: 120 }}>
+      <div style={{ minHeight: loading ? 220 : 120 }}>
+        {loading ? (
+          <div
+            data-testid="deep-dive-loading"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: spacing[3],
+              padding: `${spacing[5]} ${spacing[3]}`,
+              minHeight: 200
+            }}
+          >
+            <ContentLoading compact />
+            <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, textAlign: "center" }}>
+              Loading live analysis for {card.symbol}…
+            </p>
+          </div>
+        ) : null}
         {/* Session-aware day suppression banner */}
         {dayMarketClosed ? (
           <div
@@ -1374,14 +1397,9 @@ export function DeepDive({
             </p>
           </div>
         ) : null}
-        {tab === "setup" ? (
+        {tab === "setup" && !loading ? (
           <div style={{ display: "flex", flexDirection: "column", gap: spacing[4] }}>
-            {loading ? (
-              <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
-                Loading live analysis…
-              </span>
-            ) : null}
-            {!loading && !isInsufficient ? (
+            {!isInsufficient ? (
               <>
                 {/* 1. Bias + layer force summary (prototype panel 1) */}
                 <SignalsBiasRationalePanel
@@ -1640,13 +1658,40 @@ export function DeepDive({
                 ) : null}
               </>
             ) : null}
-            {!loading && isInsufficient ? (
-              <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.6 }}>
-                {card.verdict}
-              </p>
+            {isInsufficient ? (
+              <div
+                data-testid="deep-dive-insufficient"
+                style={{ display: "flex", flexDirection: "column", gap: spacing[3] }}
+              >
+                <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.6 }}>
+                  {transportError || fetchErrorMessage
+                    ? `Live analysis for ${card.symbol} is unavailable right now.`
+                    : card.verdict}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sym = card.symbol.trim().toUpperCase();
+                    void revalidateSignalCompositeCache(sym, activeLane);
+                  }}
+                  style={{
+                    alignSelf: "flex-start",
+                    border: `1px solid ${colors.border}`,
+                    background: colors.surfaceMuted,
+                    color: colors.text,
+                    fontSize: typography.scale.xs,
+                    fontWeight: 600,
+                    borderRadius: borderRadius.sm,
+                    padding: `${spacing[2]} ${spacing[3]}`,
+                    cursor: "pointer"
+                  }}
+                >
+                  Retry analysis
+                </button>
+              </div>
             ) : null}
           </div>
-        ) : tab === "layers" ? (
+        ) : tab === "layers" && !loading ? (
           <SignalsLayerBreakdown
             symbol={card.symbol}
             tradingMode={activeLane}
@@ -1658,13 +1703,13 @@ export function DeepDive({
             causalNarrative={causalNarrative}
             alignmentRatio={compositeAlignmentRatio}
           />
-        ) : tab === "evolution" ? (
+        ) : tab === "evolution" && !loading ? (
           <SetupEvolutionPanel
             key={`evolution-${card.symbol}-${activeLane}-${dataRefreshNonce}`}
             symbol={card.symbol}
             tradingMode={activeLane}
           />
-        ) : (
+        ) : tab === "charts" && !loading ? (
           /* Charts tab — full day/swing trading chart */
           <article
             style={{
@@ -1689,7 +1734,7 @@ export function DeepDive({
               currentPrice={card.price ?? null}
             />
           </article>
-        )}
+        ) : null}
       </div>
       </div>{/* end tabs card */}
     </div>

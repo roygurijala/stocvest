@@ -68,6 +68,7 @@ import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
 import { environmentSessionCardHint } from "@/lib/signal-evidence/environment-session-hint";
 import type { MarketEnvironmentPayload } from "@/lib/signal-evidence/market-environment-present";
 import {
+  consumeTradingRoomPostLoginFresh,
   getLastSelectedId,
   isFirstVisitOfTradingDay,
   recordTradingRoomVisit,
@@ -489,9 +490,27 @@ function TradingRoomBody({
     return () => window.removeEventListener(TRADING_ROOM_DATA_REFRESH_EVENT, onDataRefresh);
   }, []);
 
+  const resetToMarketBrief = () => {
+    setLastSelectedId(null);
+    clearTradingRoomOpenIntent();
+    setSelectedId(null);
+    setOverrideCard(null);
+    syncSymbolInUrl(null);
+    recordTradingRoomVisit();
+    selectionBootstrappedRef.current = true;
+  };
+
   const applyDeepLinkOrRestoreSelection = () => {
     const pendingHandoff = peekTradingRoomOpenIntent();
     const freshTradingDay = !pendingHandoff && isFirstVisitOfTradingDay();
+    const freshAfterLogin = !pendingHandoff && consumeTradingRoomPostLoginFresh();
+
+    // First open each NY day, or first dashboard load after logout → login, lands
+    // on Market Brief — even when a symbol is still in the URL or sessionStorage.
+    if (freshTradingDay || freshAfterLogin) {
+      resetToMarketBrief();
+      return;
+    }
 
     // Card clicks update the URL via `replaceState`, which does not refresh
     // `useSearchParams`. When the user already has a selection, keep it and heal
@@ -499,19 +518,6 @@ function TradingRoomBody({
     if (selectedId && selected) {
       syncSymbolInUrl(selected);
       clearTradingRoomOpenIntent();
-      recordTradingRoomVisit();
-      selectionBootstrappedRef.current = true;
-      return;
-    }
-
-    if (freshTradingDay) {
-      setLastSelectedId(null);
-      clearTradingRoomOpenIntent();
-      if (selectedId || overrideCard) {
-        setSelectedId(null);
-        setOverrideCard(null);
-      }
-      syncSymbolInUrl(null);
       recordTradingRoomVisit();
       selectionBootstrappedRef.current = true;
       return;
@@ -561,6 +567,18 @@ function TradingRoomBody({
   useEffect(() => {
     applyDeepLinkOrRestoreSelection();
   }, [openIntent, searchParams, allCards, selectedId]);
+
+  // Tabs left open overnight keep React state — reset when the calendar day turns.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      if (peekTradingRoomOpenIntent()) return;
+      if (!isFirstVisitOfTradingDay()) return;
+      resetToMarketBrief();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [pathname, searchParams]);
 
   // Top setup for the brief CTA: hottest actionable, else hottest overall.
   const topCard = useMemo(

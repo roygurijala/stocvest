@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import { clearAssistantSession } from "@/lib/assistant/session-reset";
+import { clearTradingRoomClientSession } from "@/lib/dashboard/trading-room/session-selection";
 import { openCrispChat } from "@/components/crisp-chat";
 import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
 import { useMarketSessionPhase } from "@/lib/hooks/use-market-session-phase";
@@ -296,7 +297,14 @@ export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
             <span className="lnav-label lnav-fade">Send feedback</span>
           </button>
           <form action={logoutAction}>
-            <button type="submit" onClick={() => clearAssistantSession()} className="lnav-item lnav-signout">
+            <button
+              type="submit"
+              onClick={() => {
+                clearAssistantSession();
+                clearTradingRoomClientSession();
+              }}
+              className="lnav-item lnav-signout"
+            >
               <span className="lnav-ic">
                 <LogOut size={18} />
               </span>

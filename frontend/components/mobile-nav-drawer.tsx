@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ChevronDown, ChevronRight, MessageCircle, ShieldCheck, X } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import { clearAssistantSession } from "@/lib/assistant/session-reset";
+import { clearTradingRoomClientSession } from "@/lib/dashboard/trading-room/session-selection";
 import { openCrispChat } from "@/components/crisp-chat";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -242,7 +243,10 @@ export function MobileNavDrawer({
                 <form action={logoutAction}>
                   <button
                     type="submit"
-                    onClick={() => clearAssistantSession()}
+                    onClick={() => {
+                      clearAssistantSession();
+                      clearTradingRoomClientSession();
+                    }}
                     className="flex w-full min-h-11 items-center justify-center gap-2 rounded-md border text-sm font-semibold"
                     style={{
                       borderColor: colors.border,
