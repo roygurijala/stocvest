@@ -5,6 +5,10 @@ import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { OpenTradingRoomSetupButton } from "@/components/dashboard/trading-room/open-trading-room-setup-button";
 import { ScannerDetailKeyLevels } from "@/components/scanner/terminal/scanner-detail-key-levels";
 import { ScannerSymbolLookupPanel } from "@/components/scanner/terminal/scanner-symbol-lookup-panel";
+import {
+  ScannerThemeBriefPanel,
+  ThemeSymbolBackBar
+} from "@/components/scanner/terminal/scanner-theme-brief-panel";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { ThemeColors } from "@/lib/design-system";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
@@ -25,6 +29,8 @@ type Props = {
   environment: MarketEnvironmentPayload | null;
   evaluationTrace: ScannerEvaluationTraceRow[];
   colors: ThemeColors;
+  onRadarSymbolSelect?: (symbol: string) => void;
+  onRadarThemeBack?: () => void;
 };
 
 function fmtPct(n: number | null): string {
@@ -254,23 +260,71 @@ export function ScannerDetailPanel({
   if (selection.kind === "radar") {
     const group = radar.find((g) => g.id === selection.groupId);
     if (!group) return <EmptyState colors={colors} />;
-    const sym = selection.symbol ?? group.symbols[0];
+
+    if (selection.symbol) {
+      const sym = selection.symbol.trim().toUpperCase();
+      const gapRow = gaps.find((g) => g.symbol === sym);
+      if (gapRow) {
+        const lane = gapRow.lane === "either" ? "swing" : gapRow.lane;
+        return (
+          <div style={{ padding: spacing[4] }}>
+            {onRadarThemeBack ? (
+              <ThemeSymbolBackBar themeTitle={group.title} onBack={onRadarThemeBack} colors={colors} />
+            ) : null}
+            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: colors.textMuted }}>
+              Gap intelligence
+            </p>
+            <h3 style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.lg, color: colors.text }}>{gapRow.symbol}</h3>
+            {gapRow.company ? (
+              <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>{gapRow.company}</p>
+            ) : null}
+            <PriceHero price={gapRow.currentPrice} changePct={gapRow.gapPct} secondary={`Prev ${fmtPrice(gapRow.prevClose)}`} colors={colors} />
+            <CtaRow symbol={sym} lane={lane} colors={colors} />
+          </div>
+        );
+      }
+
+      const signalRow =
+        actionable.find((r) => r.symbol === sym) ?? developing.find((r) => r.symbol === sym) ?? null;
+      if (signalRow) {
+        return (
+          <div style={{ padding: spacing[4] }}>
+            {onRadarThemeBack ? (
+              <ThemeSymbolBackBar themeTitle={group.title} onBack={onRadarThemeBack} colors={colors} />
+            ) : null}
+            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: colors.textMuted }}>
+              {signalRow.state === "actionable" ? "Actionable" : "Developing"}
+            </p>
+            <h3 style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.lg, color: colors.text }}>{signalRow.symbol}</h3>
+            <PriceHero price={signalRow.price} changePct={signalRow.changePct} colors={colors} />
+            <CtaRow symbol={sym} lane={signalRow.lane} colors={colors} />
+          </div>
+        );
+      }
+
+      return (
+        <div style={{ padding: spacing[4] }}>
+          {onRadarThemeBack ? (
+            <ThemeSymbolBackBar themeTitle={group.title} onBack={onRadarThemeBack} colors={colors} />
+          ) : null}
+          <ScannerSymbolLookupPanel
+            symbol={sym}
+            lane="swing"
+            evaluationTrace={evaluationTrace}
+            environment={environment}
+            colors={colors}
+          />
+        </div>
+      );
+    }
+
     return (
-      <div style={{ padding: spacing[4] }}>
-        <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: colors.textMuted }}>
-          On radar
-        </p>
-        <h3 style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.lg, color: colors.text }}>{group.title}</h3>
-        {group.note ? (
-          <p style={{ margin: `${spacing[2]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-            {group.note}
-          </p>
-        ) : null}
-        <p style={{ margin: `${spacing[3]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-          {group.symbols.join(" · ")}
-        </p>
-        {sym ? <CtaRow symbol={sym} lane="swing" colors={colors} /> : null}
-      </div>
+      <ScannerThemeBriefPanel
+        group={group}
+        gaps={gaps}
+        onSelectSymbol={(symbol) => onRadarSymbolSelect?.(symbol)}
+        colors={colors}
+      />
     );
   }
 

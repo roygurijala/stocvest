@@ -459,6 +459,16 @@ export function ScannerTerminal({
       environment={environment}
       evaluationTrace={evaluationTrace}
       colors={colors}
+      onRadarSymbolSelect={(symbol) =>
+        setSelection((prev) =>
+          prev?.kind === "radar" ? { kind: "radar", groupId: prev.groupId, symbol } : prev
+        )
+      }
+      onRadarThemeBack={() =>
+        setSelection((prev) =>
+          prev?.kind === "radar" ? { kind: "radar", groupId: prev.groupId } : prev
+        )
+      }
     />
   );
 
