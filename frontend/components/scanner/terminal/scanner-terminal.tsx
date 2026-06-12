@@ -296,6 +296,14 @@ function GapSectionLabel({
   );
 }
 
+function funnelCardGridStyle(twoColumn: boolean): CSSProperties {
+  return {
+    display: "grid",
+    gap: spacing[2],
+    gridTemplateColumns: twoColumn ? "repeat(2, minmax(0, 1fr))" : "1fr"
+  };
+}
+
 function GapCardList({
   rows,
   selection,
@@ -339,11 +347,7 @@ function GapCardList({
     );
   };
 
-  const cardGridStyle: CSSProperties = {
-    display: "grid",
-    gap: spacing[2],
-    gridTemplateColumns: twoColumn ? "repeat(2, minmax(0, 1fr))" : "1fr"
-  };
+  const cardGridStyle = funnelCardGridStyle(twoColumn);
 
   if (layout === "flat") {
     return <div style={cardGridStyle}>{rows.map(renderRow)}</div>;
@@ -399,6 +403,10 @@ function SignalRow({
   const sTone = stateTone(row.state, colors);
   const pctTone =
     row.changePct == null ? colors.textMuted : row.changePct >= 0 ? colors.bullish : colors.bearish;
+  const blockerNote =
+    row.blockerNote?.trim() && row.blockerNote.trim().toLowerCase() !== (row.verdict?.trim() ?? "").toLowerCase()
+      ? row.blockerNote.trim()
+      : null;
   return (
     <button
       type="button"
@@ -444,8 +452,8 @@ function SignalRow({
       {row.verdict ? (
         <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>{row.verdict}</p>
       ) : null}
-      {row.blockerNote && !highlight ? (
-        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>{row.blockerNote}</p>
+      {blockerNote && !highlight ? (
+        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>{blockerNote}</p>
       ) : null}
       {sessionHint ? (
         <p style={{ margin: 0, fontSize: 10, color: colors.caution, fontWeight: 600 }}>{sessionHint}</p>
@@ -935,7 +943,7 @@ export function ScannerTerminal({
                 bootstrapLoading && sections.actionable.length === 0 ? (
                   <FunnelLoadingSkeleton lines={2} colors={colors} />
                 ) : (
-                <div style={{ display: "grid", gap: spacing[2] }}>
+                <div style={funnelCardGridStyle(!narrowLayout)}>
                   {sections.actionable.map((row) => (
                     <SignalRow
                       key={row.id}
@@ -971,30 +979,34 @@ export function ScannerTerminal({
                   {sections.developingClosest.length > 0 ? (
                     <>
                       <DevelopingSubLabel colors={colors}>Closest to triggering</DevelopingSubLabel>
-                      {sections.developingClosest.map((row) => (
-                        <SignalRow
-                          key={row.id}
-                          row={row}
-                          selected={selection?.kind === "signal" && selection.id === row.id}
-                          onSelect={() => setSelection({ kind: "signal", id: row.id })}
-                          sessionHint={sessionHintForRow(row, environment)}
-                          colors={colors}
-                        />
-                      ))}
+                      <div style={funnelCardGridStyle(!narrowLayout)}>
+                        {sections.developingClosest.map((row) => (
+                          <SignalRow
+                            key={row.id}
+                            row={row}
+                            selected={selection?.kind === "signal" && selection.id === row.id}
+                            onSelect={() => setSelection({ kind: "signal", id: row.id })}
+                            sessionHint={sessionHintForRow(row, environment)}
+                            colors={colors}
+                          />
+                        ))}
+                      </div>
                     </>
                   ) : null}
                   {sections.developingAlso.length > 0 ? (
                     <>
                       <DevelopingSubLabel colors={colors}>Also developing</DevelopingSubLabel>
-                      {sections.developingAlso.map((row) => (
-                        <SignalRow
-                          key={row.id}
-                          row={row}
-                          selected={selection?.kind === "signal" && selection.id === row.id}
-                          onSelect={() => setSelection({ kind: "signal", id: row.id })}
-                          colors={colors}
-                        />
-                      ))}
+                      <div style={funnelCardGridStyle(!narrowLayout)}>
+                        {sections.developingAlso.map((row) => (
+                          <SignalRow
+                            key={row.id}
+                            row={row}
+                            selected={selection?.kind === "signal" && selection.id === row.id}
+                            onSelect={() => setSelection({ kind: "signal", id: row.id })}
+                            colors={colors}
+                          />
+                        ))}
+                      </div>
                     </>
                   ) : null}
                 </div>

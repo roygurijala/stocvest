@@ -272,7 +272,7 @@ export function feedCardToSignalRow(
   const blocker =
     card.state === "actionable"
       ? null
-      : card.verdict?.trim() || setup?.triggers?.find((t) => t.trim())?.trim() || null;
+      : setup?.triggers?.find((t) => t.trim())?.trim() || null;
   return {
     id: card.id,
     symbol: card.symbol,
@@ -294,7 +294,6 @@ function developingBlocker(row: ScannerNearQualificationRow): string | null {
   if (row.layers_away != null && row.layers_away > 0) {
     return `needs ${row.layers_away} more layer${row.layers_away === 1 ? "" : "s"}`;
   }
-  if (row.alignment?.label?.trim()) return row.alignment.label.trim();
   return null;
 }
 
