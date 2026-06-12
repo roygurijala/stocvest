@@ -243,6 +243,23 @@ a {
   width: 100%;
 }
 
+/* Trading Room desktop: each zone scrolls inside a viewport-tall shell (prototype
+ * `.zone { overflow-y: auto }`) so side panes never ghost below the footer when
+ * the center column is taller than the viewport. */
+@media (min-width: 900px) {
+  .trading-room-columns {
+    min-height: 20rem;
+    overflow: hidden;
+  }
+  .trading-room-column {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 /*
  * Dashboard "scanning" pulse — reused by empty-state indicators
  * across the Active Signal Ribbon, Swing Desk empty card, and Day

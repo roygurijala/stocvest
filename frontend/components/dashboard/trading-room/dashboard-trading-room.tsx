@@ -868,10 +868,38 @@ function TradingRoomBody({
   // 900px breakpoint the dashboard uses.
   const bleed = isMobile ? spacing[4] : spacing[6];
 
+  const wrapColumn = (node: ReactNode, lane: "feed" | "center" | "rail") =>
+    isMobile ? (
+      node
+    ) : (
+      <div
+        className={`trading-room-column trading-room-column--${lane}`}
+        data-testid={`trading-room-column-${lane}`}
+        style={
+          lane === "feed"
+            ? { paddingRight: spacing[3], borderRight: `1px solid ${colors.border}` }
+            : undefined
+        }
+      >
+        {node}
+      </div>
+    );
+
   return (
     <section
       className="stocvest-dashboard-v2"
-      style={{ display: "grid", gap: 0, color: colors.text }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 0,
+        color: colors.text,
+        ...(isMobile
+          ? {}
+          : {
+              height: "calc(100dvh - 1.5rem)",
+              maxHeight: "calc(100dvh - 1.5rem)"
+            })
+      }}
     >
       <TradingRoomMountRefresh
         dayTradingSurfaces={dayTradingSurfaces}
@@ -912,12 +940,15 @@ function TradingRoomBody({
       ) : null}
 
       <div
+        className={isMobile ? undefined : "trading-room-columns"}
         style={{
           display: "grid",
           gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : gridTemplate,
           gap: spacing[4],
-          alignItems: "start",
-          marginTop: spacing[5]
+          alignItems: isMobile ? "start" : "stretch",
+          marginTop: spacing[5],
+          flex: isMobile ? undefined : 1,
+          minHeight: isMobile ? undefined : 0
         }}
       >
         {isMobile ? (
@@ -930,9 +961,9 @@ function TradingRoomBody({
           </>
         ) : (
           <>
-            {feedPanel}
-            {centerPanel}
-            {railPanel}
+            {wrapColumn(feedPanel, "feed")}
+            {wrapColumn(centerPanel, "center")}
+            {wrapColumn(railPanel, "rail")}
           </>
         )}
       </div>
@@ -1127,28 +1158,8 @@ function SignalFeed({
   refreshingCardIds?: Set<string>;
 }) {
   const empty = day.length === 0 && swing.length === 0;
-  // Desktop: sticky wrapper + inner scroll so the pane does not ghost below the
-  // footer when the center column is taller than the viewport. Mobile: normal flow.
-  const paneStyle: CSSProperties = isMobile
-    ? { display: "flex", flexDirection: "column", gap: spacing[4] }
-    : {
-        position: "sticky",
-        top: spacing[3],
-        alignSelf: "start",
-        width: "100%",
-        maxHeight: "calc(100vh - 220px)"
-      };
-  const scrollStyle: CSSProperties | undefined = isMobile
-    ? undefined
-    : {
-        display: "flex",
-        flexDirection: "column",
-        gap: spacing[4],
-        maxHeight: "calc(100vh - 220px)",
-        overflowY: "auto",
-        paddingRight: spacing[3],
-        borderRight: `1px solid ${colors.border}`
-      };
+  // Desktop scroll lives on `.trading-room-column--feed` (prototype zone model).
+  const paneStyle: CSSProperties = { display: "flex", flexDirection: "column", gap: spacing[4] };
   const body = (
     <>
       {feedEnvironment ? (
@@ -1236,7 +1247,7 @@ function SignalFeed({
       ) : null}
     </>
   );
-  return isMobile ? <div style={paneStyle}>{body}</div> : <div style={paneStyle}><div style={scrollStyle}>{body}</div></div>;
+  return <div style={paneStyle}>{body}</div>;
 }
 
 function FeedLaneSection({

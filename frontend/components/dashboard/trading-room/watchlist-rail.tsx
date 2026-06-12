@@ -540,11 +540,8 @@ export function WatchlistRail({
           textTransform: "uppercase",
           cursor: "pointer",
           padding: isMobile ? `${spacing[3]} ${spacing[4]}` : `${spacing[3]} ${spacing[2]}`,
-          // Desktop: keep the rail full-viewport-tall and sticky so the vertical
-          // label stays centered in the page as the user scrolls.
-          position: isMobile ? "static" : "sticky",
-          top: isMobile ? undefined : spacing[3],
-          height: isMobile ? undefined : "calc(100vh - 200px)"
+          height: isMobile ? undefined : "100%",
+          minHeight: isMobile ? undefined : "100%"
         }}
       >
         <span>{isMobile ? "Your watchlist" : "Watchlist"} {symbols.length ? `· ${symbols.length}` : ""}</span>
@@ -604,7 +601,16 @@ export function WatchlistRail({
         </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: spacing[2], overflowY: "auto" }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: spacing[2],
+          overflowY: "auto",
+          flex: isMobile ? undefined : 1,
+          minHeight: isMobile ? undefined : 0
+        }}
+      >
         {status === "loading" && cards.length === 0 ? (
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Loading watchlist…</span>
         ) : status === "error" ? (
