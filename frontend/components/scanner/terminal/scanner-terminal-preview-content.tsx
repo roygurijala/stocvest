@@ -12,6 +12,7 @@ import { useDeskToday } from "@/lib/hooks/use-desk-today";
 import { useDashboardPayload } from "@/lib/hooks/use-dashboard-payload";
 import { fetchIpoEcosystems, type IpoEcosystemPayload } from "@/lib/api/fetch-ipo-ecosystems";
 import { parseSectorRotationEnvelope } from "@/lib/scanner/terminal/scanner-terminal-sector-themes";
+import { fetchBffWithRetry } from "@/lib/bff/client-fetch-retry";
 import { scannerTerminalLoadTuning } from "@/lib/scanner/terminal/scanner-terminal-load-tuning";
 
 const EMPTY_OVERVIEW: ScannerOverview = {
@@ -55,7 +56,7 @@ export function ScannerTerminalPreviewContent({
       fetchIpoEcosystems()
         .then((ecosystems) => setIpoEcosystems(ecosystems))
         .catch(() => undefined),
-      fetch("/api/stocvest/watchlists/default/symbols", { cache: "no-store" })
+      fetchBffWithRetry("/api/stocvest/watchlists/default/symbols", { cache: "no-store" })
         .then(async (wl) => {
           if (!wl.ok) return;
           const body = (await wl.json()) as { symbols?: string[] };

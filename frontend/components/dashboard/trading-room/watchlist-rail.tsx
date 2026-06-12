@@ -32,6 +32,7 @@ import {
   laneBadgeStyle
 } from "@/lib/dashboard/trading-room/feed-card-present";
 import { feedBiasColor } from "@/lib/signal-direction-colors";
+import { fetchBffWithRetry } from "@/lib/bff/client-fetch-retry";
 import { WATCHLIST_SYMBOLS_CHANGED_EVENT } from "@/lib/watchlist-membership-client";
 import { fetchSetupEvolution, type SetupEvolutionResponse } from "@/lib/api/setup-evolution";
 import {
@@ -434,18 +435,12 @@ export function WatchlistRail({
     let cancelled = false;
     setStatus("loading");
     void (async () => {
-      const retryable = new Set([502, 503, 504]);
-      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
       try {
-        let wlRes: Response | null = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          wlRes = await fetch("/api/stocvest/watchlists/default/symbols", { cache: "no-store" });
-          if (wlRes.ok || !retryable.has(wlRes.status) || attempt === 2) break;
-          await sleep(600 * (attempt + 1));
-        }
-        const matRes = await fetch(`/api/stocvest/watchlists/maturation-summary?mode=${encodeURIComponent(mode)}`, {
-          cache: "no-store"
-        });
+        const wlRes = await fetchBffWithRetry("/api/stocvest/watchlists/default/symbols", { cache: "no-store" });
+        const matRes = await fetchBffWithRetry(
+          `/api/stocvest/watchlists/maturation-summary?mode=${encodeURIComponent(mode)}`,
+          { cache: "no-store" }
+        );
         if (cancelled) return;
         const wlJson = wlRes?.ok ? await wlRes.json().catch(() => ({})) : {};
         const matJson = matRes.ok ? await matRes.json().catch(() => ({})) : {};

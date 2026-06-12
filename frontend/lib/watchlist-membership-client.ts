@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { fetchBffWithRetry } from "@/lib/bff/client-fetch-retry";
 import { coerceDeskTracking, type WatchlistDeskTracking } from "@/lib/watchlist-symbol-tracking";
 
 export const WATCHLIST_SYMBOLS_CHANGED_EVENT = "stocvest:watchlist-symbols-changed";
@@ -62,17 +63,21 @@ function parseSymbolTracking(raw: unknown, symbols: string[], dualDesk: boolean)
 }
 
 export async function fetchDefaultWatchlistMeta(dualDesk = true): Promise<DefaultWatchlistMeta | null> {
-  const listsRes = await fetch("/api/stocvest/watchlists", { credentials: "same-origin", cache: "no-store" });
+  const listsRes = await fetchBffWithRetry("/api/stocvest/watchlists", {
+    credentials: "same-origin",
+    cache: "no-store"
+  });
   if (!listsRes.ok) return null;
   const listsBody = (await listsRes.json().catch(() => ({}))) as {
     watchlists?: Array<{ watchlist_id?: string; is_default?: boolean; symbols?: unknown; symbol_tracking?: unknown }>;
+    degraded?: boolean;
   };
   const rows = listsBody.watchlists ?? [];
   const wl = rows.find((w) => w.is_default) ?? rows[0];
   const watchlistId = String(wl?.watchlist_id ?? "").trim();
   if (!watchlistId) return null;
 
-  const symRes = await fetch("/api/stocvest/watchlists/default/symbols", {
+  const symRes = await fetchBffWithRetry("/api/stocvest/watchlists/default/symbols", {
     credentials: "same-origin",
     cache: "no-store"
   });

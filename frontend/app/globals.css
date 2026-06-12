@@ -558,6 +558,37 @@ a {
   filter: brightness(1.06);
 }
 
+.scanner-terminal-funnel-section[data-separated="true"] {
+  position: relative;
+}
+
+.scanner-terminal-funnel-section[data-separated="true"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(148, 163, 184, 0.22) 12%,
+    rgba(148, 163, 184, 0.22) 88%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.theme-light .scanner-terminal-funnel-section[data-separated="true"]::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(100, 116, 139, 0.18) 12%,
+    rgba(100, 116, 139, 0.18) 88%,
+    transparent 100%
+  );
+}
+
 .scanner-terminal-section-header:active {
   filter: brightness(0.98);
 }
