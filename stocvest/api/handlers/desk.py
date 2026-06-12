@@ -22,7 +22,7 @@ from stocvest.api.shared import build_request_context
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data import PolygonClient
 from stocvest.data.corporate_actions import recent_split_symbols, symbols_with_frequent_reverse_splits
-from stocvest.data.dashboard_cache import read_dashboard_cache
+from stocvest.data.dashboard_cache import opportunity_desk_stale_key, read_dashboard_cache
 from stocvest.signals.day_trading_scanner import dynamic_gap_candidates_from_snapshots_with_stats
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -242,23 +242,29 @@ def desk_today_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
 
     key = opportunity_desk_redis_key(mode)
     envelope = read_dashboard_cache(key)
+    source: Literal["cache", "cache_stale", "cache_miss"] = "cache"
     if envelope is None:
-        return ok(
-            {
-                "mode": mode,
-                "source": "cache_miss",
-                "envelope": None,
-                "data": None,
-                "why_missing": why_missing,
-                "disclaimer": API_SIGNAL_DISCLAIMER,
-            }
-        )
+        stale = read_dashboard_cache(opportunity_desk_stale_key(key))
+        if stale is not None:
+            envelope = stale
+            source = "cache_stale"
+        else:
+            return ok(
+                {
+                    "mode": mode,
+                    "source": "cache_miss",
+                    "envelope": None,
+                    "data": None,
+                    "why_missing": why_missing,
+                    "disclaimer": API_SIGNAL_DISCLAIMER,
+                }
+            )
 
     data = envelope.get("data") if isinstance(envelope.get("data"), dict) else None
     return ok(
         {
             "mode": mode,
-            "source": "cache",
+            "source": source,
             "envelope": envelope,
             "data": data,
             "why_missing": why_missing,

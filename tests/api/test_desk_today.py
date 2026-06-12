@@ -34,6 +34,30 @@ def test_desk_today_cache_miss() -> None:
     assert "disclaimer" in body
 
 
+def test_desk_today_cache_stale_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    stale_envelope = {
+        "state_version": "day_2026_06_12_10_00",
+        "computed_at": "2026-06-12T14:00:00Z",
+        "market_date": "2026-06-12",
+        "ttl_seconds": 1200,
+        "data": {
+            "discovery": [{"symbol": "ASTN", "gap_percent": 27.0}],
+            "movers_radar": [{"symbol": "ASTN", "gap_percent": 27.0}],
+        },
+    }
+
+    def _read(key: str) -> dict | None:
+        if key.endswith(":stale"):
+            return stale_envelope
+        return None
+
+    monkeypatch.setattr("stocvest.api.handlers.desk.read_dashboard_cache", _read)
+    out = desk_today_handler(_event("day"), {})
+    body = json.loads(out["body"])
+    assert body["source"] == "cache_stale"
+    assert body["data"]["discovery"][0]["symbol"] == "ASTN"
+
+
 def test_desk_today_cache_hit(monkeypatch: pytest.MonkeyPatch) -> None:
     envelope = {
         "state_version": "swing_2026_05_26",

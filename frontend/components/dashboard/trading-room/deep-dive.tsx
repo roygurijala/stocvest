@@ -43,7 +43,8 @@ import {
   scenarioPriceAxisPercent,
   scenarioTrackBounds
 } from "@/lib/dashboard/trading-room/deep-dive-present";
-import { isInsufficientCompositeResponse } from "@/lib/api/swing-composite";
+import { isNonRenderableCompositeResponse } from "@/lib/api/swing-composite";
+import { resolveDeepDiveUnavailableMessage } from "@/lib/dashboard/trading-room/composite-unavailable-present";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import { resolveTimeframeContext, isTimeframeCounterTrend } from "@/lib/signal-evidence/timeframe-context";
 import { resolveSetupJudgmentFromComposite } from "@/lib/signal-evidence/setup-judgment";
@@ -753,8 +754,20 @@ export function DeepDive({
     [composite, layerRows]
   );
   const hasRenderableComposite =
-    composite != null && !isInsufficientCompositeResponse(composite);
+    composite != null && !isNonRenderableCompositeResponse(composite);
   const isInsufficient = !hasRenderableComposite;
+
+  const unavailableMessage = useMemo(
+    () =>
+      resolveDeepDiveUnavailableMessage({
+        symbol: card.symbol,
+        cardVerdict: card.verdict,
+        composite,
+        transportError,
+        fetchErrorMessage
+      }),
+    [card.symbol, card.verdict, composite, transportError, fetchErrorMessage]
+  );
 
   const compositeAlignmentRatio = useMemo(() => {
     if (isInsufficient) return null;
@@ -1657,9 +1670,7 @@ export function DeepDive({
                 style={{ display: "flex", flexDirection: "column", gap: spacing[3] }}
               >
                 <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.6 }}>
-                  {transportError || fetchErrorMessage
-                    ? `Live analysis for ${card.symbol} is unavailable right now.`
-                    : card.verdict}
+                  {unavailableMessage}
                 </p>
                 <button
                   type="button"

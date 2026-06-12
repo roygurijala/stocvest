@@ -24,6 +24,17 @@ ET = ZoneInfo("America/New_York")
 SIGNALS_LIVE_HINT_KEY = "stocvest:signals:live_hint"
 
 
+# Opportunity Desk movers batch runs every 15m RTH; day primary TTL must outlive that gap.
+OPPORTUNITY_DESK_DAY_RTH_TTL_SEC = 1200
+OPPORTUNITY_DESK_DAY_OFF_HOURS_TTL_SEC = 14400
+OPPORTUNITY_DESK_STALE_BACKUP_TTL_SEC = 86400
+
+
+def opportunity_desk_stale_key(primary_key: str) -> str:
+    """Longer-lived copy served when the primary desk key has expired."""
+    return f"{primary_key}:stale"
+
+
 class DashboardKeys:
     TOP_SIGNALS_SWING = "stocvest:dashboard:top_signals_swing"
     TOP_SIGNALS_DAY = "stocvest:dashboard:top_signals_day"
@@ -87,8 +98,8 @@ def get_market_ttl(key_type: str) -> int:
             # Swing desk must survive long weekends (Fri close → Mon open ≈ 65 h);
             # use 4 days to cover 3-day holiday weekends with margin.
             "opportunity_desk_swing": 345600,
-            # Day desk is intraday-only; 1-hour off-hours TTL is fine.
-            "opportunity_desk_day": 3600,
+            # Day desk survives overnight gaps until the next session batch.
+            "opportunity_desk_day": OPPORTUNITY_DESK_DAY_OFF_HOURS_TTL_SEC,
             # Legacy key — keep for backwards compat during rollout.
             "opportunity_desk": 3600,
             "evidence": 300,
@@ -102,12 +113,10 @@ def get_market_ttl(key_type: str) -> int:
         "upcoming_events": 86400,
         "active_positions": 300,
         "geo_themes": 86400,
-        # During market hours the batch refreshes every ~5 min; use short TTL
-        # so stale runs don't linger. Swing still gets a long off-hours TTL
-        # (see above) because the last market-hours write sets the weekend TTL.
+        # Movers batch every 15m — day TTL must survive one missed run + jitter.
         "opportunity_desk_swing": 345600,
-        "opportunity_desk_day": 300,
-        "opportunity_desk": 300,
+        "opportunity_desk_day": OPPORTUNITY_DESK_DAY_RTH_TTL_SEC,
+        "opportunity_desk": OPPORTUNITY_DESK_DAY_RTH_TTL_SEC,
         "evidence": 300,
     }.get(key_type, 300)
 
@@ -140,7 +149,14 @@ def write_dashboard_cache(
         return False
     try:
         r = get_upstash()
-        r.set(key, json.dumps(envelope, default=str), ex=ttl)
+        payload = json.dumps(envelope, default=str)
+        r.set(key, payload, ex=ttl)
+        if key_type in ("opportunity_desk_swing", "opportunity_desk_day", "opportunity_desk"):
+            r.set(
+                opportunity_desk_stale_key(key),
+                payload,
+                ex=OPPORTUNITY_DESK_STALE_BACKUP_TTL_SEC,
+            )
         _log_compute_success(key, ttl, mode)
         return True
     except Exception as exc:

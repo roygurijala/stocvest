@@ -170,6 +170,41 @@ def test_heat_map_updated_on_success(fake_upstash: MagicMock, monkeypatch: pytes
     assert h.get("k:ok:status") == "ok"
 
 
+def test_opportunity_desk_day_rth_ttl_covers_movers_cadence(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixed = datetime(2026, 6, 12, 11, 0, tzinfo=ET)  # Thu RTH
+
+    class _DT:
+        @classmethod
+        def now(cls, tz=None):
+            if tz == ET:
+                return fixed
+            return fixed.astimezone(tz or timezone.utc)
+
+    monkeypatch.setattr("stocvest.data.dashboard_cache.datetime", _DT)
+    from stocvest.data.dashboard_cache import OPPORTUNITY_DESK_DAY_RTH_TTL_SEC, get_market_ttl
+
+    assert get_market_ttl("opportunity_desk_day") == OPPORTUNITY_DESK_DAY_RTH_TTL_SEC
+    assert get_market_ttl("opportunity_desk_day") >= 900
+
+
+def test_opportunity_desk_write_also_persists_stale_backup(fake_upstash: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "stocvest.data.dashboard_cache.make_state_version",
+        lambda mode="swing": "day_2099_01_01_10_00",
+    )
+    from stocvest.data.dashboard_cache import DashboardKeys, opportunity_desk_stale_key, write_dashboard_cache
+
+    ok = write_dashboard_cache(
+        DashboardKeys.OPPORTUNITY_DESK_DAY,
+        {"discovery": [{"symbol": "MU"}]},
+        "opportunity_desk_day",
+        "day",
+    )
+    assert ok is True
+    assert fake_upstash.store.get(DashboardKeys.OPPORTUNITY_DESK_DAY)
+    assert fake_upstash.store.get(opportunity_desk_stale_key(DashboardKeys.OPPORTUNITY_DESK_DAY))
+
+
 def test_heat_map_updated_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("stocvest.data.dashboard_cache.upstash_configured", lambda: True)
     client = MagicMock()

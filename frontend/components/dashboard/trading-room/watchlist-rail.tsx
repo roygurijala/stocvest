@@ -26,13 +26,10 @@ import {
 } from "@/lib/watchlist-page-utils";
 import { parseMaturationSummaryEnvelope } from "@/lib/watchlist/maturation-summary-envelope";
 import { useWatchlistMaturationReloadNonce } from "@/lib/hooks/use-watchlist-maturation-reload";
-import {
-  CardRefreshButton,
-  FeedCardUpdatedLine,
-  laneBadgeStyle
-} from "@/lib/dashboard/trading-room/feed-card-present";
+import { CardRefreshButton, FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
 import { feedBiasColor } from "@/lib/signal-direction-colors";
 import { fetchBffWithRetry } from "@/lib/bff/client-fetch-retry";
+import { useSymbolNames } from "@/lib/hooks/use-symbol-names";
 import { WATCHLIST_SYMBOLS_CHANGED_EVENT } from "@/lib/watchlist-membership-client";
 import { fetchSetupEvolution, type SetupEvolutionResponse } from "@/lib/api/setup-evolution";
 import {
@@ -41,7 +38,6 @@ import {
   formatTransitionTimelineRow
 } from "@/lib/setup-evolution-present";
 import type { FeedBias, FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
-import { useSymbolName } from "@/lib/hooks/use-symbol-names";
 
 type Colors = ReturnType<typeof useTheme>["colors"];
 
@@ -225,8 +221,7 @@ function RailCard({
   const biasAccent = feedBiasColor(card.bias, colors);
   const pct = card.changePct;
   const pctTone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
-  const autoCompany = useSymbolName(card.company ? undefined : card.symbol);
-  const company = card.company || autoCompany || null;
+  const company = card.company?.trim() || null;
   return (
     <div
       style={{
@@ -269,7 +264,6 @@ function RailCard({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
           <span style={{ display: "flex", alignItems: "center", gap: spacing[1], minWidth: 0 }}>
             <span style={{ fontSize: typography.scale.sm, fontWeight: 700 }}>{card.symbol}</span>
-            <span style={laneBadgeStyle(colors)}>{card.lane}</span>
           </span>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
             <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: pctTone }}>
@@ -492,13 +486,18 @@ export function WatchlistRail({
     };
   }, [symbols, reloadNonce]);
 
+  const symbolNames = useSymbolNames(symbols);
+
   const cards = useMemo(() => {
     const list = symbols.map((sym) =>
       cardFromWatchlist(
         sym,
         bySymbol[sym],
         snaps.get(sym),
-        snaps.get(sym)?.company_name?.trim() || companyBySymbol.get(sym) || null,
+        snaps.get(sym)?.company_name?.trim() ||
+          companyBySymbol.get(sym) ||
+          symbolNames[sym] ||
+          null,
         mode,
         liveBiasBySymbol?.get(sym)
       )
@@ -509,7 +508,7 @@ export function WatchlistRail({
       if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore;
       return a.symbol.localeCompare(b.symbol);
     });
-  }, [symbols, bySymbol, snaps, companyBySymbol, mode, liveBiasBySymbol]);
+  }, [symbols, bySymbol, snaps, companyBySymbol, symbolNames, mode, liveBiasBySymbol]);
 
   if (!open) {
     // Mobile: a full-width horizontal toggle bar; desktop: a thin vertical rail.

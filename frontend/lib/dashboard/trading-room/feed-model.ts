@@ -9,7 +9,7 @@
  * This is a PURE module (no React, no fetch) so it can be unit-tested and so
  * the UI never has to reason about which upstream source a card came from.
  */
-import type { DeskDiscoveryLeader, DeskTodayData, DeskTodayMode } from "@/lib/api/desk-today";
+import type { DeskDiscoveryLeader, DeskMoverRadarRow, DeskTodayData, DeskTodayMode } from "@/lib/api/desk-today";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import type { SnapshotPayload } from "@/lib/api/market";
 
@@ -196,6 +196,33 @@ function cardFromLeader(
   };
 }
 
+function cardFromMover(
+  mover: DeskMoverRadarRow,
+  lane: FeedLane,
+  snapshotsBySymbol: Map<string, SnapshotPayload>,
+  companyBySymbol?: Map<string, string>
+): FeedCard {
+  const symbol = mover.symbol.trim().toUpperCase();
+  const snap = snapshotsBySymbol.get(symbol);
+  const company = companyBySymbol?.get(symbol) ?? snap?.company_name?.trim() ?? null;
+  return {
+    id: `${lane}:${symbol}`,
+    symbol,
+    company,
+    lane,
+    state: "potential",
+    bias: biasFromDirection(mover.direction),
+    verdict: "Session mover — desk cache warming.",
+    phase: "session activity",
+    price: cleanNum(snap?.last_trade_price),
+    changePct: cleanNum(mover.gap_percent) ?? snapChangePct(snap),
+    alignment: null,
+    rankScore: cleanNum(mover.rank_score) ?? 0,
+    source: "desk",
+    lastEvaluatedAt: null
+  };
+}
+
 function cardFromSetup(
   setup: IntradaySetupPayload,
   lane: FeedLane,
@@ -260,6 +287,16 @@ export function buildFeedCards(input: BuildFeedInput): FeedCard[] {
   if (dayTradingSurfaces) {
     for (const leader of input.dayDesk?.discovery ?? []) {
       ingest(cardFromLeader(leader, "day", snapshotsBySymbol, companyBySymbol), false);
+    }
+    const dayDiscoveryCount = input.dayDesk?.discovery?.length ?? 0;
+    if (dayDiscoveryCount === 0) {
+      const movers =
+        (input.dayDesk?.movers_radar?.length ? input.dayDesk.movers_radar : null) ??
+        (input.dayDesk == null ? input.swingDesk?.movers_radar : null) ??
+        [];
+      for (const mover of movers) {
+        ingest(cardFromMover(mover, "day", snapshotsBySymbol, companyBySymbol), false);
+      }
     }
   }
   for (const setup of input.swingSetups) {

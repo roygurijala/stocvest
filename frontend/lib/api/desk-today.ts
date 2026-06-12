@@ -80,9 +80,11 @@ export type DeskWhyMissingDiagnostic = {
   survivor_limit_used?: number;
 };
 
+export type DeskTodaySource = "cache" | "cache_stale" | "cache_miss" | string;
+
 export type DeskTodayResponse = {
   mode: DeskTodayMode;
-  source: "cache" | "cache_miss" | string;
+  source: DeskTodaySource;
   envelope?: Record<string, unknown> | null;
   data: DeskTodayData | null;
   why_missing?: DeskWhyMissingDiagnostic | null;
