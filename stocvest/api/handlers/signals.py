@@ -153,10 +153,22 @@ def _try_sync_watchlist_maturation_from_evidence(
             sync_watchlist_maturation_from_composite,
         )
 
+        desk_mode = "day" if mode == "day" else "swing"
+        try:
+            from stocvest.api.services.system_signal_maturation_sync import sync_system_signal_from_composite
+
+            sync_system_signal_from_composite(
+                symbol=symbol,
+                mode=desk_mode,
+                composite_body=body,
+                evaluation_source="evidence",
+            )
+        except Exception as sys_exc:  # noqa: BLE001
+            _LOG.debug("system signal maturation sync skipped: %s", sys_exc)
         return sync_watchlist_maturation_from_composite(
             user_id=user_id,
             symbol=symbol,
-            mode="day" if mode == "day" else "swing",
+            mode=desk_mode,
             composite_body=body,
             email_on_state_change=False,
         )

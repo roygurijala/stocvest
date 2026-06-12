@@ -168,6 +168,33 @@ async def _composite_for_mode(symbol: str, mode: DeskMode) -> dict[str, Any] | N
     return await _composite_swing(symbol)
 
 
+async def _composite_for_mode_with_system_log(symbol: str, mode: DeskMode) -> dict[str, Any] | None:
+    composite = await _composite_for_mode(symbol, mode)
+    _sync_system_evolution_from_composite(composite, symbol=symbol, mode=mode)
+    return composite
+
+
+def _sync_system_evolution_from_composite(
+    composite: dict[str, Any] | None,
+    *,
+    symbol: str,
+    mode: DeskMode,
+) -> None:
+    if not isinstance(composite, dict):
+        return
+    try:
+        from stocvest.api.services.system_signal_maturation_sync import sync_system_signal_from_composite
+
+        sync_system_signal_from_composite(
+            symbol=symbol,
+            mode=mode,
+            composite_body=composite,
+            evaluation_source="desk_batch",
+        )
+    except Exception as exc:  # noqa: BLE001
+        _LOG.debug("system evolution sync skipped %s %s: %s", mode, symbol, exc)
+
+
 async def _track_retained_pool_symbols(
     movers: tuple[Any, ...],
     *,
@@ -192,6 +219,7 @@ async def _track_retained_pool_symbols(
             composite = await _composite_for_mode(mover.symbol, mode)
         if not isinstance(composite, dict):
             return
+        _sync_system_evolution_from_composite(composite, symbol=mover.symbol, mode=mode)
         try:
             process_composite_body(composite, mode=mode, symbol=mover.symbol, notify=True)
             tracked += 1
@@ -220,6 +248,7 @@ async def _build_discovery_rows(
         if composite is None:
             composite_failures += 1
         elif isinstance(composite, dict):
+            _sync_system_evolution_from_composite(composite, symbol=mover.symbol, mode=mode)
             try:
                 process_composite_body(composite, mode=mode, symbol=mover.symbol, notify=True)
             except Exception as exc:  # noqa: BLE001
@@ -393,7 +422,7 @@ async def run_opportunity_desk_batch(
             quiet_leaders_swing = await build_quiet_leaders(
                 snapshots,
                 funnel.movers,
-                composite_fn=lambda sym: _composite_for_mode(sym, "swing"),
+                composite_fn=lambda sym: _composite_for_mode_with_system_log(sym, "swing"),
                 funnel_cfg=cfg.funnel,
                 recent_split_symbols=recent_splits,
                 frequent_reverse_split_symbols=frequent_reverse,

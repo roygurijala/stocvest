@@ -81,9 +81,12 @@ export function SetupEvolutionPanel({ symbol, tradingMode, showSummary: _showSum
 
   const symU = symbol.trim().toUpperCase();
   const started = formatStartedTracking(data?.started_tracking_at ?? null);
+  const platformSince = formatStartedTracking(data?.platform_tracked_since ?? null);
   const analytics = data?.analytics;
   const hasHistory =
     (analytics?.score_trend?.length ?? 0) > 0 || (data?.transitions?.length ?? 0) > 0;
+  const onWatchlist = data?.on_watchlist === true;
+  const historySource = data?.history_source ?? "none";
 
   return (
     <section
@@ -157,13 +160,26 @@ export function SetupEvolutionPanel({ symbol, tradingMode, showSummary: _showSum
       )}
 
       {data && data !== null ? (
-        <p
-          className="m-0 text-xs leading-relaxed"
-          style={{ color: colors.textMuted }}
-          data-testid="setup-evolution-progression-expectation"
-        >
-          {MATURATION_PROGRESSION_EXPECTATION_LINE}
-        </p>
+        <>
+          {!onWatchlist && hasHistory ? (
+            <div
+              data-testid="setup-evolution-watchlist-cta"
+              style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}
+            >
+              <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+                Add {symU} to your watchlist for personal alerts and to mark when you started following this setup.
+              </p>
+              <AddToWatchlistButton symbol={symU} />
+            </div>
+          ) : null}
+          <p
+            className="m-0 text-xs leading-relaxed"
+            style={{ color: colors.textMuted }}
+            data-testid="setup-evolution-progression-expectation"
+          >
+            {MATURATION_PROGRESSION_EXPECTATION_LINE}
+          </p>
+        </>
       ) : null}
     </section>
   );

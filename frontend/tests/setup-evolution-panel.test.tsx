@@ -11,6 +11,10 @@ vi.mock("@/lib/api/setup-evolution", () => ({
   fetchSetupEvolution: vi.fn()
 }));
 
+vi.mock("@/components/add-to-watchlist-button", () => ({
+  AddToWatchlistButton: () => <button type="button">+ Watchlist</button>
+}));
+
 import { fetchSetupEvolution, type SetupEvolutionAnalytics } from "@/lib/api/setup-evolution";
 
 const fetchMock = vi.mocked(fetchSetupEvolution);
@@ -80,10 +84,30 @@ describe("SetupEvolutionPanel", () => {
 
   test("refetches when watchlist symbols change after add", async () => {
     fetchMock
-      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         symbol: "AMD",
         mode: "day",
+        history_source: "none",
+        on_watchlist: false,
+        started_tracking_at: null,
+        evaluation_cadence: "test cadence",
+        transitions: [],
+        summary: {
+          days_tracked: 0,
+          first_session: null,
+          last_session: null,
+          state_distribution: {},
+          alignment_trend: [],
+          transition_counts: { initial: 0, improved: 0, worsened: 0, unchanged: 0 },
+          latest_state: null,
+          latest_layers_aligned: null
+        }
+      })
+      .mockResolvedValueOnce({
+        symbol: "AMD",
+        mode: "day",
+        history_source: "watchlist",
+        on_watchlist: true,
         started_tracking_at: "2026-05-19T14:00:00Z",
         evaluation_cadence: "test cadence",
         transitions: [],
@@ -102,9 +126,7 @@ describe("SetupEvolutionPanel", () => {
     wrap(<SetupEvolutionPanel symbol="AMD" tradingMode="day" />);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Add AMD to your default watchlist to track setup evolution/i)
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("setup-evolution-warming")).toBeInTheDocument();
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
 

@@ -48,6 +48,7 @@ locals {
     DYNAMODB_WATCHLISTS_TABLE                      = aws_dynamodb_table.watchlists.name
     DYNAMODB_WATCHLIST_MATURATION_TABLE            = aws_dynamodb_table.watchlist_maturation.name
     DYNAMODB_WATCHLIST_MATURATION_TRANSITION_TABLE = aws_dynamodb_table.watchlist_maturation_transition.name
+    DYNAMODB_SYSTEM_SIGNAL_TRANSITION_TABLE        = aws_dynamodb_table.system_signal_transition.name
     DYNAMODB_BROKER_CONNECTIONS_TABLE              = aws_dynamodb_table.broker_connections.name
     DYNAMODB_DAY_TRADING_SETUPS                    = aws_dynamodb_table.day_trading_setups.name
     DYNAMODB_SIGNAL_HISTORY_TABLE                  = aws_dynamodb_table.signal_history.name
@@ -89,6 +90,7 @@ locals {
       aws_dynamodb_table.watchlists,
       aws_dynamodb_table.watchlist_maturation,
       aws_dynamodb_table.watchlist_maturation_transition,
+      aws_dynamodb_table.system_signal_transition,
       aws_dynamodb_table.alerts,
       aws_dynamodb_table.orders,
       aws_dynamodb_table.day_trading_setups,

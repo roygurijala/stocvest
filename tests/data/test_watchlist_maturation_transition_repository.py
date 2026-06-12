@@ -17,6 +17,10 @@ class _FakeDynamoTable:
     def put_item(self, *, Item: dict[str, Any]) -> None:
         self._by_pk_sk[(Item["pk"], Item["sk"])] = dict(Item)
 
+    def get_item(self, *, Key: dict[str, str]) -> dict[str, Any]:
+        item = self._by_pk_sk.get((Key["pk"], Key["sk"]))
+        return {"Item": dict(item)} if item else {}
+
     def query(self, **kwargs: Any) -> dict[str, Any]:
         eav = kwargs.get("ExpressionAttributeValues") or {}
         index = kwargs.get("IndexName")

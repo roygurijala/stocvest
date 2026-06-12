@@ -5,14 +5,22 @@ from __future__ import annotations
 from typing import Any
 
 from stocvest.api.handlers.watchlists import watchlists_setup_evolution_handler
+from stocvest.data.system_signal_transition_repository import SystemSignalTransitionRepository
 from stocvest.data.watchlist_maturation_repository import WatchlistMaturationRepository
 from stocvest.data.watchlist_maturation_transition_repository import (
     WatchlistMaturationTransitionRepository,
 )
+from stocvest.models.system_signal_transition import SystemSignalTransition
 from stocvest.data.watchlist_store import InMemoryWatchlistStore
 from stocvest.models.watchlist import WatchlistEntry, WatchlistState
 from stocvest.models.watchlist_transition import WatchlistMaturationTransition
 from tests.data.test_watchlist_maturation_repository import _FakeDynamoTable
+
+
+class _ProfileStoreStub:
+    def get_profile(self, user_id: str) -> None:
+        _ = user_id
+        return None
 
 
 def _event(symbol: str = "TSLA", *, sub: str = "sub-1") -> dict[str, Any]:
@@ -36,14 +44,64 @@ def test_setup_evolution_requires_auth() -> None:
     assert resp["statusCode"] == 401
 
 
-def test_setup_evolution_not_on_watchlist() -> None:
+def test_setup_evolution_not_on_watchlist_returns_empty_platform_history(monkeypatch) -> None:
+    import json
+
     store = InMemoryWatchlistStore()
     store.create_watchlist("sub-1", "Main", ["AAPL"], is_default=True)
     from stocvest.api.handlers import watchlists as wh
 
     wh.get_watchlist_store = lambda: store  # type: ignore[method-assign]
+    monkeypatch.setattr(wh, "get_system_signal_transition_repository", lambda: None)
+    monkeypatch.setattr(wh, "get_user_profile_store", lambda: _ProfileStoreStub())
     resp = watchlists_setup_evolution_handler(_event("TSLA"), {})
-    assert resp["statusCode"] == 404
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert body["symbol"] == "TSLA"
+    assert body["history_source"] == "none"
+    assert body["on_watchlist"] is False
+    assert body["transitions"] == []
+
+
+def test_setup_evolution_system_history_without_watchlist(monkeypatch) -> None:
+    import json
+
+    store = InMemoryWatchlistStore()
+    store.create_watchlist("sub-1", "Main", ["AAPL"], is_default=True)
+    system_table = _FakeDynamoTable()
+    system_repo = SystemSignalTransitionRepository(system_table)
+    system_repo.put_transition(
+        SystemSignalTransition(
+            symbol="UBXG",
+            mode="swing",
+            recorded_at="2026-06-12T12:00:00+00:00",
+            session_date="2026-06-12",
+            from_state=None,
+            to_state="developing",
+            layers_aligned=4,
+            previous_layers_aligned=None,
+            layers_total=6,
+            alignment_pct=66.7,
+            bias="long",
+            transition_type="initial",
+            evaluation_source="desk_batch",
+            signal_score=58,
+        )
+    )
+
+    from stocvest.api.handlers import watchlists as wh
+
+    wh.get_watchlist_store = lambda: store  # type: ignore[method-assign]
+    monkeypatch.setattr(wh, "get_system_signal_transition_repository", lambda: system_repo)
+    monkeypatch.setattr(wh, "get_user_profile_store", lambda: _ProfileStoreStub())
+
+    resp = watchlists_setup_evolution_handler(_event("UBXG"), {})
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert body["history_source"] == "system"
+    assert body["on_watchlist"] is False
+    assert len(body["transitions"]) == 1
+    assert body["analytics"]["score_trend"][0]["signal_score"] == 58
 
 
 def test_setup_evolution_returns_transitions(monkeypatch) -> None:
@@ -89,6 +147,8 @@ def test_setup_evolution_returns_transitions(monkeypatch) -> None:
     from stocvest.api.handlers import watchlists as wh
 
     wh.get_watchlist_store = lambda: store  # type: ignore[method-assign]
+    monkeypatch.setattr(wh, "get_system_signal_transition_repository", lambda: None)
+    monkeypatch.setattr(wh, "get_user_profile_store", lambda: _ProfileStoreStub())
     monkeypatch.setattr(wh, "get_watchlist_maturation_repository", lambda: mat_repo)
     monkeypatch.setattr(wh, "get_watchlist_maturation_transition_repository", lambda: trans_repo)
 
