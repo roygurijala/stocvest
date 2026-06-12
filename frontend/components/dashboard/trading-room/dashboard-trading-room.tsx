@@ -912,10 +912,11 @@ function TradingRoomBody({
         }}
       >
         {isMobile ? (
-          // Mobile: center brief/deep-dive leads, then feed + watchlist rail.
+          // Mobile: brief/deep-dive leads. Hide the desk feed while a setup is
+          // open so scrolling the deep dive does not land on a second full feed.
           <>
             {centerPanel}
-            {feedPanel}
+            {selected ? null : feedPanel}
             {railPanel}
           </>
         ) : (
