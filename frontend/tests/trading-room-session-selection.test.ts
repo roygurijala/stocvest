@@ -1,8 +1,11 @@
 import { describe, expect, test, beforeEach, vi } from "vitest";
 import {
   __resetSessionSelectionForTests,
+  clearTradingRoomClientSession,
+  consumeTradingRoomPostLoginFresh,
   getLastSelectedId,
   isFirstVisitOfTradingDay,
+  markTradingRoomPostLoginFresh,
   recordTradingRoomVisit,
   setLastSelectedId
 } from "@/lib/dashboard/trading-room/session-selection";
@@ -20,8 +23,8 @@ describe("trading room session selection", () => {
     expect(getLastSelectedId()).toBe("swing:AAPL");
   });
 
-  test("first visit ever does not count as a fresh trading-day reset", () => {
-    expect(isFirstVisitOfTradingDay()).toBe(false);
+  test("first visit ever starts on market brief", () => {
+    expect(isFirstVisitOfTradingDay()).toBe(true);
   });
 
   test("first visit on a new NY day triggers fresh start", () => {
@@ -32,6 +35,20 @@ describe("trading room session selection", () => {
   test("same-day revisit does not trigger fresh start", () => {
     recordTradingRoomVisit();
     expect(isFirstVisitOfTradingDay()).toBe(false);
+  });
+
+  test("logout clears selection and marks post-login fresh start", () => {
+    setLastSelectedId("swing:NAVN");
+    clearTradingRoomClientSession();
+    expect(getLastSelectedId()).toBeNull();
+    expect(consumeTradingRoomPostLoginFresh()).toBe(true);
+    expect(consumeTradingRoomPostLoginFresh()).toBe(false);
+  });
+
+  test("post-login fresh flag is one-shot", () => {
+    markTradingRoomPostLoginFresh();
+    expect(consumeTradingRoomPostLoginFresh()).toBe(true);
+    expect(consumeTradingRoomPostLoginFresh()).toBe(false);
   });
 });
 
