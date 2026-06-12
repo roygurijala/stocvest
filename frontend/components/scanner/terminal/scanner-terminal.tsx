@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { useTheme } from "@/lib/theme-provider";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import {
   biasPillStyle,
-  gapCardChrome,
   radarCardChrome,
   sectorAccentFromGroupId,
   selectionAccentColor,
@@ -37,6 +36,10 @@ import {
   type ScannerTerminalSignalRow
 } from "@/lib/scanner/terminal/scanner-terminal-model";
 import { ScannerDetailPanel } from "@/components/scanner/terminal/scanner-detail-panel";
+import { ScannerTerminalGapCard } from "@/components/scanner/terminal/scanner-terminal-gap-card";
+import { enrichGapRowFromSnapshot } from "@/lib/scanner/terminal/enrich-gap-rows";
+import type { SnapshotPayload } from "@/lib/api/market";
+import { useSymbolNames } from "@/lib/hooks/use-symbol-names";
 import { ScannerTerminalDetailSheet } from "@/components/scanner/terminal/scanner-terminal-detail-sheet";
 import { ScannerTerminalQuietPanel } from "@/components/scanner/terminal/scanner-terminal-quiet-panel";
 import type { ScannerScanSummary } from "@/lib/scanner-scan-summary";
@@ -175,51 +178,92 @@ function FilterPill({
   );
 }
 
-function GapRow({
-  row,
-  selected,
-  onSelect,
-  colors
-}: {
-  row: ScannerTerminalGapRow;
-  selected: boolean;
-  onSelect: () => void;
-  colors: ReturnType<typeof useTheme>["colors"];
-}) {
-  const pctTone = row.gapPct >= 0 ? colors.bullish : colors.bearish;
-  const chrome = gapCardChrome(row, selected, colors);
+function GapSectionLabel({ children, colors }: { children: ReactNode; colors: ReturnType<typeof useTheme>["colors"] }) {
   return (
-    <button
-      type="button"
-      className="scanner-terminal-card"
-      onClick={onSelect}
+    <p
       style={{
-        padding: spacing[3],
-        ...chrome,
-        ...(row.isIpoWatch
-          ? { borderStyle: "dashed", borderColor: "rgba(245,158,11,0.45)", background: "rgba(245,158,11,0.06)" }
-          : null)
+        margin: `${spacing[2]} 0 ${spacing[1]}`,
+        fontSize: 9.5,
+        fontWeight: 700,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+        color: colors.textMuted
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
-        <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: colors.text }}>{row.symbol}</span>
-        <span
+      {children}
+    </p>
+  );
+}
+
+function GapCardList({
+  rows,
+  selection,
+  setSelection,
+  gapSnapshots,
+  symbolNames,
+  colors,
+  layout = "split"
+}: {
+  rows: ScannerTerminalGapRow[];
+  selection: ScannerTerminalSelection;
+  setSelection: (s: ScannerTerminalSelection) => void;
+  gapSnapshots: Map<string, SnapshotPayload>;
+  symbolNames: Record<string, string>;
+  colors: ReturnType<typeof useTheme>["colors"];
+  layout?: "split" | "flat";
+}) {
+  const downs = useMemo(
+    () => [...rows].filter((r) => r.gapPct < 0).sort((a, b) => a.gapPct - b.gapPct),
+    [rows]
+  );
+  const ups = useMemo(
+    () => [...rows].filter((r) => r.gapPct >= 0).sort((a, b) => b.gapPct - a.gapPct),
+    [rows]
+  );
+
+  const renderRow = (row: ScannerTerminalGapRow) => {
+    const sym = row.symbol.trim().toUpperCase();
+    return (
+      <ScannerTerminalGapCard
+        key={row.isIpoWatch ? `ipo-${sym}` : sym}
+        row={row}
+        selected={selection?.kind === "gap" && selection.symbol === sym}
+        onSelect={() => setSelection({ kind: "gap", symbol: sym })}
+        colors={colors}
+        snapshot={gapSnapshots.get(sym) ?? null}
+        companyFallback={symbolNames[sym] ?? null}
+      />
+    );
+  };
+
+  if (layout === "flat") {
+    return <div style={{ display: "grid", gap: spacing[2] }}>{rows.map(renderRow)}</div>;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: spacing[2] }}>
+      {downs.length > 0 ? (
+        <>
+          <GapSectionLabel colors={colors}>Gap downs</GapSectionLabel>
+          {downs.map(renderRow)}
+        </>
+      ) : null}
+      {downs.length > 0 && ups.length > 0 ? (
+        <div
           style={{
-            color: pctTone,
-            fontWeight: 700,
-            fontVariantNumeric: "tabular-nums",
-            fontSize: typography.scale.sm
+            margin: `${spacing[1]} 0`,
+            borderTop: `1px dashed ${colors.border}`,
+            opacity: 0.7
           }}
-        >
-          {row.gapPct >= 0 ? "+" : ""}
-          {row.gapPct.toFixed(1)}%
-        </span>
-      </div>
-      <div style={{ marginTop: spacing[1], fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>
-        <span style={{ fontWeight: 700, color: pctTone }}>{row.statusLabel}</span>
-        {row.note ? ` · ${row.note}` : ""}
-      </div>
-    </button>
+        />
+      ) : null}
+      {ups.length > 0 ? (
+        <>
+          <GapSectionLabel colors={colors}>Gap ups</GapSectionLabel>
+          {ups.map(renderRow)}
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -400,6 +444,44 @@ export function ScannerTerminal({
 
   const watchSet = useMemo(() => new Set(watchlistSymbols.map((s) => s.trim().toUpperCase())), [watchlistSymbols]);
 
+  const gapSymbols = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of overview.gapIntelligence) set.add(r.symbol.trim().toUpperCase());
+    for (const r of overview.gapIpoWatch ?? []) set.add(r.symbol.trim().toUpperCase());
+    return [...set];
+  }, [overview.gapIntelligence, overview.gapIpoWatch]);
+
+  const [gapSnapshots, setGapSnapshots] = useState<Map<string, SnapshotPayload>>(new Map());
+  const symbolNames = useSymbolNames(gapSymbols);
+
+  useEffect(() => {
+    if (!gapSymbols.length) {
+      setGapSnapshots(new Map());
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/stocvest/market/snapshots?symbols=${encodeURIComponent(gapSymbols.join(","))}`,
+          { cache: "no-store" }
+        );
+        const body = (await res.json().catch(() => ({}))) as { snapshots?: SnapshotPayload[] };
+        const map = new Map<string, SnapshotPayload>();
+        for (const row of body.snapshots ?? []) {
+          const sym = String(row.symbol ?? "").trim().toUpperCase();
+          if (sym) map.set(sym, row);
+        }
+        if (!cancelled) setGapSnapshots(map);
+      } catch {
+        if (!cancelled) setGapSnapshots(new Map());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [gapSymbols.join(",")]);
+
   const sections = useMemo(
     () =>
       buildScannerTerminalSections({
@@ -425,6 +507,18 @@ export function ScannerTerminal({
     if (!env) return null;
     return environmentSessionCardHint(env, row.lane, feedStateForHint(row.state));
   };
+
+  const enrichedGapRows = useMemo(() => {
+    const enrich = (row: ScannerTerminalGapRow) => {
+      const sym = row.symbol.trim().toUpperCase();
+      return enrichGapRowFromSnapshot(row, gapSnapshots.get(sym) ?? null, symbolNames[sym] ?? null);
+    };
+    return {
+      gaps: sections.gaps.map(enrich),
+      ipoWatch: sections.ipoWatch.map(enrich),
+      all: [...sections.gaps, ...sections.ipoWatch].map(enrich)
+    };
+  }, [sections.gaps, sections.ipoWatch, gapSnapshots, symbolNames]);
 
   const allVisibleSymbols = useMemo(() => {
     const set = new Set<string>();
@@ -452,7 +546,7 @@ export function ScannerTerminal({
   const detailPanel = (
     <ScannerDetailPanel
       selection={selection}
-      gaps={[...sections.gaps, ...sections.ipoWatch]}
+      gaps={enrichedGapRows.all}
       actionable={sections.actionable}
       developing={sections.developing}
       radar={sections.radar}
@@ -658,21 +752,18 @@ export function ScannerTerminal({
               colors={colors}
             />
             {openSections.gaps ? (
-              <div style={{ display: "grid", gap: spacing[2] }}>
-                {sections.gaps.length === 0 ? (
-                  <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>No gap flags in this filter.</p>
-                ) : (
-                  sections.gaps.map((row) => (
-                    <GapRow
-                      key={row.symbol}
-                      row={row}
-                      selected={selection?.kind === "gap" && selection.symbol === row.symbol}
-                      onSelect={() => setSelection({ kind: "gap", symbol: row.symbol })}
-                      colors={colors}
-                    />
-                  ))
-                )}
-              </div>
+              sections.gaps.length === 0 ? (
+                <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>No gap flags in this filter.</p>
+              ) : (
+                <GapCardList
+                  rows={enrichedGapRows.gaps}
+                  selection={selection}
+                  setSelection={setSelection}
+                  gapSnapshots={gapSnapshots}
+                  symbolNames={symbolNames}
+                  colors={colors}
+                />
+              )
             ) : null}
           </section>
 
@@ -692,15 +783,15 @@ export function ScannerTerminal({
                     New listings excluded from ranked movers. Gaps shown for monitoring only — not evaluated by the signal
                     engine.
                   </p>
-                  {sections.ipoWatch.map((row) => (
-                    <GapRow
-                      key={`ipo-${row.symbol}`}
-                      row={row}
-                      selected={selection?.kind === "gap" && selection.symbol === row.symbol}
-                      onSelect={() => setSelection({ kind: "gap", symbol: row.symbol })}
-                      colors={colors}
-                    />
-                  ))}
+                  <GapCardList
+                    rows={enrichedGapRows.ipoWatch}
+                    selection={selection}
+                    setSelection={setSelection}
+                    gapSnapshots={gapSnapshots}
+                    symbolNames={symbolNames}
+                    colors={colors}
+                    layout="flat"
+                  />
                 </div>
               ) : null}
             </section>
