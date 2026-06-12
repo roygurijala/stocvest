@@ -15,9 +15,28 @@ OIL_SUPPLY_DISRUPTION: Final = "oil_supply_disruption"
 US_CHINA_TRADE_TENSION: Final = "us_china_trade_tension"
 MIDDLE_EAST_CONFLICT: Final = "middle_east_conflict"
 CENTRAL_BANK_POLICY: Final = "central_bank_policy"
+LATAM_EMERGING_MARKET: Final = "latam_emerging_market"
 
 # Order matters: US/China trade before generic ``war`` (e.g. ``trade war`` headlines).
 _EVENT_KEYWORD_ORDER: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        LATAM_EMERGING_MARKET,
+        (
+            "argentina",
+            "milei",
+            "argentine peso",
+            "peso devaluation",
+            "buenos aires",
+            "latin america",
+            "latam",
+            "brazil central bank",
+            "brazilian real",
+            "mexico peso",
+            "emerging market debt",
+            "sovereign risk",
+            "capital controls",
+        ),
+    ),
     (
         US_CHINA_TRADE_TENSION,
         (
@@ -112,6 +131,14 @@ GEO_SECTOR_IMPACT: dict[str, dict[str, float]] = {
         "real_estate": 1.4,
         "utilities": 1.3,
         "technology": 0.8,
+    },
+    LATAM_EMERGING_MARKET: {
+        "financials": 1.7,
+        "banks": 1.8,
+        "energy": 1.4,
+        "utilities": 1.3,
+        "consumer_discretionary": 1.2,
+        "technology": 0.6,
     },
 }
 
@@ -250,3 +277,34 @@ def deterministic_geo_exposure_summary(
     if weighted_score <= 0.8:
         return f"Limited direct exposure: active themes ({et}) map to muted weights for {impact_sector_key}."
     return f"Balanced geo read: {et} active; {impact_sector_key} sits near neutral impact weights."
+
+
+_COUNTRY_GEO_THEMES: dict[str, dict[str, str]] = {
+    "AR": {
+        "key": LATAM_EMERGING_MARKET,
+        "display_name": "Argentina / LatAm Policy",
+        "description": "Home-country policy, FX, and sovereign risk for Argentine ADRs.",
+    },
+    "BR": {
+        "key": LATAM_EMERGING_MARKET,
+        "display_name": "Brazil / LatAm Policy",
+        "description": "Brazil rates, FX, and fiscal policy for LatAm ADRs.",
+    },
+    "MX": {
+        "key": LATAM_EMERGING_MARKET,
+        "display_name": "Mexico / LatAm Policy",
+        "description": "Mexico macro and trade policy for LatAm ADRs.",
+    },
+}
+
+
+def country_geo_theme_for_ticker(ticker_ref: Any | None) -> dict[str, str] | None:
+    """Prefer home-country geo theme for non-US ADRs instead of generic US-China baseline."""
+    if ticker_ref is None or not callable(getattr(ticker_ref, "is_adr", None)):
+        return None
+    if not ticker_ref.is_adr():
+        return None
+    country = str(getattr(ticker_ref, "country_code", None) or "").strip().upper()
+    if not country or country == "US":
+        return None
+    return _COUNTRY_GEO_THEMES.get(country)

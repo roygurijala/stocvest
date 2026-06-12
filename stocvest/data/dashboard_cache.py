@@ -103,6 +103,7 @@ def get_market_ttl(key_type: str) -> int:
             # Legacy key — keep for backwards compat during rollout.
             "opportunity_desk": 3600,
             "evidence": 300,
+            "perplexity": 86400,
         }.get(key_type, 86400)
 
     return {
@@ -117,8 +118,9 @@ def get_market_ttl(key_type: str) -> int:
         "opportunity_desk_swing": 345600,
         "opportunity_desk_day": OPPORTUNITY_DESK_DAY_RTH_TTL_SEC,
         "opportunity_desk": OPPORTUNITY_DESK_DAY_RTH_TTL_SEC,
-        "evidence": 300,
-    }.get(key_type, 300)
+            "evidence": 300,
+            "perplexity": 86400,
+        }.get(key_type, 300)
 
 
 def write_dashboard_cache(

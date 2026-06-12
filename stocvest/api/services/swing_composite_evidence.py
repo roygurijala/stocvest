@@ -875,6 +875,18 @@ def build_swing_composite_evidence_fields(
                         "detail": f"{n} data is {mins}m old",
                     }
                 )
+    perplexity_headwinds = payload.get("perplexity_headwinds")
+    if isinstance(perplexity_headwinds, list):
+        for hw in perplexity_headwinds[:4]:
+            text = str(hw or "").strip()
+            if text:
+                risk_factors_detailed.append(
+                    {
+                        "label": "Fundamental Headwind",
+                        "severity": "medium",
+                        "detail": text[:240],
+                    }
+                )
 
     risk_factors = [f"{r['label']}: {r['detail']}" for r in risk_factors_detailed]
     if not risk_factors:

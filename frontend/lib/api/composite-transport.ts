@@ -33,7 +33,7 @@ export function getCompositeTransportError(
       : DEFAULT_MESSAGES[raw];
   const retryAfter =
     typeof body.retry_after === "number" && Number.isFinite(body.retry_after)
-      ? Math.max(1, Math.round(body.retry_after))
+      ? Math.max(0, Math.round(body.retry_after))
       : undefined;
   return { code: raw, message, retryAfterSec: retryAfter };
 }

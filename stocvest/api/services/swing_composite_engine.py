@@ -49,6 +49,10 @@ from stocvest.api.services.swing_composite_evidence import (
     build_swing_composite_evidence_fields,
     serialize_daily_bars_for_range,
 )
+from stocvest.api.services.symbol_perplexity_enrichment import (
+    maybe_apply_perplexity_layers,
+    perplexity_risk_factor_lines,
+)
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
 from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult, benzinga_multi_shell, ensure_analyst_feed
@@ -149,7 +153,7 @@ async def build_swing_composite_response(
     earnings_horizon = None
 
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
-        daily_r, sym_r, news_r, spy_r, qqq_r, vix_r, econ_r, bz_r = await asyncio.gather(
+        daily_r, sym_r, news_r, spy_r, qqq_r, vix_r, econ_r, bz_r, ref_r = await asyncio.gather(
             client.get_bars(sym, Timeframe.DAY_1, limit=params.swing_technical.daily_bars_lookback),
             client.get_snapshot(sym),
             client.get_market_news(tickers=[sym], limit=50, published_utc_gte=news_since),
@@ -158,6 +162,7 @@ async def build_swing_composite_response(
             get_vix_snapshot_with_fallback(client),
             client.get_economic_calendar_range(date.today(), econ_end),
             benzinga.get_multi(sym, mode="swing"),
+            get_ticker_reference(client, sym),
             return_exceptions=True,
         )
 
@@ -171,6 +176,7 @@ async def build_swing_composite_response(
         qqq_snap: Snapshot | None = _safe_result(qqq_r, None)
         vix_snap: Snapshot | None = _safe_result(vix_r, None)
         econ = _safe_result(econ_r, [])
+        ticker_ref = _safe_result(ref_r, None)
 
         sector_snap: Snapshot | None = None
         sector_display: str | None = None
@@ -185,6 +191,7 @@ async def build_swing_composite_response(
                         client,
                         sector_cache if sector_cache.enabled else None,
                         params.sector,
+                        ticker_ref=ticker_ref,
                     )
                 )
                 sector_etf_sym = (etf or "").strip().upper()
@@ -204,13 +211,11 @@ async def build_swing_composite_response(
 
         earnings_horizon = await resolve_upcoming_earnings_horizon(sym, polygon_client=client)
 
-        ref_r, splits_r, freq_rev_r = await asyncio.gather(
-            get_ticker_reference(client, sym),
+        splits_r, freq_rev_r = await asyncio.gather(
             recent_split_symbols(client),
             symbols_with_frequent_reverse_splits(client),
             return_exceptions=True,
         )
-        ticker_ref = _safe_result(ref_r, None)
         recent_splits = _safe_result(splits_r, frozenset())
         frequent_reverse = _safe_result(freq_rev_r, frozenset())
 
@@ -281,6 +286,21 @@ async def build_swing_composite_response(
         events_lookback_days=params.swing_macro_events_days,
         macro_context=macro_ctx,
     )
+    news, macro, perplexity_news, perplexity_macro = await maybe_apply_perplexity_layers(
+        symbol=sym,
+        ticker_ref=ticker_ref,
+        news=news,
+        macro=macro,
+        benzinga_data=bz_data,
+        economic_event_count=len(econ) if isinstance(econ, list) else 0,
+        news_bullish_threshold=params.news.bullish_threshold,
+        news_bearish_threshold=params.news.bearish_threshold,
+    )
+    perplexity_headwinds = perplexity_risk_factor_lines(perplexity_news)
+    if perplexity_macro is not None:
+        for rf in perplexity_macro.risk_factors[:2]:
+            if rf.strip() and rf not in perplexity_headwinds:
+                perplexity_headwinds.append(rf)
 
     w_sec = _weekly_pct_from_daily_bars(sector_week_bars) if params.swing_sector_use_weekly else None
     w_spy = _weekly_pct_from_daily_bars(spy_week_bars) if params.swing_sector_use_weekly else None
@@ -298,7 +318,10 @@ async def build_swing_composite_response(
         mode="swing",
     )
     geo = GeoAnalyzer().analyze(
-        news_rows, lookback_hours=params.swing_geo_lookback_hours, sector_bucket=sic_bucket_for_geo
+        news_rows,
+        lookback_hours=params.swing_geo_lookback_hours,
+        sector_bucket=sic_bucket_for_geo,
+        ticker_ref=ticker_ref,
     )
     if geo.geo_active_events and geo.geo_impact_sector_key and geo.geo_exposure_summary:
         from stocvest.signals.geo_exposure_llm import try_claude_geo_exposure_line
@@ -643,6 +666,8 @@ async def build_swing_composite_response(
         "intraday_bar_count": 0,
         "daily_bars_range": serialize_daily_bars_for_range(daily_bars, limit=10),
     }
+    if perplexity_headwinds:
+        payload_stub["perplexity_headwinds"] = perplexity_headwinds
     _tech_atr = getattr(tech, "atr", None)
     if _tech_atr is not None:
         try:
