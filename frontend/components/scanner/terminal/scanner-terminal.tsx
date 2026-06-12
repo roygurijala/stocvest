@@ -204,20 +204,95 @@ function FunnelLoadingSkeleton({
   );
 }
 
-function GapSectionLabel({ children, colors }: { children: ReactNode; colors: ReturnType<typeof useTheme>["colors"] }) {
+function FunnelSection({
+  children,
+  colors,
+  separated = true
+}: {
+  children: ReactNode;
+  colors: ReturnType<typeof useTheme>["colors"];
+  separated?: boolean;
+}) {
   return (
-    <p
+    <section
+      className="scanner-terminal-funnel-section"
+      data-separated={separated ? "true" : "false"}
       style={{
-        margin: `${spacing[2]} 0 ${spacing[1]}`,
-        fontSize: 9.5,
-        fontWeight: 700,
-        letterSpacing: "0.12em",
-        textTransform: "uppercase",
-        color: colors.textMuted
+        display: "flex",
+        flexDirection: "column",
+        gap: spacing[2],
+        ...(separated
+          ? {
+              marginTop: spacing[5],
+              paddingTop: spacing[5],
+              borderTop: `1px solid color-mix(in srgb, ${colors.border} 88%, transparent)`
+            }
+          : null)
       }}
     >
       {children}
-    </p>
+    </section>
+  );
+}
+
+function GapSectionLabel({
+  children,
+  colors,
+  direction,
+  count
+}: {
+  children: ReactNode;
+  colors: ReturnType<typeof useTheme>["colors"];
+  direction: "up" | "down";
+  count: number;
+}) {
+  const accent = direction === "up" ? colors.bullish : colors.bearish;
+  return (
+    <div
+      className="scanner-terminal-gap-section-label"
+      data-direction={direction}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: spacing[2],
+        margin: `${spacing[3]} 0 ${spacing[2]}`,
+        padding: `${spacing[2]} ${spacing[3]}`,
+        borderRadius: borderRadius.md,
+        border: `1px solid color-mix(in srgb, ${accent} 38%, ${colors.border})`,
+        borderLeft: `3px solid ${accent}`,
+        background: `color-mix(in srgb, ${accent} 10%, ${colors.surface})`
+      }}
+    >
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 800,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: accent,
+          whiteSpace: "nowrap"
+        }}
+      >
+        {children}
+      </span>
+      <span
+        style={{
+          fontSize: typography.scale.sm,
+          fontWeight: 700,
+          color: colors.text,
+          fontVariantNumeric: "tabular-nums"
+        }}
+      >
+        {count}
+      </span>
+      <span
+        style={{
+          flex: 1,
+          height: 1,
+          background: `linear-gradient(90deg, color-mix(in srgb, ${accent} 45%, transparent) 0%, transparent 100%)`
+        }}
+      />
+    </div>
   );
 }
 
@@ -228,7 +303,8 @@ function GapCardList({
   gapSnapshots,
   symbolNames,
   colors,
-  layout = "split"
+  layout = "split",
+  twoColumn = false
 }: {
   rows: ScannerTerminalGapRow[];
   selection: ScannerTerminalSelection;
@@ -237,6 +313,7 @@ function GapCardList({
   symbolNames: Record<string, string>;
   colors: ReturnType<typeof useTheme>["colors"];
   layout?: "split" | "flat";
+  twoColumn?: boolean;
 }) {
   const downs = useMemo(
     () => [...rows].filter((r) => r.gapPct < 0).sort((a, b) => a.gapPct - b.gapPct),
@@ -262,31 +339,42 @@ function GapCardList({
     );
   };
 
+  const cardGridStyle: CSSProperties = {
+    display: "grid",
+    gap: spacing[2],
+    gridTemplateColumns: twoColumn ? "repeat(2, minmax(0, 1fr))" : "1fr"
+  };
+
   if (layout === "flat") {
-    return <div style={{ display: "grid", gap: spacing[2] }}>{rows.map(renderRow)}</div>;
+    return <div style={cardGridStyle}>{rows.map(renderRow)}</div>;
   }
 
   return (
     <div style={{ display: "grid", gap: spacing[2] }}>
       {downs.length > 0 ? (
         <>
-          <GapSectionLabel colors={colors}>Gap downs</GapSectionLabel>
-          {downs.map(renderRow)}
+          <GapSectionLabel colors={colors} direction="down" count={downs.length}>
+            Gap downs
+          </GapSectionLabel>
+          <div style={cardGridStyle}>{downs.map(renderRow)}</div>
         </>
       ) : null}
       {downs.length > 0 && ups.length > 0 ? (
         <div
+          role="presentation"
           style={{
-            margin: `${spacing[1]} 0`,
-            borderTop: `1px dashed ${colors.border}`,
-            opacity: 0.7
+            margin: `${spacing[2]} 0`,
+            borderTop: `1px solid color-mix(in srgb, ${colors.border} 75%, transparent)`,
+            opacity: 0.9
           }}
         />
       ) : null}
       {ups.length > 0 ? (
         <>
-          <GapSectionLabel colors={colors}>Gap ups</GapSectionLabel>
-          {ups.map(renderRow)}
+          <GapSectionLabel colors={colors} direction="up" count={ups.length}>
+            Gap ups
+          </GapSectionLabel>
+          <div style={cardGridStyle}>{ups.map(renderRow)}</div>
         </>
       ) : null}
     </div>
@@ -769,7 +857,7 @@ export function ScannerTerminal({
             </div>
           </div>
 
-          <section>
+          <FunnelSection colors={colors} separated>
             <SectionHeader
               title="Gap intelligence — pre-market & opening hour"
               count={sections.gaps.length}
@@ -795,14 +883,15 @@ export function ScannerTerminal({
                   gapSnapshots={gapSnapshots}
                   symbolNames={symbolNames}
                   colors={colors}
+                  twoColumn={!narrowLayout}
                 />
                 </>
               )
             ) : null}
-          </section>
+          </FunnelSection>
 
           {sections.ipoWatch.length > 0 ? (
-            <section>
+            <FunnelSection colors={colors} separated>
               <SectionHeader
                 title="IPO watch — unscored"
                 count={sections.ipoWatch.length}
@@ -825,14 +914,15 @@ export function ScannerTerminal({
                     symbolNames={symbolNames}
                     colors={colors}
                     layout="flat"
+                    twoColumn={!narrowLayout}
                   />
                 </div>
               ) : null}
-            </section>
+            </FunnelSection>
           ) : null}
 
           {bootstrapLoading || sections.actionable.length > 0 ? (
-            <section>
+            <FunnelSection colors={colors} separated>
               <SectionHeader
                 title="Actionable now — all gates cleared"
                 count={sections.actionable.length}
@@ -860,11 +950,11 @@ export function ScannerTerminal({
                 </div>
                 )
               ) : null}
-            </section>
+            </FunnelSection>
           ) : null}
 
           {bootstrapLoading || sections.developing.length > 0 ? (
-            <section>
+            <FunnelSection colors={colors} separated>
               <SectionHeader
                 title="Developing — building toward actionable"
                 count={sections.developing.length}
@@ -910,10 +1000,10 @@ export function ScannerTerminal({
                 </div>
                 )
               ) : null}
-            </section>
+            </FunnelSection>
           ) : null}
 
-          <section>
+          <FunnelSection colors={colors} separated>
             <SectionHeader
               title="On radar — active themes today"
               count={sections.radar.reduce((n, g) => n + g.symbols.length, 0)}
@@ -941,7 +1031,7 @@ export function ScannerTerminal({
                 )}
               </div>
             ) : null}
-          </section>
+          </FunnelSection>
         </div>
 
         {!narrowLayout ? (
