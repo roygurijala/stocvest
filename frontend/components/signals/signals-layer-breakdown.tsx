@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   ChevronDown, 
@@ -15,16 +15,8 @@ import {
   Newspaper,
   BarChart3,
   Cpu,
-  Info,
-  Target,
-  Scale,
   FileText,
   Building2,
-  AlertTriangle,
-  Calendar,
-  Newspaper as NewsIcon,
-  TrendingUp as MomentumIcon,
-  Users
 } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";
@@ -48,6 +40,22 @@ import {
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
+import {
+  formatCatalystSourceLabel,
+  truncateCatalystHeadline,
+  type LayerCatalystArticle
+} from "@/lib/signals/layer-catalyst-articles";
+import {
+  articlesForDrawer,
+  buildLayerAlignmentLine,
+  filterDisplayChips,
+  indicatorHighlights,
+  ratingsForDrawer,
+  shouldShowAnalystTimeline,
+  shouldShowGeoEventList,
+  shouldShowMacroEventList
+} from "@/lib/signals/layer-drawer-present";
+import { catalystPublishedAgo } from "@/lib/signal-evidence";
 import { layerStatusColor, polarityTrendIconKind } from "@/lib/signal-direction-colors";
 import { useTheme } from "@/lib/theme-provider";
 
@@ -519,6 +527,10 @@ function LayerDetailDrawer({
   colors: ReturnType<typeof useTheme>["colors"];
   symbol: string;
 }) {
+  const [evidenceExpanded, setEvidenceExpanded] = useState(false);
+  useEffect(() => {
+    setEvidenceExpanded(false);
+  }, [layer?.key, symbol]);
   if (!layer) return null;
 
   const IconComponent = LAYER_ICONS[layer.key] || Activity;
@@ -531,8 +543,14 @@ function LayerDetailDrawer({
   // Use actual layer data for specific justifications
   const confidence = levelPct >= 70 ? "High" : levelPct >= 50 ? "Medium" : "Low";
   
-  // Build specific justification items based on layer data
-  const justificationItems = buildJustificationItems(layer, colors, dot);
+  const displayChips = filterDisplayChips(layer);
+  const alignmentLine = buildLayerAlignmentLine(layer, bias, polarity, levelLabel);
+  const articlePack = articlesForDrawer(layer.catalystArticles, evidenceExpanded);
+  const ratingPack = ratingsForDrawer(layer.recentRatings, evidenceExpanded);
+  const indicatorRows = indicatorHighlights(layer.indicatorSnapshot);
+  const evidenceOverflow =
+    (layer.catalystArticles?.length ?? 0) > articlePack.visible.length ||
+    (layer.recentRatings?.length ?? 0) > ratingPack.visible.length;
 
   return (
     <AnimatePresence>
@@ -610,7 +628,7 @@ function LayerDetailDrawer({
             </div>
 
             {/* Content */}
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-5">
               {/* Score Card */}
               <div 
                 className="rounded-2xl p-5"
@@ -673,147 +691,114 @@ function LayerDetailDrawer({
                 </div>
               </div>
 
-              {/* Our Analysis - Specific Reasoning */}
-              {(layer.reasoning ?? layer.explanation) && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Info className="w-4 h-4" style={{ color: colors.accent }} />
-                    <h3 className="m-0 text-sm font-bold uppercase tracking-wider" style={{ color: colors.text }}>
-                      Our Analysis
-                    </h3>
-                  </div>
-                  <div 
-                    className="p-4 rounded-xl"
-                    style={{
-                      background: `${colors.surfaceMuted}60`,
-                      border: `1px solid ${colors.border}`
-                    }}
-                  >
-                    <p className="m-0 text-sm leading-relaxed" style={{ color: colors.text }}>
-                      {layer.reasoning ?? layer.explanation}
-                    </p>
-                  </div>
-                </div>
-              )}
+              <p
+                className="m-0 text-sm leading-snug"
+                style={{
+                  color:
+                    polarity === "supportive"
+                      ? colors.bullish
+                      : polarity === "blocking"
+                        ? colors.bearish
+                        : colors.textMuted
+                }}
+              >
+                {alignmentLine}
+              </p>
 
-              {/* Supporting Data Points (Chips) */}
-              {layer.chips && layer.chips.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Target className="w-4 h-4" style={{ color: colors.accent }} />
-                    <h3 className="m-0 text-sm font-bold uppercase tracking-wider" style={{ color: colors.text }}>
-                      Supporting Evidence
-                    </h3>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {layer.chips.map((chip, i) => (
-                      <motion.span
-                        key={i}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                        style={{
-                          background: `${colors.accent}15`,
-                          border: `1px solid ${colors.accent}30`,
-                          color: colors.text
-                        }}
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: i * 0.05 }}
-                      >
-                        {chip}
-                      </motion.span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Layer-Specific Justifications */}
-              {justificationItems.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Scale className="w-4 h-4" style={{ color: colors.accent }} />
-                    <h3 className="m-0 text-sm font-bold uppercase tracking-wider" style={{ color: colors.text }}>
-                      What Drives This Score
-                    </h3>
-                  </div>
-                  <div className="space-y-2">
-                    {justificationItems.map((item, i) => (
-                      <motion.div
-                        key={i}
-                        className="flex items-start gap-3 p-3 rounded-xl"
-                        style={{
-                          background: `${colors.surfaceMuted}80`,
-                          border: `1px solid ${colors.border}`
-                        }}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                      >
-                        <div className="mt-0.5 shrink-0">
-                          {item.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="m-0 text-xs font-semibold uppercase tracking-wider" style={{ color: colors.textMuted }}>
-                            {item.label}
-                          </p>
-                          <p className="m-0 mt-0.5 text-sm" style={{ color: colors.text }}>
-                            {item.value}
-                          </p>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Context / Why This Matters */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Users className="w-4 h-4" style={{ color: colors.accent }} />
-                  <h3 className="m-0 text-sm font-bold uppercase tracking-wider" style={{ color: colors.text }}>
-                    Why This Matters
-                  </h3>
-                </div>
-                <div 
-                  className="p-4 rounded-xl"
-                  style={{
-                    background: `${polarity === "supportive" ? colors.bullish : polarity === "blocking" ? colors.bearish : colors.textMuted}10`,
-                    border: `1px solid ${polarity === "supportive" ? colors.bullish : polarity === "blocking" ? colors.bearish : colors.textMuted}25`
-                  }}
+              {(layer.reasoning ?? layer.explanation) ? (
+                <div
+                  className="rounded-xl p-4"
+                  style={{ background: `${colors.surfaceMuted}50`, border: `1px solid ${colors.border}` }}
                 >
                   <p className="m-0 text-sm leading-relaxed" style={{ color: colors.text }}>
-                    {(() => {
-                      const analysisText = layer.reasoning ?? layer.explanation;
-                      const statusLower = String(layer.status ?? "").toLowerCase();
-
-                      if (bias === "Neutral") {
-                        if (statusLower === "bullish") {
-                          return <>This layer shows a <strong style={{ color: colors.bullish }}>bullish</strong> read (score {levelLabel}) in a neutral setup. {analysisText}</>;
-                        }
-                        if (statusLower === "bearish") {
-                          return <>This layer shows a <strong style={{ color: colors.bearish }}>bearish</strong> read (score {levelLabel}) in a neutral setup. {analysisText}</>;
-                        }
-                        return <>This layer is <strong style={{ color: colors.textMuted }}>neutral</strong> to your neutral setup. {analysisText}</>;
-                      }
-
-                      const alignmentText =
-                        polarity === "supportive"
-                          ? "supporting"
-                          : polarity === "blocking"
-                            ? "countering"
-                            : polarity === "mixed"
-                              ? "sending mixed signals for"
-                              : "neutral to";
-                      return (
-                        <>
-                          This layer is <strong style={{ color: statusTone }}>{alignmentText}</strong> your {bias} setup.
-                          {layer.statusLabel ? ` The ${layer.name.toLowerCase()} reading shows ${layer.statusLabel.toLowerCase()}.` : null}{" "}
-                          {analysisText}
-                        </>
-                      );
-                    })()}
+                    {layer.reasoning ?? layer.explanation}
                   </p>
                 </div>
-              </div>
+              ) : null}
+
+              {layer.key === "news" && articlePack.visible.length > 0 ? (
+                <LayerCatalystArticleList articles={articlePack.visible} colors={colors} />
+              ) : null}
+
+              {layer.key === "news" && shouldShowAnalystTimeline(layer) && ratingPack.visible.length > 0 ? (
+                <LayerAnalystRatingList ratings={ratingPack.visible} colors={colors} compact />
+              ) : null}
+
+              {layer.key === "technical" && indicatorRows.length > 0 ? (
+                <LayerIndicatorSnapshot rows={indicatorRows} colors={colors} />
+              ) : null}
+
+              {layer.key === "macro" && shouldShowMacroEventList(layer) ? (
+                <LayerEventList
+                  title="On the calendar"
+                  items={(layer.upcomingEvents ?? []).slice(0, evidenceExpanded ? 4 : 2).map((e) => ({
+                    primary: e.event,
+                    secondary: [e.date, e.impact].filter(Boolean).join(" · ")
+                  }))}
+                  colors={colors}
+                  compact
+                />
+              ) : null}
+
+              {layer.key === "geopolitical" && shouldShowGeoEventList(layer) ? (
+                <LayerEventList
+                  title="Active themes"
+                  items={(layer.geoActiveEvents ?? []).slice(0, evidenceExpanded ? 4 : 2).map((e) => ({
+                    primary: e.title,
+                    secondary: e.severity
+                  }))}
+                  colors={colors}
+                  compact
+                />
+              ) : null}
+
+              {layer.key === "sector" && layer.sectorDailySessions && layer.sectorDailySessions.length > 0 ? (
+                <LayerSectorSessions
+                  sessions={layer.sectorDailySessions.slice(0, evidenceExpanded ? 4 : 2)}
+                  colors={colors}
+                />
+              ) : null}
+
+              {layer.key === "news" && layer.latestGuidance ? (
+                <LayerFactLine label="Guidance" value={layer.latestGuidance} colors={colors} />
+              ) : null}
+
+              {layer.key === "news" && layer.earningsResult ? (
+                <LayerFactLine label="Earnings" value={layer.earningsResult} colors={colors} />
+              ) : null}
+
+              {layer.key === "sector" && layer.sectorInterpretation ? (
+                <LayerFactLine label="Sector read" value={layer.sectorInterpretation} colors={colors} />
+              ) : null}
+
+              {displayChips.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {displayChips.map((chip) => (
+                    <span
+                      key={chip}
+                      className="rounded-full px-2.5 py-1 text-[11px] font-medium"
+                      style={{
+                        background: `${colors.surfaceMuted}`,
+                        border: `1px solid ${colors.border}`,
+                        color: colors.textMuted
+                      }}
+                    >
+                      {chip}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+
+              {evidenceOverflow ? (
+                <button
+                  type="button"
+                  className="text-xs font-semibold"
+                  style={{ color: colors.accent, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  onClick={() => setEvidenceExpanded((v) => !v)}
+                >
+                  {evidenceExpanded ? "Show less detail" : "Show more detail"}
+                </button>
+              ) : null}
 
               {/* Last Updated */}
               <div 
@@ -833,177 +818,293 @@ function LayerDetailDrawer({
   );
 }
 
-// Build specific justification items based on actual layer data
-type JustificationItem = {
-  icon: React.ReactNode;
+function catalystSentimentChip(
+  sentiment: LayerCatalystArticle["sentiment"],
+  colors: ReturnType<typeof useTheme>["colors"]
+): { label: string; fg: string; bg: string; border: string } {
+  if (sentiment === "positive") {
+    return {
+      label: "Bullish",
+      fg: colors.bullish,
+      bg: `${colors.bullish}1f`,
+      border: `1px solid ${colors.bullish}66`
+    };
+  }
+  if (sentiment === "negative") {
+    return {
+      label: "Bearish",
+      fg: colors.bearish,
+      bg: `${colors.bearish}1f`,
+      border: `1px solid ${colors.bearish}66`
+    };
+  }
+  return {
+    label: "Neutral",
+    fg: colors.caution,
+    bg: `${colors.caution}1a`,
+    border: `1px solid ${colors.caution}55`
+  };
+}
+
+function LayerFactLine({
+  label,
+  value,
+  colors
+}: {
   label: string;
   value: string;
-};
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  return (
+    <div className="flex gap-2 text-sm leading-snug">
+      <span className="shrink-0 font-semibold" style={{ color: colors.textMuted }}>
+        {label}
+      </span>
+      <span style={{ color: colors.text }}>{value}</span>
+    </div>
+  );
+}
 
-function buildJustificationItems(
-  layer: SignalsLayerRowInput,
-  colors: ReturnType<typeof useTheme>["colors"],
-  dot: string
-): JustificationItem[] {
-  const items: JustificationItem[] = [];
+function LayerCatalystArticleList({
+  articles,
+  colors
+}: {
+  articles: LayerCatalystArticle[];
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  return (
+    <div>
+      <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textMuted }}>
+        Headlines
+      </p>
+      <ul className="m-0 p-0 list-none space-y-2">
+        {articles.map((article, i) => {
+          const chip = catalystSentimentChip(article.sentiment, colors);
+          const title = truncateCatalystHeadline(article.text, 100);
+          return (
+            <li
+              key={`${article.text}-${i}`}
+              className="rounded-lg px-3 py-2.5"
+              style={{ background: `${colors.surfaceMuted}60`, border: `1px solid ${colors.border}` }}
+            >
+              {article.url ? (
+                <a
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-semibold leading-snug"
+                  style={{ color: colors.accent }}
+                >
+                  {title}
+                </a>
+              ) : (
+                <p className="m-0 text-sm font-semibold leading-snug" style={{ color: colors.text }}>
+                  {title}
+                </p>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span
+                  className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                  style={{ border: `1px solid ${colors.border}`, color: colors.textMuted, background: `${colors.surfaceMuted}` }}
+                >
+                  {formatCatalystSourceLabel(article.source)}
+                </span>
+                {article.publishedAt ? (
+                  <span className="text-[11px]" style={{ color: colors.textMuted }}>
+                    {catalystPublishedAgo(article.publishedAt)}
+                  </span>
+                ) : null}
+                <span
+                  className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                  style={{ border: chip.border, background: chip.bg, color: chip.fg }}
+                >
+                  {chip.label}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
-  // Technical layer specific items
-  if (layer.key === "technical") {
-    if (layer.vwapState) {
-      items.push({
-        icon: <div style={{ color: dot }}><MomentumIcon className="w-4 h-4" /></div>,
-        label: "VWAP Position",
-        value: layer.vwapState
-      });
+function LayerEventList({
+  title,
+  items,
+  colors,
+  compact = false
+}: {
+  title: string;
+  items: Array<{ primary: string; secondary?: string }>;
+  colors: ReturnType<typeof useTheme>["colors"];
+  compact?: boolean;
+}) {
+  return (
+    <div>
+      <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textMuted }}>
+        {title}
+      </p>
+      <ul className="m-0 p-0 list-none space-y-1.5">
+        {items.map((item, i) => (
+          <li
+            key={`${item.primary}-${i}`}
+            className={compact ? "text-sm leading-snug" : "rounded-lg px-3 py-2.5"}
+            style={
+              compact
+                ? { color: colors.text }
+                : { background: `${colors.surfaceMuted}60`, border: `1px solid ${colors.border}` }
+            }
+          >
+            <span style={{ color: colors.text }}>{item.primary}</span>
+            {item.secondary ? (
+              <span className={compact ? "text-xs" : "mt-1 block text-xs"} style={{ color: colors.textMuted }}>
+                {compact ? ` · ${item.secondary}` : item.secondary}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function formatIndicatorLabel(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatIndicatorValue(key: string, value: string | number | boolean | null): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") {
+    if (key.includes("rsi") || key.includes("pct") || key.includes("range")) {
+      return Number.isInteger(value) ? String(value) : value.toFixed(1);
     }
-    if (layer.vwapStateTooltip) {
-      items.push({
-        icon: <div style={{ color: colors.accent }}><Info className="w-4 h-4" /></div>,
-        label: "Technical Context",
-        value: layer.vwapStateTooltip
-      });
+    if (key.includes("sma") || key.includes("ema") || key.includes("vwap")) {
+      return `$${value.toFixed(2)}`;
     }
+    if (key === "volume_vs_adv") return `${value.toFixed(2)}x`;
+    return Number.isInteger(value) ? String(value) : value.toFixed(2);
   }
+  return String(value).replace(/_/g, " ");
+}
 
-  // News layer specific items
-  if (layer.key === "news") {
-    if (layer.articleCount !== undefined && layer.articleCount > 0) {
-      items.push({
-        icon: <div style={{ color: dot }}><NewsIcon className="w-4 h-4" /></div>,
-        label: "Articles Analyzed",
-        value: `${layer.articleCount} news items in scan window`
-      });
-    }
-    if (layer.headlineSentiment !== null && layer.headlineSentiment !== undefined) {
-      const sentiment = layer.headlineSentiment > 0.3 ? "Bullish" : layer.headlineSentiment < -0.3 ? "Bearish" : "Neutral";
-      items.push({
-        icon: <div style={{ color: dot }}><TrendingUp className="w-4 h-4" /></div>,
-        label: "Headline Sentiment",
-        value: `${sentiment} (${(layer.headlineSentiment * 100).toFixed(0)}%)`
-      });
-    }
-    if (layer.latestRating) {
-      items.push({
-        icon: <div style={{ color: colors.accent }}><Target className="w-4 h-4" /></div>,
-        label: "Latest Analyst Rating",
-        value: layer.latestRating
-      });
-    }
-    if (layer.analystConsensus) {
-      items.push({
-        icon: <div style={{ color: colors.accent }}><Users className="w-4 h-4" /></div>,
-        label: "Analyst Consensus",
-        value: layer.analystConsensus
-      });
-    }
-    if (layer.earningsResult) {
-      items.push({
-        icon: <div style={{ color: dot }}><Calendar className="w-4 h-4" /></div>,
-        label: "Recent Earnings",
-        value: layer.earningsResult
-      });
-    }
-    if (layer.wimSummary) {
-      items.push({
-        icon: <div style={{ color: colors.accent }}><FileText className="w-4 h-4" /></div>,
-        label: "What It Means",
-        value: layer.wimSummary
-      });
-    }
-  }
+function LayerIndicatorSnapshot({
+  rows,
+  colors
+}: {
+  rows: Array<[string, string | number | boolean | null]>;
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <div>
+      <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textMuted }}>
+        Key levels
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {rows.map(([key, value]) => (
+          <div
+            key={key}
+            className="rounded-lg px-3 py-2"
+            style={{ background: `${colors.surfaceMuted}60`, border: `1px solid ${colors.border}` }}
+          >
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wider" style={{ color: colors.textMuted }}>
+              {formatIndicatorLabel(key)}
+            </p>
+            <p className="m-0 mt-1 text-sm font-semibold tabular-nums" style={{ color: colors.text }}>
+              {formatIndicatorValue(key, value)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  // Macro layer specific items
-  if (layer.key === "macro") {
-    if (layer.macroWarnings && layer.macroWarnings.length > 0) {
-      items.push({
-        icon: <div style={{ color: colors.caution }}><AlertTriangle className="w-4 h-4" /></div>,
-        label: "Macro Warnings",
-        value: layer.macroWarnings.join("; ")
-      });
-    }
-    if (layer.upcomingEvents && layer.upcomingEvents.length > 0) {
-      const nextEvent = layer.upcomingEvents[0];
-      items.push({
-        icon: <div style={{ color: dot }}><Calendar className="w-4 h-4" /></div>,
-        label: "Upcoming Event",
-        value: `${nextEvent.event} (${nextEvent.date})`
-      });
-    }
-    if (layer.yieldCurve) {
-      items.push({
-        icon: <div style={{ color: dot }}><TrendingUp className="w-4 h-4" /></div>,
-        label: "Yield Curve",
-        value: `${layer.yieldCurve.status} - ${layer.yieldCurve.signal}`
-      });
-    }
-  }
+function LayerAnalystRatingList({
+  ratings,
+  colors,
+  compact = false
+}: {
+  ratings: NonNullable<SignalsLayerRowInput["recentRatings"]>;
+  colors: ReturnType<typeof useTheme>["colors"];
+  compact?: boolean;
+}) {
+  return (
+    <div>
+      <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textMuted }}>
+        Analyst actions
+      </p>
+      <ul className="m-0 p-0 list-none space-y-1.5">
+        {ratings.map((rating, i) => {
+          const actionTone =
+            /upgrade|raise|outperform|buy/i.test(`${rating.action} ${rating.rating}`)
+              ? colors.bullish
+              : /downgrade|cut|underperform|sell/i.test(`${rating.action} ${rating.rating}`)
+                ? colors.bearish
+                : colors.textMuted;
+          return (
+            <li
+              key={`${rating.firm}-${rating.date}-${i}`}
+              className={compact ? "text-sm leading-snug" : "rounded-lg px-3 py-2.5"}
+              style={
+                compact
+                  ? undefined
+                  : { background: `${colors.surfaceMuted}60`, border: `1px solid ${colors.border}` }
+              }
+            >
+              <span className="font-semibold" style={{ color: colors.text }}>
+                {rating.firm || "Analyst"}
+              </span>
+              <span className="text-xs" style={{ color: actionTone }}>
+                {" "}
+                · {[rating.action, rating.rating].filter(Boolean).join(" · ")}
+              </span>
+              <span className="text-xs" style={{ color: colors.textMuted }}>
+                {" "}
+                · {rating.date}
+                {rating.priceTarget != null ? ` · PT $${rating.priceTarget.toFixed(2)}` : ""}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
-  // Geopolitical layer specific items
-  if (layer.key === "geopolitical") {
-    if (layer.geoActiveEvents && layer.geoActiveEvents.length > 0) {
-      const topEvent = layer.geoActiveEvents[0];
-      items.push({
-        icon: <div style={{ color: colors.caution }}><AlertTriangle className="w-4 h-4" /></div>,
-        label: "Active Event",
-        value: `${topEvent.title} (${topEvent.severity})`
-      });
-    }
-    if (layer.geoExposureSummary) {
-      items.push({
-        icon: <div style={{ color: colors.accent }}><Info className="w-4 h-4" /></div>,
-        label: "Exposure Assessment",
-        value: layer.geoExposureSummary
-      });
-    }
-    if (layer.geoExposureBand) {
-      items.push({
-        icon: <div style={{ color: dot }}><Scale className="w-4 h-4" /></div>,
-        label: "Risk Band",
-        value: layer.geoExposureBand
-      });
-    }
-    if (layer.geoPrimaryTheme) {
-      items.push({
-        icon: <div style={{ color: colors.accent }}><FileText className="w-4 h-4" /></div>,
-        label: "Primary Theme",
-        value: layer.geoPrimaryTheme
-      });
-    }
-  }
-
-  // Sector layer specific items
-  if (layer.key === "sector") {
-    if (layer.sectorDisplayName) {
-      items.push({
-        icon: <div style={{ color: dot }}><Building2 className="w-4 h-4" /></div>,
-        label: "Sector",
-        value: layer.sectorDisplayName
-      });
-    }
-    if (layer.sectorEtf) {
-      items.push({
-        icon: <div style={{ color: colors.accent }}><Target className="w-4 h-4" /></div>,
-        label: "Sector ETF",
-        value: layer.sectorEtf
-      });
-    }
-    if (layer.vsSectorPerformance !== null && layer.vsSectorPerformance !== undefined) {
-      const perf = layer.vsSectorPerformance;
-      const perfStr = perf > 0 ? `+${perf.toFixed(2)}%` : `${perf.toFixed(2)}%`;
-      items.push({
-        icon: <div style={{ color: perf > 0 ? colors.bullish : colors.bearish }}><MomentumIcon className="w-4 h-4" /></div>,
-        label: "vs Sector ETF",
-        value: perfStr
-      });
-    }
-    if (layer.sectorMomentum !== null && layer.sectorMomentum !== undefined) {
-      items.push({
-        icon: <div style={{ color: dot }}><TrendingUp className="w-4 h-4" /></div>,
-        label: "Sector Momentum",
-        value: `${layer.sectorMomentum.toFixed(1)}/100`
-      });
-    }
-  }
-
-  return items;
+function LayerSectorSessions({
+  sessions,
+  colors
+}: {
+  sessions: NonNullable<SignalsLayerRowInput["sectorDailySessions"]>;
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  return (
+    <div>
+      <p className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: colors.textMuted }}>
+        vs SPY (recent)
+      </p>
+      <ul className="m-0 list-none space-y-1 p-0 text-sm leading-snug">
+        {sessions.map((session) => {
+          const relTone = session.relative >= 0 ? colors.bullish : colors.bearish;
+          const rel = `${session.relative >= 0 ? "+" : ""}${session.relative.toFixed(2)}%`;
+          return (
+            <li key={session.date} style={{ color: colors.text }}>
+              <span style={{ color: colors.textMuted }}>{session.date}</span>
+              <span style={{ color: relTone }}> {rel}</span>
+              <span style={{ color: colors.textMuted }}>
+                {" "}
+                (ETF {session.etfPct >= 0 ? "+" : ""}
+                {session.etfPct.toFixed(2)}%)
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }

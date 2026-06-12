@@ -3,6 +3,7 @@
  * Keeps copy discipline aligned with `trade-decision.ts` (validates, does not instruct).
  */
 
+import type { LayerCatalystArticle } from "@/lib/signals/layer-catalyst-articles";
 import {
   formatAlignmentStatusLine,
   formatLayersFromActionableHint,
@@ -74,7 +75,19 @@ export type SignalsLayerRowInput = {
   analystConsensus?: string | null;
   earningsResult?: string | null;
   wimSummary?: string | null;
+  latestGuidance?: string | null;
+  /** Headlines that contributed to the news score (from composite catalyst_headlines). */
+  catalystArticles?: LayerCatalystArticle[];
+  recentRatings?: Array<{
+    action: string;
+    rating: string;
+    firm: string;
+    date: string;
+    priceTarget?: number | null;
+  }>;
+  indicatorSnapshot?: Record<string, string | number | boolean | null>;
   /** Layer-specific macro data */
+  macroRiskLevel?: string | null;
   macroWarnings?: string[];
   upcomingEvents?: Array<{ event: string; date: string; impact?: string }>;
   yieldCurve?: { status: string; signal: string } | null;
@@ -88,6 +101,20 @@ export type SignalsLayerRowInput = {
   sectorDisplayName?: string | null;
   sectorMomentum?: number | null;
   vsSectorPerformance?: number | null;
+  sectorInterpretation?: string | null;
+  sectorTrending?: string | null;
+  sectorRank1d?: number | null;
+  sectorRank5d?: number | null;
+  sectorDailySessions?: Array<{
+    date: string;
+    etfPct: number;
+    spyPct: number;
+    relative: number;
+    outperformed: boolean;
+  }>;
+  /** Layer-specific internals data */
+  breadthSignal?: string | null;
+  participationSignal?: string | null;
 };
 
 export function layerDeltaVsBaseline(
