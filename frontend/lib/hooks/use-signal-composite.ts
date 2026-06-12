@@ -98,6 +98,10 @@ interface FetchCompositeOptions {
   signal?: AbortSignal;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * POSTs `{ symbol }` to the mode-appropriate composite endpoint and
  * returns the parsed JSON. Throws on non-2xx so SWR routes it
@@ -115,29 +119,42 @@ async function fetchSignalComposite(
     mode === "swing"
       ? "/api/stocvest/signals/composite/swing"
       : "/api/stocvest/signals/composite/real";
-  let response: Response;
-  try {
-    response = await fetch(path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ symbol }),
-      credentials: "same-origin",
-      signal: opts.signal
-    });
-  } catch (err: unknown) {
-    if (opts.signal?.aborted) throw err;
-    return { error: "upstream_unavailable" };
+  const maxAttempts = 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (opts.signal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+    let response: Response;
+    try {
+      response = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ symbol }),
+        credentials: "same-origin",
+        signal: opts.signal
+      });
+    } catch (err: unknown) {
+      if (opts.signal?.aborted) throw err;
+      return { error: "upstream_unavailable" };
+    }
+    if (!response.ok) {
+      throw new Error(
+        `Composite request to ${path} failed: ${response.status} ${response.statusText}`
+      );
+    }
+    const body = (await response.json()) as SignalCompositeResult;
+    const transport = getCompositeTransportError(body);
+    if (transport?.code === "rate_limited" && attempt < maxAttempts - 1) {
+      const waitMs = (transport.retryAfterSec ?? 2) * 1000;
+      await sleep(waitMs);
+      continue;
+    }
+    if (!transport && !String(body.error ?? "").trim()) {
+      notifyWatchlistMaturationUpdated(symbol.trim().toUpperCase(), mode);
+    }
+    return body;
   }
-  if (!response.ok) {
-    throw new Error(
-      `Composite request to ${path} failed: ${response.status} ${response.statusText}`
-    );
-  }
-  const body = (await response.json()) as SignalCompositeResult;
-  if (!getCompositeTransportError(body) && !String(body.error ?? "").trim()) {
-    notifyWatchlistMaturationUpdated(symbol.trim().toUpperCase(), mode);
-  }
-  return body;
+  return { error: "rate_limited", retry_after: 60 };
 }
 
 export function useSignalComposite(

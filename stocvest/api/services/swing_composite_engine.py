@@ -592,6 +592,7 @@ async def build_swing_composite_response(
         }
     last_px = float(sym_snap.last_trade_price) if sym_snap and sym_snap.last_trade_price else 0.0
     pattern = str(getattr(tech, "confluence_pattern", None) or "swing_composite")
+    response_body["pattern"] = pattern
 
     cf: Any = None
     cf_subset: dict[str, Any] | None = None

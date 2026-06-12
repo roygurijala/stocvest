@@ -136,6 +136,10 @@ def test_evidence_rate_limit_enforced(monkeypatch: pytest.MonkeyPatch) -> None:
         "stocvest.api.handlers.signals.evidence_rate_limit_exceeded",
         lambda _uid: True,
     )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.read_dashboard_cache",
+        lambda _k: None,
+    )
     out = composite_response_with_evidence_cache(
         symbol="AAPL",
         user_id="u1",
@@ -144,6 +148,37 @@ def test_evidence_rate_limit_enforced(monkeypatch: pytest.MonkeyPatch) -> None:
         sync_compute=lambda: {"symbol": "AAPL"},
     )
     assert out.get("error") == "rate_limited"
+
+
+def test_evidence_cache_hit_skips_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    rate_checks: list[int] = []
+
+    def rate_limit(_uid: str | None) -> bool:
+        rate_checks.append(1)
+        return True
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.evidence_rate_limit_exceeded",
+        rate_limit,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.read_dashboard_cache",
+        lambda _k: {
+            "state_version": "swing_cached",
+            "data": {"symbol": "GGAL", "signal_score": 75, "layers": []},
+        },
+    )
+
+    out = composite_response_with_evidence_cache(
+        symbol="GGAL",
+        user_id="u1",
+        user_email=None,
+        mode="swing",
+        sync_compute=lambda: {"symbol": "GGAL"},
+    )
+    assert out.get("source") == "cache"
+    assert out.get("signal_score") == 75
+    assert rate_checks == []
 
 
 def test_insufficient_data_not_cached(monkeypatch: pytest.MonkeyPatch) -> None:

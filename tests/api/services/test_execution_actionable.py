@@ -85,6 +85,19 @@ def test_apply_entry_gates_blocked_when_rr_below_threshold() -> None:
     assert body["decision_state"] == "blocked"
 
 
+def test_scenario_payload_maps_strength_and_pattern() -> None:
+    from stocvest.api.services.execution_actionable import scenario_payload_from_body
+
+    body = _active_body()
+    body["pattern"] = "ema9_bounce volume_expansion"
+    body["signal_score"] = 72
+    scenario = scenario_payload_from_body(body, mode="swing", symbol="GGAL")
+    assert scenario["strength"] == 72
+    assert scenario["pattern"] == "ema9_bounce volume_expansion"
+    assert scenario["entry_zone_low"] == 99.0
+    assert scenario["entry_zone_high"] == 101.0
+
+
 def test_resolve_decision_state_blocked_when_ledger_fails() -> None:
     body = _active_body(rr=0.5)
     ledger_ok, exec_ok, _ = evaluate_execution_actionable(body, mode="swing")

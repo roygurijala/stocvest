@@ -24,7 +24,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { SWRConfig } from "swr";
 
-import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
+import { useSignalComposite, __internal_fetchSignalComposite } from "@/lib/hooks/use-signal-composite";
 
 const fetchMock = vi.fn();
 const ORIGINAL_FETCH = global.fetch;
@@ -154,5 +154,20 @@ describe("useSignalComposite", () => {
     );
     await waitFor(() => expect(result.current.error).toBeTruthy());
     expect(result.current.composite).toBeNull();
+  });
+
+  test("rate_limited envelope retries then returns composite payload", async () => {
+    vi.useFakeTimers();
+    fetchMock
+      .mockResolvedValueOnce(
+        makeOkResponse({ error: "rate_limited", retry_after: 1 })
+      )
+      .mockResolvedValueOnce(makeOkResponse({ signal_summary: "bullish", layers: [] }));
+    const pending = __internal_fetchSignalComposite("GGAL", "swing");
+    await vi.advanceTimersByTimeAsync(1000);
+    const body = await pending;
+    expect(body.signal_summary).toBe("bullish");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 });

@@ -194,13 +194,6 @@ def composite_response_with_evidence_cache(
     sync_compute: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
     """Bounded + cached composite for View Evidence (Upstash); rate limit + circuit breaker."""
-    if evidence_rate_limit_exceeded(user_id):
-        return {
-            "error": "rate_limited",
-            "retry_after": 60,
-            "disclaimer": API_SIGNAL_DISCLAIMER,
-        }
-
     cache_key = evidence_cache_key(symbol, mode)
     envelope = read_dashboard_cache(cache_key)
     if envelope and isinstance(envelope.get("data"), dict):
@@ -211,6 +204,13 @@ def composite_response_with_evidence_cache(
             user_id=user_id, symbol=symbol, mode=mode, body=data
         )
         return _with_maturation_sync(data, sync_status)
+
+    if evidence_rate_limit_exceeded(user_id):
+        return {
+            "error": "rate_limited",
+            "retry_after": 60,
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+        }
 
     try:
         body = polygon_circuit.call(
