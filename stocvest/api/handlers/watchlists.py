@@ -13,7 +13,11 @@ from stocvest.api.text_sanitize import WATCHLIST_NAME_MAX, sanitize_free_text
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.data.scan_symbols import SYSTEM_DEFAULTS
 from stocvest.api.services.user_profile_store import get_user_profile_store
-from stocvest.analytics.evolution_stats import compute_evolution_summary, filter_transitions_by_plan
+from stocvest.analytics.evolution_stats import (
+    compute_evolution_analytics,
+    compute_evolution_summary,
+    filter_transitions_by_plan,
+)
 from stocvest.api.services.watchlist_maturation_gates import maturation_summary_include_readiness_label
 from stocvest.api.services.watchlist_plan_limits import watchlist_symbol_cap_for_profile
 from stocvest.data.watchlist_maturation_repository import get_watchlist_maturation_repository
@@ -464,6 +468,7 @@ def watchlists_setup_evolution_handler(event: LambdaEvent, context: LambdaContex
     gated = filter_transitions_by_plan(raw_rows, has_full_access=has_full)
     transitions = [r.to_api_dict() for r in gated]
     summary = compute_evolution_summary(gated)
+    analytics = compute_evolution_analytics(gated)
 
     return ok(
         {
@@ -476,6 +481,7 @@ def watchlists_setup_evolution_handler(event: LambdaEvent, context: LambdaContex
                 "day refresh (~9:35 AM ET when market is open), and EOD reconcile (~4:30 PM ET)."
             ),
             "summary": summary,
+            "analytics": analytics,
             "transitions": transitions,
         }
     )

@@ -42,6 +42,7 @@ class WatchlistMaturationTransition:
     fundamental_backdrop: str | None = None
     earnings_days_away: int | None = None
     price_at_event: float | None = None
+    signal_score: int | None = None
 
     def to_api_dict(self) -> dict:
         out: dict = {
@@ -64,6 +65,8 @@ class WatchlistMaturationTransition:
             out["fundamental_backdrop"] = self.fundamental_backdrop
         if self.earnings_days_away is not None:
             out["earnings_days_away"] = self.earnings_days_away
+        if self.signal_score is not None:
+            out["signal_score"] = int(self.signal_score)
         return out
 
 

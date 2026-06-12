@@ -7,7 +7,7 @@
 | Surface | Route | Data source |
 |---------|-------|-------------|
 | **Product KPI** (platform signal accuracy) | `/performance` · admin Desk backtesting | `SignalHistory` PUBLIC + `product_kpi.py` cohort — **not** setup-outcomes |
-| Setup Evolution (per symbol) | `/dashboard/signals?symbol=` + Past states panel | `WatchlistMaturationTransition` via `GET /v1/watchlists/symbols/{symbol}/setup-evolution` |
+| Setup Evolution (per symbol) | `/dashboard/signals?tab=evolution`, Trading Room **Deep Dive → Evolution**, hub | `WatchlistMaturationTransition` via `GET /v1/watchlists/symbols/{symbol}/setup-evolution` (+ **`analytics`** block, B68) |
 | Setup Evolution (hub) | `/dashboard/setup-evolution` | Same API per selected watchlist symbol |
 | Setup Outcomes | `/dashboard/setup-outcomes` | `GET /v1/analytics/setup-outcomes` (v1: transition pairs on default watchlist) |
 | System behavior | Outcomes page (user) + admin | `GET /v1/admin/system-behavior` (admin, cached) |
@@ -65,3 +65,23 @@ From consecutive maturation transitions on the same symbol/mode:
 ## Plan gating
 
 Free: last 14 transition rows per symbol; paid: 90 days / full timeline.
+
+## Evolution tab UX (B68, 2026-06-10)
+
+The Evolution tab answers three questions in order (Signals desk, Trading Room Deep Dive, setup-evolution hub):
+
+1. **Where is this setup now?** — Horizontal **state journey** (Potential / Near / Actionable / Cooling from display tiers), dwell time between transitions, score at each node (current segment shows live score).
+2. **Is it getting stronger or weaker?** — **Score sparkline** (0–100 composite, not alignment %), actionable threshold line at **72**, state-colored dots; **inflection row** (peak alignment, biggest jump, streak in current state, momentum over last 3 sessions); **forward projection** (linear extrapolation only — labeled not a forecast).
+3. **Why is it behaving this way?** — **Layer stability** (■ confirmed / ▨ missing per session, band hints); **daily score timeline** grouped by week (green/red/amber dots for score change / state change).
+
+**Data:** `analytics` on setup-evolution API; new transitions persist **`signal_score`** from composite when available. Legacy transitions without stored score use a deterministic proxy in `resolve_signal_score()`.
+
+**Out of scope (by design):**
+
+- Hypothetical P&amp;L or “if you entered at $X” copy (non-RIA positioning).
+- Aggregate pattern win-rate on the per-symbol tab (counsel review first).
+- Comparable setups from ledger (deferred until signal volume supports it).
+
+**Frontend:** `frontend/components/signals/setup-evolution-panel.tsx`, `frontend/lib/setup-evolution-analytics.ts`, types in `frontend/lib/api/setup-evolution.ts`.
+
+**Tests:** `tests/analytics/test_evolution_stats.py`, `tests/api/test_watchlists_setup_evolution.py`, `frontend/tests/setup-evolution-*.test.ts`.
