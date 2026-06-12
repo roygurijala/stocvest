@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from uuid import uuid4
 
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
+from stocvest.api.services.composite_layer_detail_wire import technical_indicator_snapshot_wire
 from stocvest.api.services.composite_sector_wire import sector_layer_api_extras
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
@@ -230,8 +231,6 @@ def _build_catalyst_headlines(news_rows: list[dict[str, Any]]) -> list[dict[str,
                     sent = 1.0
                 elif s in {"negative", "bearish"}:
                     sent = -1.0
-        if abs(sent) < 0.3:
-            continue
         out.append(
             {
                 "text": title[:80],
@@ -244,7 +243,7 @@ def _build_catalyst_headlines(news_rows: list[dict[str, Any]]) -> list[dict[str,
             }
         )
     out.sort(key=lambda x: abs(float(x.get("sentiment_score") or 0.0)), reverse=True)
-    return out[:3]
+    return out[:8]
 
 
 @dataclass(frozen=True)
@@ -626,6 +625,12 @@ async def build_real_composite_response(
             row["analyst_feed_state"] = getattr(res, "analyst_feed_state", None)
             row["headline_sentiment"] = getattr(res, "headline_sentiment", None)
             row["analyst_sub_score"] = getattr(res, "analyst_sub_score", None)
+            qa = list(getattr(res, "quality_articles", []) or [])
+            if qa:
+                row["quality_articles"] = qa
+            rr = list(getattr(res, "recent_ratings", []) or [])
+            if rr:
+                row["recent_ratings"] = rr
         if lid == "geopolitical":
             row["geo_active_events"] = list(getattr(res, "geo_active_events", []) or [])
             row["geo_impact_sector_key"] = getattr(res, "geo_impact_sector_key", "") or ""
@@ -641,6 +646,9 @@ async def build_real_composite_response(
         if lid == "technical":
             row["vwap_state"] = getattr(res, "vwap_state", None)
             row["vwap_state_tooltip"] = getattr(res, "vwap_state_tooltip", None)
+            snap = technical_indicator_snapshot_wire(res, mode="day")
+            if snap:
+                row["indicator_snapshot"] = snap
         if lid == "macro":
             row["macro_warnings"] = list(getattr(res, "macro_warnings", None) or [])
             row["macro_risk_level"] = getattr(res, "macro_risk_level", None)

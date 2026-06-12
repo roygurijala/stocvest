@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
+from stocvest.api.services.composite_layer_detail_wire import quality_article_wire, recent_ratings_wire
 from stocvest.api.services.news_quality_filter import is_quality_article
 from stocvest.config.signal_parameters import NewsParameters
 from stocvest.data.benzinga_client import BenzingaMultiResult
@@ -43,6 +44,8 @@ class NewsLayerResult:
     latest_guidance: dict[str, Any] | None = None
     earnings_result: dict[str, Any] | None = None
     analyst_consensus: dict[str, Any] | None = None
+    quality_articles: list[dict[str, Any]] = field(default_factory=list)
+    recent_ratings: list[dict[str, Any]] = field(default_factory=list)
 
 
 _CATALYST_PATTERNS: dict[str, tuple[str, ...]] = {
@@ -136,6 +139,8 @@ def _fill_benzinga_fields(
     out.analyst_consensus = analyst_consensus
     if analyst_feed_state:
         out.analyst_feed_state = analyst_feed_state
+    if bz is not None and bz.ratings:
+        out.recent_ratings = recent_ratings_wire(bz.ratings)
     return out
 
 
@@ -263,6 +268,9 @@ class NewsAnalyzer:
                 catalyst_headline = ch_head
 
             sent = _article_sentiment(art)
+            wire = quality_article_wire(art, sent)
+            if wire:
+                quality_article_rows.append(wire)
             pub_raw = art.get("published_utc")
             try:
                 pub = datetime.fromisoformat(str(pub_raw).replace("Z", "+00:00"))
@@ -380,6 +388,7 @@ class NewsAnalyzer:
                 analyst_feed_state=analyst_feed_state,
                 reasoning=reasoning,
                 chips=chips,
+                quality_articles=quality_article_rows,
             ),
             benzinga_data,
             current_price=current_price,

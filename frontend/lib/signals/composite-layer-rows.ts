@@ -3,6 +3,7 @@
  */
 
 import { isInsufficientCompositeResponse } from "@/lib/api/swing-composite";
+import { catalystArticlesForNewsLayer } from "@/lib/signals/layer-catalyst-articles";
 import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
 import { normalizeSetupBias, type SignalsLayerRowInput, type SignalsSetupBias } from "@/lib/signals-page-present";
 
@@ -73,6 +74,10 @@ function layerMetadataFromEntry(
     meta.vwapState = strField(entry.vwap_state) || null;
     const tooltip = strField(entry.vwap_state_tooltip ?? entry.vwap_tooltip);
     if (tooltip) meta.vwapStateTooltip = tooltip;
+    const snap = entry.indicator_snapshot;
+    if (snap && typeof snap === "object") {
+      meta.indicatorSnapshot = snap as Record<string, string | number | boolean | null>;
+    }
   }
 
   if (key === "news") {
@@ -100,9 +105,31 @@ function layerMetadataFromEntry(
       const period = strField(e.period);
       meta.earningsResult = [beat, period].filter(Boolean).join(" · ") || null;
     }
+    const lg = entry.latest_guidance;
+    if (lg && typeof lg === "object") {
+      const headline = strField((lg as Record<string, unknown>).headline);
+      if (headline) meta.latestGuidance = headline;
+    }
+    const rr = entry.recent_ratings;
+    if (Array.isArray(rr)) {
+      meta.recentRatings = rr
+        .filter((item) => item && typeof item === "object")
+        .map((item) => {
+          const o = item as Record<string, unknown>;
+          return {
+            action: strField(o.action),
+            rating: strField(o.rating),
+            firm: strField(o.firm),
+            date: strField(o.date ?? o.date_str),
+            priceTarget: numField(o.price_target)
+          };
+        })
+        .filter((row) => row.firm.length > 0 || row.action.length > 0);
+    }
   }
 
   if (key === "macro") {
+    meta.macroRiskLevel = strField(entry.macro_risk_level) || null;
     const mw = entry.macro_warnings;
     if (Array.isArray(mw)) {
       meta.macroWarnings = mw.map((x) => String(x)).filter((s) => s.trim().length > 0);
@@ -155,6 +182,32 @@ function layerMetadataFromEntry(
     meta.sectorDisplayName = strField(entry.sector_display_name) || null;
     meta.sectorMomentum = numField(entry.sector_momentum ?? entry.sector_persistence);
     meta.vsSectorPerformance = numField(entry.vs_sector_performance ?? entry.relative_strength);
+    meta.sectorInterpretation = strField(entry.sector_interpretation) || null;
+    meta.sectorTrending = strField(entry.sector_trending) || null;
+    meta.sectorRank1d = numField(entry.sector_rank_1d);
+    meta.sectorRank5d = numField(entry.sector_rank_5d);
+    const sessions = entry.sector_daily_sessions;
+    if (Array.isArray(sessions)) {
+      meta.sectorDailySessions = sessions
+        .filter((item) => item && typeof item === "object")
+        .map((item) => {
+          const o = item as Record<string, unknown>;
+          return {
+            date: strField(o.date),
+            etfPct: numField(o.etf_pct) ?? 0,
+            spyPct: numField(o.spy_pct) ?? 0,
+            relative: numField(o.relative) ?? 0,
+            outperformed: o.outperformed === true
+          };
+        })
+        .filter((row) => row.date.length > 0)
+        .slice(0, 5);
+    }
+  }
+
+  if (key === "internals") {
+    meta.breadthSignal = strField(entry.breadth_signal) || null;
+    meta.participationSignal = strField(entry.participation) || null;
   }
 
   return meta;
@@ -184,7 +237,7 @@ export function compositeToSignalsLayerRows(
   if (!composite || isInsufficientCompositeResponse(composite)) return [];
   const rawLayers = composite.layers;
   if (!Array.isArray(rawLayers)) return [];
-  return COMPOSITE_LAYER_KEYS.map((key) => {
+  const rows = COMPOSITE_LAYER_KEYS.map((key) => {
     const entry = (rawLayers as Array<Record<string, unknown>>).find(
       (x) => String(x.layer ?? "").toLowerCase() === key
     );
@@ -221,6 +274,19 @@ export function compositeToSignalsLayerRows(
       ...layerMetadataFromEntry(key, entry ?? {})
     };
   });
+
+  const newsEntry = (rawLayers as Array<Record<string, unknown>> | undefined)?.find(
+    (x) => String(x.layer ?? "").toLowerCase() === "news"
+  );
+  const catalystArticles = catalystArticlesForNewsLayer(newsEntry, composite);
+  if (catalystArticles.length > 0) {
+    const news = rows.find((r) => r.key === "news");
+    if (news) {
+      news.catalystArticles = catalystArticles;
+    }
+  }
+
+  return rows;
 }
 
 export function deriveSetupBiasFromComposite(

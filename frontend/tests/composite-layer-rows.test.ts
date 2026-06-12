@@ -127,6 +127,117 @@ describe("compositeToSignalsLayerRows", () => {
     expect(tech?.vwapState).toBe("Above VWAP");
   });
 
+  test("prefers quality_articles on the news layer over catalyst_headlines", () => {
+    const rows = compositeToSignalsLayerRows({
+      catalyst_headlines: [{ text: "Fallback headline", sentiment: "positive" }],
+      layers: [
+        {
+          layer: "news",
+          status: "available",
+          score: 100,
+          verdict: "bullish",
+          article_count: 2,
+          quality_articles: [
+            {
+              text: "Navan beats earnings",
+              source: "polygon",
+              published_at: "2026-06-10T12:00:00Z",
+              sentiment: "positive"
+            },
+            {
+              text: "Sector outlook stable",
+              source: "benzinga",
+              published_at: "2026-06-10T10:00:00Z",
+              sentiment: "neutral"
+            }
+          ]
+        }
+      ]
+    });
+    const news = rows.find((r) => r.key === "news");
+    expect(news?.catalystArticles?.map((a) => a.text)).toEqual([
+      "Navan beats earnings",
+      "Sector outlook stable"
+    ]);
+  });
+
+  test("maps technical indicator snapshot and analyst recent ratings", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [
+        {
+          layer: "technical",
+          status: "available",
+          score: 65,
+          verdict: "bullish",
+          indicator_snapshot: { mode: "day", rsi: 58, ema9: 12.5, volume_vs_adv: 1.2 }
+        },
+        {
+          layer: "news",
+          status: "available",
+          score: 80,
+          verdict: "bullish",
+          recent_ratings: [
+            {
+              action: "Upgrade",
+              rating: "Buy",
+              firm: "Morgan Stanley",
+              date: "2026-06-08",
+              price_target: 24
+            }
+          ]
+        }
+      ]
+    });
+    expect(rows.find((r) => r.key === "technical")?.indicatorSnapshot?.rsi).toBe(58);
+    expect(rows.find((r) => r.key === "news")?.recentRatings?.[0]?.firm).toBe("Morgan Stanley");
+  });
+
+  test("attaches catalyst headlines to the news row", () => {
+    const rows = compositeToSignalsLayerRows({
+      catalyst_headlines: [
+        {
+          text: "Navan raises guidance",
+          source: "polygon",
+          published_at: "2026-06-10T12:00:00Z",
+          sentiment: "positive",
+          url: "https://example.com/navan"
+        }
+      ],
+      layers: [
+        {
+          layer: "news",
+          status: "available",
+          score: 100,
+          verdict: "bullish",
+          article_count: 2,
+          reasoning: "News score 100/100 from 2 quality articles."
+        }
+      ]
+    });
+    const news = rows.find((r) => r.key === "news");
+    expect(news?.articleCount).toBe(2);
+    expect(news?.catalystArticles).toHaveLength(1);
+    expect(news?.catalystArticles?.[0]?.text).toContain("Navan");
+  });
+
+  test("maps internals breadth and participation signals", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [
+        {
+          layer: "internals",
+          status: "available",
+          score: 72,
+          verdict: "bullish",
+          breadth_signal: "strong_up",
+          participation: "broad_up"
+        }
+      ]
+    });
+    const internals = rows.find((r) => r.key === "internals");
+    expect(internals?.breadthSignal).toBe("strong_up");
+    expect(internals?.participationSignal).toBe("broad_up");
+  });
+
   test("preserves legitimate technical score of zero", () => {
     const rows = compositeToSignalsLayerRows({
       layers: [
