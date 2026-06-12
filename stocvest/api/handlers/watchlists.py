@@ -21,6 +21,7 @@ from stocvest.analytics.evolution_stats import (
 from stocvest.api.services.watchlist_maturation_gates import maturation_summary_include_readiness_label
 from stocvest.api.services.watchlist_plan_limits import watchlist_symbol_cap_for_profile
 from stocvest.data.watchlist_maturation_repository import get_watchlist_maturation_repository
+from stocvest.data.system_signal_transition_repository import get_system_signal_transition_repository
 from stocvest.data.watchlist_maturation_transition_repository import (
     get_watchlist_maturation_transition_repository,
 )
@@ -425,7 +426,7 @@ def watchlists_maturation_summary_handler(event: LambdaEvent, context: LambdaCon
 
 
 def watchlists_setup_evolution_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
-    """GET /v1/watchlists/symbols/{symbol}/setup-evolution — transition timeline for default-list symbol."""
+    """GET /v1/watchlists/symbols/{symbol}/setup-evolution — platform + optional watchlist overlay."""
     _ = context
     rc = build_request_context(event)
     if not rc.user_id:
@@ -447,38 +448,77 @@ def watchlists_setup_evolution_handler(event: LambdaEvent, context: LambdaContex
     limit = max(1, min(limit, 500))
 
     wl = get_watchlist_store().get_default_watchlist(rc.user_id)
-    if not wl or sym not in {s.strip().upper() for s in wl.symbols}:
-        return not_found("Symbol is not on your default watchlist.")
+    on_watchlist = bool(wl and sym in {s.strip().upper() for s in wl.symbols})
 
-    mat_repo = get_watchlist_maturation_repository()
     started_tracking_at: str | None = None
-    if mat_repo is not None:
-        entry = mat_repo.get_entry(rc.user_id, sym, mode)
-        if entry and entry.added_at:
-            started_tracking_at = entry.added_at
+    if on_watchlist:
+        mat_repo = get_watchlist_maturation_repository()
+        if mat_repo is not None:
+            entry = mat_repo.get_entry(rc.user_id, sym, mode)
+            if entry and entry.added_at:
+                started_tracking_at = entry.added_at
 
-    trans_repo = get_watchlist_maturation_transition_repository()
-    raw_rows = []
-    if trans_repo is not None:
-        raw_rows = trans_repo.list_for_symbol(rc.user_id, sym, mode, limit=limit, scan_forward=True)
+    system_repo = get_system_signal_transition_repository()
+    system_rows = []
+    if system_repo is not None:
+        system_rows = system_repo.list_for_symbol(sym, mode, limit=limit, scan_forward=True)
+
+    history_source = "system" if system_rows else "none"
+    analytics_rows = [r.to_watchlist_transition() for r in system_rows]
+
+    if not analytics_rows and on_watchlist:
+        trans_repo = get_watchlist_maturation_transition_repository()
+        if trans_repo is not None:
+            user_rows = trans_repo.list_for_symbol(rc.user_id, sym, mode, limit=limit, scan_forward=True)
+            if user_rows:
+                history_source = "watchlist"
+                profile_store = get_user_profile_store()
+                profile = profile_store.get_profile(rc.user_id) if profile_store else None
+                has_full = bool(
+                    profile
+                    and (
+                        profile.beta_access_active
+                        or (profile.subscription_plan or "").lower() in ("swing_pro", "swing_day_pro")
+                    )
+                )
+                analytics_rows = list(filter_transitions_by_plan(user_rows, has_full_access=has_full))
 
     profile_store = get_user_profile_store()
     profile = profile_store.get_profile(rc.user_id) if profile_store else None
-    has_full = bool(profile and (profile.beta_access_active or (profile.subscription_plan or "").lower() in ("swing_pro", "swing_day_pro")))
-    gated = filter_transitions_by_plan(raw_rows, has_full_access=has_full)
-    transitions = [r.to_api_dict() for r in gated]
-    summary = compute_evolution_summary(gated)
-    analytics = compute_evolution_analytics(gated)
+    has_full = bool(
+        profile
+        and (
+            profile.beta_access_active
+            or (profile.subscription_plan or "").lower() in ("swing_pro", "swing_day_pro")
+        )
+    )
+    transitions = [r.to_api_dict() for r in analytics_rows]
+    summary = compute_evolution_summary(analytics_rows)
+    analytics = compute_evolution_analytics(analytics_rows)
+
+    first_system_session = system_rows[0].session_date if system_rows else None
+    platform_since: str | None = None
+    if system_repo is not None:
+        state_entry = system_repo.get_state(sym, mode)
+        if state_entry and state_entry.first_evaluated_at:
+            platform_since = state_entry.first_evaluated_at
+    if not platform_since and system_rows:
+        platform_since = system_rows[0].recorded_at
 
     return ok(
         {
             "symbol": sym,
             "mode": mode,
+            "history_source": history_source,
+            "on_watchlist": on_watchlist,
             "started_tracking_at": started_tracking_at,
-            "has_full_access": has_full,
+            "platform_tracked_since": platform_since or None,
+            "first_session": first_system_session,
+            "has_full_access": has_full if history_source == "watchlist" else True,
             "evaluation_cadence": (
-                "Recorded on Evidence or row Refresh, weekday swing refresh (~8:15 AM ET), "
-                "day refresh (~9:35 AM ET when market is open), and EOD reconcile (~4:30 PM ET)."
+                "Platform history is recorded when the desk batch evaluates a symbol, when you open "
+                "Evidence, or on watchlist refresh. User-specific tracking starts when you add the "
+                "symbol to your default watchlist."
             ),
             "summary": summary,
             "analytics": analytics,

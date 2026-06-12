@@ -193,6 +193,9 @@ class Settings(BaseSettings):
     dynamodb_watchlist_maturation_transition_table: str = Field(
         "", alias="DYNAMODB_WATCHLIST_MATURATION_TRANSITION_TABLE"
     )
+    dynamodb_system_signal_transition_table: str = Field(
+        "", alias="DYNAMODB_SYSTEM_SIGNAL_TRANSITION_TABLE"
+    )
 
     # ── Journal + PDT persistence ────────────────────────────────
     trade_journal_table: str = Field("", alias="STOCVEST_TRADE_JOURNAL_TABLE")

@@ -105,7 +105,12 @@ export type SetupEvolutionSummary = {
 export type SetupEvolutionResponse = {
   symbol: string;
   mode: "swing" | "day";
+  /** Platform history when available; falls back to watchlist-only rows. */
+  history_source?: "system" | "watchlist" | "none";
+  on_watchlist?: boolean;
   started_tracking_at: string | null;
+  platform_tracked_since?: string | null;
+  first_session?: string | null;
   has_full_access?: boolean;
   evaluation_cadence: string;
   summary?: SetupEvolutionSummary;
