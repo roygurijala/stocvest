@@ -274,6 +274,7 @@ class RealCompositeEnginePhase:
     vix_snap: Snapshot | None = None
     ticker_ref: TickerReference | None = None
     market_context_dampening: dict[str, Any] | None = None
+    perplexity_headwinds: tuple[str, ...] = ()
 
 
 async def run_real_composite_engine_phase(
@@ -559,6 +560,7 @@ async def run_real_composite_engine_phase(
         vix_snap=vix_snap,
         ticker_ref=ticker_ref,
         market_context_dampening=damp_meta,
+        perplexity_headwinds=tuple(perplexity_headwinds),
     )
 
 
@@ -814,8 +816,8 @@ async def build_real_composite_response(
         ],
         "daily_bars_range": serialize_daily_bars_for_range(daily_bars, limit=10),
     }
-    if perplexity_headwinds:
-        payload_stub["perplexity_headwinds"] = perplexity_headwinds
+    if phase.perplexity_headwinds:
+        payload_stub["perplexity_headwinds"] = list(phase.perplexity_headwinds)
     _tech_atr = getattr(tech, "atr", None)
     if _tech_atr is not None:
         try:
