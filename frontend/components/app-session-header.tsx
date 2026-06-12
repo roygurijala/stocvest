@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Menu } from "lucide-react";
 import { SymbolSearch } from "@/components/dashboard/trading-room/symbol-search";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -13,8 +13,6 @@ import {
   sessionWord,
   vixWord
 } from "@/lib/session-header-market";
-import { useStackedLayout } from "@/lib/hooks/use-stacked-layout";
-
 export type SessionHeaderCounts = Record<FeedState, number>;
 
 export type AppSessionHeaderProps = {
@@ -48,16 +46,11 @@ export function AppSessionHeader({
   updatedAtIso,
   onOpenSymbol,
   bleed,
-  isMobile = false,
+  isMobile: _isMobile = false,
   colors,
   badge,
   searchPlaceholder = "Jump to a symbol or company…"
 }: AppSessionHeaderProps) {
-  const compactNav = useStackedLayout(899);
-  const mobile = isMobile || compactNav;
-  const headerRef = useRef<HTMLElement | null>(null);
-  const [headerHeightPx, setHeaderHeightPx] = useState(0);
-
   const orbTone =
     marketOpen === true ? colors.bullish : /extended/i.test(marketStatusLabel) ? colors.caution : colors.textMuted;
   const breadth = breadthWord(spyPct, qqqPct, iwmPct);
@@ -94,23 +87,6 @@ export function AppSessionHeader({
 
   const { openNavDrawer } = useAppChrome();
 
-  useLayoutEffect(() => {
-    if (!mobile) {
-      setHeaderHeightPx(0);
-      return;
-    }
-    const el = headerRef.current;
-    if (!el) return;
-    const measure = () => {
-      const h = el.getBoundingClientRect().height;
-      if (Number.isFinite(h) && h > 0) setHeaderHeightPx(Math.ceil(h));
-    };
-    measure();
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
-    ro?.observe(el);
-    return () => ro?.disconnect();
-  }, [mobile, regimeLabel, counts.actionable, counts.near, counts.potential, counts.cooling]);
-
   const marketLineCompact = (
     <span style={{ lineHeight: 1.4 }}>
       <Tone color={regimeTone}>{regimeLabel}</Tone> · <Tone color={sessionTone}>{session}</Tone> · VIX{" "}
@@ -130,7 +106,6 @@ export function AppSessionHeader({
       style={{ ["--session-header-bleed" as string]: bleed }}
     >
       <header
-        ref={headerRef}
         data-testid="app-session-header"
         className="app-session-header"
         style={{
@@ -304,11 +279,6 @@ export function AppSessionHeader({
         </div>
       </div>
       </header>
-      <div
-        aria-hidden
-        className="app-session-header-spacer"
-        style={{ height: headerHeightPx > 0 ? headerHeightPx : undefined, flexShrink: 0, display: "none" }}
-      />
     </div>
   );
 }

@@ -149,16 +149,18 @@ a {
   .desktop-nav-only { display: none !important; }
   .session-header-market-compact { display: flex !important; }
   .session-header-market-full { display: none !important; }
+  /* Sticky (not fixed) keeps the session chrome pinned during scroll without
+   * ghosting at the page bottom — fixed + a hidden spacer was letting content
+   * run under the header and could repeat the chrome after long stacked panes. */
   .app-session-header {
-    position: fixed;
+    position: sticky;
     top: 0;
-    left: 0;
-    right: 0;
     z-index: 30;
+    width: 100%;
+    align-self: start;
   }
   .app-session-header-spacer {
-    display: block;
-    min-height: 10.5rem;
+    display: none !important;
   }
 }
 @media (min-width: 900px) {
