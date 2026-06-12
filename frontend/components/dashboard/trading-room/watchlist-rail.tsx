@@ -565,7 +565,8 @@ export function WatchlistRail({
         gap: spacing[3],
         maxHeight: isMobile ? undefined : "calc(100vh - 220px)",
         position: isMobile ? "static" : "sticky",
-        top: isMobile ? undefined : spacing[3]
+        top: isMobile ? undefined : spacing[3],
+        alignSelf: isMobile ? undefined : "start"
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>

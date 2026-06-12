@@ -41,13 +41,14 @@ export function CardRefreshButton({
         width: 24,
         height: 24,
         borderRadius: borderRadius.sm,
-        border: `1px solid ${colors.border}`,
-        background: colors.surfaceMuted,
-        color: colors.textMuted,
+        border: `1px solid ${colors.accent}66`,
+        background: `${colors.accent}22`,
+        color: colors.accent,
         cursor: busy ? "wait" : "pointer",
-        fontSize: 12,
+        fontSize: 13,
+        fontWeight: 700,
         lineHeight: 1,
-        opacity: busy ? 0.6 : 1
+        opacity: busy ? 0.65 : 1
       }}
     >
       {busy ? "…" : "↻"}

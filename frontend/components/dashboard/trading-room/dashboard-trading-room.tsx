@@ -77,7 +77,7 @@ import {
   applyDashboardSymbolUrl,
   clearTradingRoomOpenIntent,
   feedCardIdForDeepLink,
-  hasDashboardSymbolInLocation,
+  parseDashboardTradingRoomDeepLink,
   peekTradingRoomOpenIntent,
   syntheticFeedCardForDeepLink,
   type DashboardTradingRoomDeepLink
@@ -492,7 +492,6 @@ function TradingRoomBody({
   const applyDeepLinkOrRestoreSelection = () => {
     const pendingHandoff = peekTradingRoomOpenIntent();
     const freshTradingDay = !pendingHandoff && isFirstVisitOfTradingDay();
-    const staleUrlSymbol = !pendingHandoff && hasDashboardSymbolInLocation();
 
     // Card clicks update the URL via `replaceState`, which does not refresh
     // `useSearchParams`. When the user already has a selection, keep it and heal
@@ -505,7 +504,7 @@ function TradingRoomBody({
       return;
     }
 
-    if (freshTradingDay || staleUrlSymbol) {
+    if (freshTradingDay) {
       setLastSelectedId(null);
       clearTradingRoomOpenIntent();
       if (selectedId || overrideCard) {
@@ -529,6 +528,16 @@ function TradingRoomBody({
     if (selectionBootstrappedRef.current) return;
     selectionBootstrappedRef.current = true;
     recordTradingRoomVisit();
+
+    // Hard refresh: `replaceState` query params survive reload — reopen that setup.
+    const urlIntent =
+      typeof window !== "undefined"
+        ? parseDashboardTradingRoomDeepLink(new URLSearchParams(window.location.search))
+        : null;
+    if (urlIntent) {
+      openSymbol(urlIntent.symbol, null, urlIntent.lane);
+      return;
+    }
 
     const lastId = getLastSelectedId();
     if (!lastId) return;
@@ -1118,24 +1127,30 @@ function SignalFeed({
   refreshingCardIds?: Set<string>;
 }) {
   const empty = day.length === 0 && swing.length === 0;
-  // Desktop: an independently-scrolling feed zone (sticky pane) with a vertical
-  // divider to its right — mirrors the prototype's bordered feed zone. Mobile:
-  // normal flow within the stacked layout.
+  // Desktop: sticky wrapper + inner scroll so the pane does not ghost below the
+  // footer when the center column is taller than the viewport. Mobile: normal flow.
   const paneStyle: CSSProperties = isMobile
     ? { display: "flex", flexDirection: "column", gap: spacing[4] }
+    : {
+        position: "sticky",
+        top: spacing[3],
+        alignSelf: "start",
+        width: "100%",
+        maxHeight: "calc(100vh - 220px)"
+      };
+  const scrollStyle: CSSProperties | undefined = isMobile
+    ? undefined
     : {
         display: "flex",
         flexDirection: "column",
         gap: spacing[4],
-        position: "sticky",
-        top: spacing[3],
         maxHeight: "calc(100vh - 220px)",
         overflowY: "auto",
         paddingRight: spacing[3],
         borderRight: `1px solid ${colors.border}`
       };
-  return (
-    <div style={paneStyle}>
+  const body = (
+    <>
       {feedEnvironment ? (
         <MarketEnvironmentStrip environment={feedEnvironment} testId="trading-room-environment-strip" />
       ) : null}
@@ -1219,8 +1234,9 @@ function SignalFeed({
           </p>
         )
       ) : null}
-    </div>
+    </>
   );
+  return isMobile ? <div style={paneStyle}>{body}</div> : <div style={paneStyle}><div style={scrollStyle}>{body}</div></div>;
 }
 
 function FeedLaneSection({
