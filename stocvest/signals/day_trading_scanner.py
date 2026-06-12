@@ -129,6 +129,9 @@ def _passes_min_day_volume_for_gap(
         return True
     if not _is_outside_rth_ny(now_utc):
         return False
+    # Polygon often reports day.v=0 before the open; partial sub-threshold prints still fail.
+    if vol > 0:
+        return False
     prev_vol = float(snapshot.prev_day_volume or 0.0)
     return prev_vol >= _MIN_PRIOR_DAY_VOLUME_PREMARKET_GAP
 
