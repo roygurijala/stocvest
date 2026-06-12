@@ -88,12 +88,11 @@ import { useScannerGapIntelBatch } from "@/lib/hooks/use-scanner-gap-intel-batch
 import { fetchSymbolMinuteBars } from "@/lib/fetch-symbol-bars";
 import { buildEvidenceFromSetup, enrichEvidenceWithComposite, type SignalEvidenceData } from "@/lib/signal-evidence";
 import {
-  gapIntelligenceHiddenCountForModeDefault,
-  gapIntelligenceRowMatchesScannerModeDefault,
   resolveEvidenceTradingMode,
   resolveGapCardTradingMode,
   resolveSetupRowTradingMode
 } from "@/lib/scanner-mode-resolution";
+import { classifyGapTimeHorizon, gapTimeHorizonLabel } from "@/lib/scanner/gap-time-horizon";
 import { topSignalStrengthPercent } from "@/lib/top-signal-strength";
 import { scannerSignificanceLabel } from "@/lib/scanner-significance-present";
 import {
@@ -422,75 +421,42 @@ export function GapIntelCard({ item, idx, noCatSection, deps }: GapIntelCardProp
           </div>
         </div>
       )}
-      {/* B30 Phase 4: "Best evaluated as" classifier tag. Advisory — shows
-          which engine the View Signal click will route to in the 'both'
-          scanner view, and which engine is best-fit for swing/day views.
-          Hidden when the verdict is unavailable (e.g. cached pre-Phase-4
-          response) since we can't justify a guess. */}
-      {item.mode_best_fit ? (() => {
-        const verdictMode = resolveGapCardTradingMode(scannerSetupMode, item.mode_best_fit);
-        const isExplicitContext = scannerSetupMode === "swing" || scannerSetupMode === "day";
-        const verdict = item.mode_best_fit;
-        // Pill copy: short and unambiguous.
-        const label =
-          verdict === "swing"
-            ? "Best evaluated as: Swing (multi-day)"
-            : verdict === "day"
-              ? "Best evaluated as: Day (intraday)"
-              : "Best evaluated as: Either desk";
-        // Color tokens follow the design system role contract:
-        //   swing → accent (cool/structural), day → caution (warm/active),
-        //   either → textMuted (neutral). Background is a subtle tint of
-        //   the role color so the pill reads as an annotation, not a CTA.
-        const pillFg =
-          verdict === "swing" ? colors.accent : verdict === "day" ? colors.caution : colors.textMuted;
-        const pillBg =
-          verdict === "swing"
-            ? "rgba(59,130,246,0.10)"
-            : verdict === "day"
-              ? "rgba(245,158,11,0.12)"
-              : "rgba(148,163,184,0.10)";
-        const tipText = isExplicitContext
-          ? `You're in ${scannerSetupMode === "swing" ? "Swing" : "Day"} scanner mode, so the View Signal click opens the ${scannerSetupMode === "swing" ? "Swing" : "Day"} engine regardless of this verdict. The tag indicates the classifier's best-fit assessment for this gap.`
-          : verdictMode === verdict
-            ? "View Signal opens this engine."
-            : "View Signal opens the Swing engine by default. Switch the scanner to Day mode to open the Day engine on this gap.";
-        return (
-          <div style={{ marginTop: spacing[2], display: "flex", flexDirection: "column", gap: spacing[1] }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: spacing[1], flexWrap: "wrap" }}>
-              <span
-                data-testid="gap-mode-best-fit"
-                data-mode-best-fit={verdict}
-                style={{
-                  borderRadius: borderRadius.full,
-                  padding: "2px 10px",
-                  fontSize: typography.scale.xs,
-                  fontWeight: 600,
-                  background: pillBg,
-                  color: pillFg,
-                  border: `1px solid ${pillFg}`,
-                  letterSpacing: "0.02em"
-                }}
-              >
-                {label}
-              </span>
-              <InfoTip text={tipText} label="Best evaluated as — why this verdict" maxWidth={320} />
-            </div>
-            {item.mode_best_fit_reasons && item.mode_best_fit_reasons.length > 0 ? (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: typography.scale.xs,
-                  color: colors.textMuted,
-                  lineHeight: 1.35
-                }}
-              >
-                {item.mode_best_fit_reasons.join(" \u00b7 ")}
-              </p>
-            ) : null}
-          </div>
-        );
-      })() : null}
+      <div style={{ marginTop: spacing[2], display: "flex", flexDirection: "column", gap: spacing[1] }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: spacing[1], flexWrap: "wrap" }}>
+          <span
+            data-testid="gap-time-horizon"
+            style={{
+              borderRadius: borderRadius.full,
+              padding: "2px 10px",
+              fontSize: typography.scale.xs,
+              fontWeight: 600,
+              background: "rgba(148,163,184,0.10)",
+              color: colors.textMuted,
+              border: `1px solid ${colors.border}`,
+              letterSpacing: "0.02em"
+            }}
+          >
+            ⏱ {gapTimeHorizonLabel(classifyGapTimeHorizon({ hasCatalyst: item.has_catalyst, modeBestFit: item.mode_best_fit }))}
+          </span>
+          <InfoTip
+            text="How long this gap may stay relevant. Desk evaluation happens when you open the full setup — gap intelligence shows every overnight move regardless of Day or Swing mode."
+            label="Gap time horizon"
+            maxWidth={320}
+          />
+        </div>
+        {item.mode_best_fit_reasons && item.mode_best_fit_reasons.length > 0 ? (
+          <p
+            style={{
+              margin: 0,
+              fontSize: typography.scale.xs,
+              color: colors.textMuted,
+              lineHeight: 1.35
+            }}
+          >
+            {item.mode_best_fit_reasons.join(" \u00b7 ")}
+          </p>
+        ) : null}
+      </div>
       <div style={{ marginTop: spacing[2], display: "inline-flex", flexWrap: "wrap", gap: spacing[2], alignItems: "center" }}>
         <button
           type="button"

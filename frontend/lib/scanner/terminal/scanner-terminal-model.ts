@@ -4,6 +4,10 @@
  */
 
 import type { IpoEcosystemPayload } from "@/lib/api/fetch-ipo-ecosystems";
+import {
+  classifyGapTimeHorizon,
+  type GapTimeHorizon
+} from "@/lib/scanner/gap-time-horizon";
 import type { DeskQuietLeader, DeskTodayData } from "@/lib/api/desk-today";
 import type { GapIntelligenceItem, IntradaySetupPayload } from "@/lib/api/scanner";
 import { buildIpoEcosystemRadarGroups } from "@/lib/scanner/terminal/scanner-terminal-ipo-themes";
@@ -60,6 +64,7 @@ export type ScannerTerminalGapRow = {
   lane: FeedLane | "either";
   isIpoWatch: boolean;
   unscored: boolean;
+  timeHorizon: GapTimeHorizon;
 };
 
 export type ScannerTerminalSignalRow = {
@@ -211,7 +216,12 @@ function gapRowFromItem(item: GapIntelligenceItem, opts?: { ipoWatch?: boolean }
       : gapMonitorNote(item),
     lane: gapLane(item),
     isIpoWatch: ipoWatch,
-    unscored: ipoWatch || item.unscored === true
+    unscored: ipoWatch || item.unscored === true,
+    timeHorizon: classifyGapTimeHorizon({
+      hasCatalyst: item.has_catalyst,
+      modeBestFit: item.mode_best_fit,
+      isIpoWatch: ipoWatch
+    })
   };
 }
 
@@ -221,12 +231,8 @@ export function buildGapRows(
 ): ScannerTerminalGapRow[] {
   const query = normQuery(filters.query);
   return items
-    .filter((item) => {
-      const lane = gapLane(item);
-      if (filters.mode !== "all" && lane !== "either" && lane !== filters.mode) return false;
-      return matchesQuery(item.symbol, item.company_name, query);
-    })
-    .slice(0, 12)
+    .filter((item) => matchesQuery(item.symbol, item.company_name, query))
+    .slice(0, 16)
     .map((item) => gapRowFromItem(item));
 }
 

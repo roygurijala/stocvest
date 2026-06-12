@@ -27,7 +27,8 @@ const BASE: ScannerTerminalGapRow = {
   monitorNote: "",
   lane: "either",
   isIpoWatch: false,
-  unscored: false
+  unscored: false,
+  timeHorizon: "multi_session"
 };
 
 describe("enrich-gap-rows", () => {

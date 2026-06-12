@@ -57,6 +57,7 @@ import { SignalsLayerBreakdown } from "@/components/signals/signals-layer-breakd
 import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
 import { MarketContextPanel } from "@/components/signals/market-context-panel";
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
+import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { SetupEvolutionPanel } from "@/components/signals/setup-evolution-panel";
 import { FullPriceChart, type ChartSignalOverlay } from "@/components/assistant/full-price-chart";
 import { ContentLoading } from "@/components/content-loading";
@@ -1208,22 +1209,14 @@ export function DeepDive({
             symbol={card.symbol}
             colors={colors}
           />
-          <span
+          <div
             style={{
               justifySelf: isMobile ? undefined : "end",
-              marginLeft: isMobile ? "auto" : undefined,
-              fontSize: typography.scale.xs,
-              fontWeight: 600,
-              color: colors.bullish,
-              border: `1px solid ${colors.bullish}`,
-              borderRadius: borderRadius.full,
-              padding: "3px 12px",
-              background: `${colors.bullish}18`,
-              whiteSpace: "nowrap"
+              marginLeft: isMobile ? "auto" : undefined
             }}
           >
-            ✓ Watching
-          </span>
+            <AddToWatchlistButton symbol={card.symbol} />
+          </div>
         </div>
 
         {/* Row 2: Company · Price ±%  |  Evaluated timestamp */}
