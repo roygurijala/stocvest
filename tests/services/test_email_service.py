@@ -123,3 +123,30 @@ def test_send_skips_without_postmark_token(monkeypatch: pytest.MonkeyPatch) -> N
             is False
         )
         mock_send.assert_not_called()
+
+
+def test_html_execution_actionable_shows_strength_setup_and_zone() -> None:
+    es = EmailService()
+    html_out = es._build_html_body(
+        AlertType.EXECUTION_ACTIONABLE,
+        {
+            "symbol": "GGAL",
+            "mode": "swing",
+            "direction": "long",
+            "strength": 68,
+            "pattern": "ema9_bounce volume_expansion",
+            "entry_zone_low": 42.10,
+            "entry_zone_high": 43.50,
+            "price": 42.85,
+            "risk_reward": 2.4,
+            "min_rr": 2.0,
+            "alignment_ratio": 0.67,
+        },
+    )
+    assert "68%" in html_out
+    assert "EMA9 Bounce" in html_out
+    assert "Volume Expansion" in html_out
+    assert "$42.10" in html_out
+    assert "$43.50" in html_out
+    assert "Risk / reward" in html_out
+    assert "Layer alignment" in html_out

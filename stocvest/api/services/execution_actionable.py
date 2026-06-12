@@ -265,6 +265,44 @@ def apply_entry_gates_to_response_body(body: dict[str, Any], *, mode: Mode) -> d
     return body
 
 
+def _pattern_slug_from_body(body: dict[str, Any]) -> str:
+    raw = body.get("pattern")
+    if raw:
+        return str(raw).strip()
+    confirms = body.get("confirming_signals")
+    if isinstance(confirms, list):
+        slugs: list[str] = []
+        for row in confirms:
+            if not isinstance(row, dict):
+                continue
+            slug = str(row.get("slug") or row.get("id") or row.get("signal") or "").strip()
+            if slug:
+                slugs.append(slug)
+        if slugs:
+            return " ".join(slugs)
+    setup = body.get("setup_judgment")
+    if isinstance(setup, dict):
+        label = str(setup.get("primary_label") or setup.get("headline") or "").strip()
+        if label:
+            return label
+    return "swing_composite" if body.get("mode") == "swing" else "intraday_setup"
+
+
+def _strength_from_body(body: dict[str, Any]) -> int:
+    raw = body.get("signal_score")
+    if raw is None:
+        raw = body.get("signal_strength")
+    if raw is None:
+        return 0
+    try:
+        score = float(raw)
+    except (TypeError, ValueError):
+        return 0
+    if 0.0 <= score <= 1.0:
+        score *= 100.0
+    return int(round(max(0.0, min(100.0, score))))
+
+
 def scenario_payload_from_body(body: dict[str, Any], *, mode: Mode, symbol: str) -> dict[str, Any]:
     """Compact scenario dict for execution-actionable alert emails."""
     zone = _entry_zone_from_body(body)
@@ -278,6 +316,8 @@ def scenario_payload_from_body(body: dict[str, Any], *, mode: Mode, symbol: str)
             mode=mode,
         )
     env = body.get("market_environment") if isinstance(body.get("market_environment"), dict) else {}
+    strength = _strength_from_body(body)
+    pattern = _pattern_slug_from_body(body)
     return {
         "symbol": symbol.strip().upper(),
         "mode": mode,
@@ -292,5 +332,8 @@ def scenario_payload_from_body(body: dict[str, Any], *, mode: Mode, symbol: str)
         "min_rr": float(min_rr) if min_rr is not None else None,
         "environment_tier": str(env.get("environment_tier") or "normal"),
         "alignment_ratio": body.get("alignment_ratio"),
-        "signal_score": body.get("signal_score"),
+        "signal_score": strength,
+        "strength": strength,
+        "signal_strength": strength,
+        "pattern": pattern,
     }

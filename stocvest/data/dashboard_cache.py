@@ -199,7 +199,7 @@ def evidence_cache_key(symbol: str, mode: str) -> str:
 
 
 def evidence_rate_limit_exceeded(user_id: str | None) -> bool:
-    """Return True if user exceeded evidence requests in the rolling window."""
+    """Return True if user exceeded fresh composite *compute* requests in the rolling window."""
     uid = str(user_id or "anon").strip() or "anon"
     if not upstash_configured():
         return False
@@ -209,7 +209,8 @@ def evidence_rate_limit_exceeded(user_id: str | None) -> bool:
         n = int(r.incr(rate_key) or 0)
         if n == 1:
             r.expire(rate_key, 60)
-        return n > 10
+        # Trading Room can legitimately refresh a dozen symbols on mount; cap compute bursts.
+        return n > 20
     except Exception:
         return False
 

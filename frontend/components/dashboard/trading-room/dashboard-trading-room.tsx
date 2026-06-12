@@ -495,14 +495,7 @@ function TradingRoomBody({
     if (key) {
       void mutateSwr(key, () => __internal_fetchSignalComposite(sym, lane), { revalidate: false });
     }
-    if (dayTradingSurfaces) {
-      const alt = lane === "day" ? "swing" : "day";
-      const altKey = signalCompositeCacheKey(sym, alt);
-      if (altKey) {
-        void mutateSwr(altKey, () => __internal_fetchSignalComposite(sym, alt), { revalidate: false });
-      }
-    }
-  }, [selected?.id, selected?.symbol, selected?.lane, dayTradingSurfaces]);
+  }, [selected?.id, selected?.symbol, selected?.lane]);
 
   const handleRefreshFeedCard = useCallback(
     async (card: FeedCard) => {

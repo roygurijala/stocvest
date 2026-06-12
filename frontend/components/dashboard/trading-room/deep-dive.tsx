@@ -737,8 +737,6 @@ export function DeepDive({
     if (dataRefreshNonce <= 0) return;
     const sym = card.symbol.trim().toUpperCase();
     void revalidateSignalCompositeCache(sym, activeLane);
-    const other: "day" | "swing" = activeLane === "day" ? "swing" : "day";
-    void revalidateSignalCompositeCache(sym, other);
   }, [dataRefreshNonce, card.symbol, activeLane]);
 
   // ── Full signals-page computation pipeline ─────────────────────────────────

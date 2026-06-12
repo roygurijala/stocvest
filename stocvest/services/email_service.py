@@ -7,7 +7,7 @@ import json
 from typing import Any
 
 from stocvest.data.models import AlertType
-from stocvest.services.alert_email_present import format_direction
+from stocvest.services.alert_email_present import format_alert_pattern, format_direction
 from stocvest.services.postmark_client import send_postmark_html_email
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -165,6 +165,43 @@ class EmailService:
                 ("Desk", mode_label or "—"),
                 ("Change", f"{context.get('previous_label') or '—'} → {context.get('new_label') or '—'}"),
             ]
+            return rows
+        if alert_type == AlertType.EXECUTION_ACTIONABLE:
+            sym = str(context.get("symbol") or "").upper()
+            mode_s = str(context.get("mode") or "swing").strip().lower()
+            mode_label = "Swing" if mode_s == "swing" else "Day" if mode_s == "day" else mode_s.capitalize()
+            direction = format_direction(str(context.get("direction") or ""))
+            strength = int(
+                context.get("strength")
+                or context.get("signal_strength")
+                or context.get("signal_score")
+                or 0
+            )
+            pattern = format_alert_pattern(str(context.get("pattern") or ""), mode=mode_s or "swing")
+            rows = [
+                ("Symbol", sym),
+                ("Desk", mode_label or "—"),
+                ("Direction", direction),
+                ("Strength", f"{strength}%"),
+                ("Setup", pattern),
+            ]
+            lo = context.get("entry_zone_low")
+            hi = context.get("entry_zone_high")
+            if isinstance(lo, (int, float)) and isinstance(hi, (int, float)):
+                rows.append(("Entry zone", f"${float(lo):.2f}–${float(hi):.2f}"))
+            price = context.get("price")
+            if isinstance(price, (int, float)):
+                rows.append(("Price", f"${float(price):.2f}"))
+            rr = context.get("risk_reward")
+            min_rr = context.get("min_rr")
+            if isinstance(rr, (int, float)):
+                rr_label = f"{float(rr):.2f}"
+                if isinstance(min_rr, (int, float)):
+                    rr_label = f"{rr_label} (min {float(min_rr):.2f})"
+                rows.append(("Risk / reward", rr_label))
+            ar = context.get("alignment_ratio")
+            if isinstance(ar, (int, float)):
+                rows.append(("Layer alignment", f"{int(round(float(ar) * 100))}%"))
             return rows
         sym = str(context.get("symbol") or "").upper()
         direction = format_direction(str(context.get("direction") or ""))
