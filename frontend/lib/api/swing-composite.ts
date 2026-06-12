@@ -94,3 +94,30 @@ export function isInsufficientCompositeResponse(
     body.market_status != null
   );
 }
+
+export function isLiquidityFilteredCompositeResponse(
+  body: Record<string, unknown> | null
+): body is {
+  status: "liquidity_filtered";
+  message: string;
+  symbol: string;
+  market_status: SwingCompositeMarketStatus;
+} {
+  return (
+    body != null &&
+    body.status === "liquidity_filtered" &&
+    typeof body.message === "string" &&
+    body.message.trim().length > 0
+  );
+}
+
+/** Composite envelope exists but must not drive Setup / Layers UI. */
+export function isNonRenderableCompositeResponse(body: Record<string, unknown> | null): boolean {
+  return isInsufficientCompositeResponse(body) || isLiquidityFilteredCompositeResponse(body);
+}
+
+export function compositeStatusMessage(body: Record<string, unknown> | null): string | null {
+  if (!body) return null;
+  const msg = body.message;
+  return typeof msg === "string" && msg.trim() ? msg.trim() : null;
+}

@@ -1,0 +1,71 @@
+import { describe, expect, test } from "vitest";
+import { buildFeedCards } from "@/lib/dashboard/trading-room/feed-model";
+import type { DeskTodayData } from "@/lib/api/desk-today";
+
+const swingDesk: DeskTodayData = {
+  generated_at: "2026-06-12T15:00:00Z",
+  discovery: [{ symbol: "SPY", gap_percent: 1.2, direction: "up", rank_score: 90, desk: "swing" }],
+  movers_radar: [
+    { symbol: "ASTN", gap_percent: 27.7, direction: "up", rank_score: 88 },
+    { symbol: "ASTX", gap_percent: 18.2, direction: "up", rank_score: 70 }
+  ]
+};
+
+describe("buildFeedCards", () => {
+  test("falls back to swing movers for day lane when day desk cache is null", () => {
+    const cards = buildFeedCards({
+      mode: "swing",
+      swingDesk,
+      dayDesk: null,
+      swingSetups: [],
+      daySetups: [],
+      snapshotsBySymbol: new Map(),
+      dayTradingSurfaces: true
+    });
+    const dayCards = cards.filter((c) => c.lane === "day");
+    expect(dayCards.length).toBeGreaterThan(0);
+    expect(dayCards.some((c) => c.symbol === "ASTN")).toBe(true);
+    expect(dayCards.every((c) => c.state === "potential")).toBe(true);
+  });
+
+  test("prefers day desk discovery over swing movers fallback", () => {
+    const dayDesk: DeskTodayData = {
+      discovery: [
+        {
+          symbol: "NVDA",
+          gap_percent: 4.5,
+          direction: "up",
+          rank_score: 95,
+          desk: "day",
+          decision_state: "actionable"
+        }
+      ],
+      movers_radar: []
+    };
+    const cards = buildFeedCards({
+      mode: "swing",
+      swingDesk,
+      dayDesk,
+      swingSetups: [],
+      daySetups: [],
+      snapshotsBySymbol: new Map(),
+      dayTradingSurfaces: true
+    });
+    const nvda = cards.find((c) => c.lane === "day" && c.symbol === "NVDA");
+    expect(nvda?.state).toBe("actionable");
+    expect(cards.filter((c) => c.lane === "day" && c.symbol === "ASTN")).toHaveLength(0);
+  });
+
+  test("skips day lane entirely when dayTradingSurfaces is false", () => {
+    const cards = buildFeedCards({
+      mode: "swing",
+      swingDesk,
+      dayDesk: null,
+      swingSetups: [],
+      daySetups: [],
+      snapshotsBySymbol: new Map(),
+      dayTradingSurfaces: false
+    });
+    expect(cards.every((c) => c.lane === "swing")).toBe(true);
+  });
+});

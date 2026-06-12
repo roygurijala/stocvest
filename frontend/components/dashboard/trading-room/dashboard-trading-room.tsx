@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { mutate as mutateSwr } from "swr";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AppSessionHeader } from "@/components/app-session-header";
 import { useTheme } from "@/lib/theme-provider";
@@ -14,6 +15,10 @@ import {
   useDashboardEarnings
 } from "@/components/dashboard/dashboard-earnings-context";
 import { useDeskToday } from "@/lib/hooks/use-desk-today";
+import { useTradingRoomDeskAutoLoad } from "@/lib/hooks/use-trading-room-desk-auto-load";
+import { isDeskCacheStale } from "@/lib/dashboard/desk-response";
+import { __internal_fetchSignalComposite } from "@/lib/hooks/use-signal-composite";
+import { signalCompositeCacheKey } from "@/lib/signal-composite-cache";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import { formatTradingDateLabel, isoDateInNewYork } from "@/lib/market-hours-et";
 import { useMacroContext } from "@/lib/hooks/use-macro-context";
@@ -274,6 +279,30 @@ function TradingRoomBody({
     fallbackData: deskInitial?.day
   });
 
+  const scannerDataSettled = useMemo(
+    () =>
+      Boolean(scannerOverview.error) ||
+      scannerOverview.swingUniverseSymbolCount != null ||
+      scannerOverview.gapIntelligence.length > 0 ||
+      scannerOverview.setups.length > 0,
+    [
+      scannerOverview.error,
+      scannerOverview.swingUniverseSymbolCount,
+      scannerOverview.gapIntelligence.length,
+      scannerOverview.setups.length
+    ]
+  );
+
+  const { deskWarmupLoading } = useTradingRoomDeskAutoLoad({
+    dayTradingSurfaces,
+    swingDesk,
+    dayDesk,
+    scannerDataSettled,
+    gapFallbackCount: scannerOverview.gapIntelligence.length,
+    revalidateSwingDesk: refreshSwingDesk,
+    revalidateDayDesk: refreshDayDesk
+  });
+
   const [snapshotOverrides, setSnapshotOverrides] = useState<Map<string, SnapshotPayload>>(new Map());
   const [refreshingCardIds, setRefreshingCardIds] = useState<Set<string>>(() => new Set());
   const [centerDataRefreshNonce, setCenterDataRefreshNonce] = useState(0);
@@ -456,6 +485,24 @@ function TradingRoomBody({
     if (overrideCard && overrideCard.id === selectedId) return overrideCard;
     return null;
   }, [allCards, selectedId, overrideCard]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const sym = selected.symbol.trim().toUpperCase();
+    if (!sym) return;
+    const lane = selected.lane === "day" ? "day" : "swing";
+    const key = signalCompositeCacheKey(sym, lane);
+    if (key) {
+      void mutateSwr(key, () => __internal_fetchSignalComposite(sym, lane), { revalidate: false });
+    }
+    if (dayTradingSurfaces) {
+      const alt = lane === "day" ? "swing" : "day";
+      const altKey = signalCompositeCacheKey(sym, alt);
+      if (altKey) {
+        void mutateSwr(altKey, () => __internal_fetchSignalComposite(sym, alt), { revalidate: false });
+      }
+    }
+  }, [selected?.id, selected?.symbol, selected?.lane, dayTradingSurfaces]);
 
   const handleRefreshFeedCard = useCallback(
     async (card: FeedCard) => {
@@ -817,6 +864,8 @@ function TradingRoomBody({
     ? `300px minmax(0, 1fr) 300px`
     : `300px minmax(0, 1fr) 44px`;
 
+  const dayDeskStale = isDeskCacheStale(dayDesk);
+
   const feedPanel = (
     <SignalFeed
       day={day}
@@ -826,6 +875,8 @@ function TradingRoomBody({
       deskEmpty={deskEmpty}
       swingDeskData={swingDesk?.data}
       dayDeskData={dayDesk?.data}
+      dayDeskStale={dayDeskStale}
+      deskWarmupLoading={deskWarmupLoading}
       snapshotsBySymbol={snapshotsBySymbol}
       companyBySymbol={companyBySymbol}
       onSelectCard={selectCard}
@@ -1143,6 +1194,8 @@ function SignalFeed({
   deskEmpty,
   swingDeskData,
   dayDeskData,
+  dayDeskStale = false,
+  deskWarmupLoading = false,
   snapshotsBySymbol,
   companyBySymbol,
   onSelectCard,
@@ -1163,6 +1216,8 @@ function SignalFeed({
   deskEmpty: boolean;
   swingDeskData: DeskTodayData | null | undefined;
   dayDeskData: DeskTodayData | null | undefined;
+  dayDeskStale?: boolean;
+  deskWarmupLoading?: boolean;
   snapshotsBySymbol: Map<string, SnapshotPayload>;
   companyBySymbol: Map<string, string>;
   onSelectCard: (card: FeedCard) => void;
@@ -1195,17 +1250,26 @@ function SignalFeed({
         </p>
       ) : null}
       {showDay ? (
-        <FeedLaneSection
-          title="Day"
-          count={day.length}
-          cards={day}
-          selectedId={selectedId}
-          onSelectCard={onSelectCard}
-          colors={colors}
-          environment={dayEnvironment}
-          onRefreshFeedCard={onRefreshFeedCard}
-          refreshingCardIds={refreshingCardIds}
-        />
+        <>
+          {dayDeskStale || deskWarmupLoading ? (
+            <p className="m-0 text-[10px] leading-snug" style={{ color: colors.textMuted }}>
+              {deskWarmupLoading
+                ? "Day desk is warming up — session movers will appear shortly."
+                : "Day desk is using the last cached refresh — live desk data is catching up."}
+            </p>
+          ) : null}
+          <FeedLaneSection
+            title="Day"
+            count={day.length}
+            cards={day}
+            selectedId={selectedId}
+            onSelectCard={onSelectCard}
+            colors={colors}
+            environment={dayEnvironment}
+            onRefreshFeedCard={onRefreshFeedCard}
+            refreshingCardIds={refreshingCardIds}
+          />
+        </>
       ) : null}
       <FeedLaneSection
         title="Swing"
@@ -1337,6 +1401,7 @@ function FeedLaneSection({
           active={card.id === selectedId}
           onSelectCard={onSelectCard}
           colors={colors}
+          showLaneBadge={false}
           staleDate={staleLabel}
           environmentHint={environmentSessionCardHint(environment, card.lane, card.state)}
           onRefresh={onRefreshFeedCard ? () => onRefreshFeedCard(card) : undefined}
@@ -1374,6 +1439,7 @@ function SignalCard({
   active,
   onSelectCard,
   colors,
+  showLaneBadge = true,
   staleDate = null,
   environmentHint = null,
   onRefresh,
@@ -1383,6 +1449,8 @@ function SignalCard({
   active: boolean;
   onSelectCard: (card: FeedCard) => void;
   colors: ReturnType<typeof useTheme>["colors"];
+  /** Hide when the card already sits under a Day/Swing section header. */
+  showLaneBadge?: boolean;
   /** When non-null, this card's price data is from a prior day — shown as a small badge. */
   staleDate?: string | null;
   /** Layer 0 ledger policy hint for actionable/near cards in elevated/stressed sessions. */
@@ -1439,7 +1507,7 @@ function SignalCard({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
           <span style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
             <span style={{ fontSize: typography.scale.base, fontWeight: 700 }}>{card.symbol}</span>
-            <span style={laneBadgeStyle(colors)}>{card.lane}</span>
+            {showLaneBadge ? <span style={laneBadgeStyle(colors)}>{card.lane}</span> : null}
           </span>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
             <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: pctTone }}>{fmtPrice(card.price)}</span>

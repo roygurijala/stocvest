@@ -2,15 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { DeskTodayResponse } from "@/lib/api/desk-today";
+import { deskResponseHasLeaders, isDeskCacheMiss } from "@/lib/dashboard/desk-response";
 import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
-
-function deskHasSessionLeaders(data: DeskTodayResponse | null | undefined): boolean {
-  const d = data?.data;
-  if (!d) return false;
-  const discovery = Array.isArray(d.discovery) ? d.discovery.length : 0;
-  const movers = Array.isArray(d.movers_radar) ? d.movers_radar.length : 0;
-  return discovery > 0 || movers > 0;
-}
 
 function autoRefreshStorageKey(mode: DashboardDeskMode): string {
   return `stocvest:desk:auto-refresh:${mode}`;
@@ -46,12 +39,12 @@ export function useDashboardDeskAutoLoad(opts: {
 
   useEffect(() => {
     if (!scannerDataSettled) return;
-    if (deskToday?.source === "cache") return;
+    if (!isDeskCacheMiss(deskToday)) return;
     void revalidateDesk();
-  }, [scannerDataSettled, deskToday?.source, revalidateDesk]);
+  }, [scannerDataSettled, deskToday?.source, deskToday?.data, revalidateDesk]);
 
   useEffect(() => {
-    if (deskHasSessionLeaders(deskToday)) {
+    if (deskResponseHasLeaders(deskToday)) {
       setAutoRefreshBusy(false);
       if (typeof window !== "undefined") {
         window.sessionStorage.setItem(autoRefreshStorageKey(mode), "1");
@@ -85,8 +78,8 @@ export function useDashboardDeskAutoLoad(opts: {
   const sessionActivityLoading =
     autoRefreshBusy ||
     (manualRefreshBusy &&
-      deskToday?.source === "cache_miss" &&
-      !deskHasSessionLeaders(deskToday) &&
+      isDeskCacheMiss(deskToday) &&
+      !deskResponseHasLeaders(deskToday) &&
       gapFallbackCount === 0);
 
   return { sessionActivityLoading };

@@ -12,11 +12,8 @@ import {
   markDeskManualRefreshAt
 } from "@/lib/dashboard/desk-manual-refresh";
 import { formatDeskRefreshErrorMessage } from "@/lib/dashboard/desk-refresh-present";
-import {
-  DESK_MANUAL_REFRESH_COOLDOWN_MS,
-  DESK_REFRESH_TIER_B_MS,
-  shouldPollDeskTier
-} from "@/lib/dashboard/desk-refresh-tiers";
+import { deskTodayRefreshIntervalMs } from "@/lib/dashboard/desk-refresh-interval";
+import { DESK_MANUAL_REFRESH_COOLDOWN_MS } from "@/lib/dashboard/desk-refresh-tiers";
 import { deskTodayKey } from "@/lib/hooks/use-desk-today";
 
 /**
@@ -30,13 +27,12 @@ type UseDashboardDeskRefreshOptions = {
 };
 
 export function useDashboardDeskRefresh(mode: DeskTodayMode, options: UseDashboardDeskRefreshOptions = {}) {
-  const refreshInterval = shouldPollDeskTier("movers") ? DESK_REFRESH_TIER_B_MS : 0;
   const fallbackData = options.fallbackData ?? undefined;
 
   const { data, error, isLoading, isValidating, mutate } = useSWR(
     deskTodayKey(mode),
     async ([, m]: readonly [string, DeskTodayMode]) => fetchDeskToday(m),
-    { refreshInterval, fallbackData }
+    { refreshInterval: deskTodayRefreshIntervalMs, fallbackData }
   );
 
   const [manualBusy, setManualBusy] = useState(false);
