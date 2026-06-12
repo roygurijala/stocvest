@@ -897,7 +897,8 @@ function TradingRoomBody({
           ? {}
           : {
               height: "calc(100dvh - 1.5rem)",
-              maxHeight: "calc(100dvh - 1.5rem)"
+              maxHeight: "calc(100dvh - 1.5rem)",
+              overflow: "hidden"
             })
       }}
     >
@@ -944,11 +945,13 @@ function TradingRoomBody({
         style={{
           display: "grid",
           gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : gridTemplate,
+          gridTemplateRows: isMobile ? undefined : "minmax(0, 1fr)",
           gap: spacing[4],
           alignItems: isMobile ? "start" : "stretch",
           marginTop: spacing[5],
-          flex: isMobile ? undefined : 1,
-          minHeight: isMobile ? undefined : 0
+          flex: isMobile ? undefined : "1 1 0%",
+          minHeight: isMobile ? undefined : 0,
+          overflow: isMobile ? undefined : "hidden"
         }}
       >
         {isMobile ? (
@@ -1374,80 +1377,94 @@ function SignalCard({
   const pct = card.changePct;
   const pctTone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
   return (
-    <button
-      type="button"
-      onClick={() => onSelectCard(card)}
+    <div
+      data-testid={`signal-card-${card.symbol}`}
       style={{
-        textAlign: "left",
+        position: "relative",
+        width: "100%",
         background: active ? colors.surfaceMuted : colors.surface,
         border: `1px solid ${active ? colors.accent : colors.border}`,
         borderLeft: `3px solid ${biasAccent}`,
         borderBottom: `3px solid ${biasAccent}`,
         borderRadius: borderRadius.md,
-        padding: spacing[3],
-        cursor: "pointer",
-        display: "flex",
-        flexDirection: "column",
-        gap: spacing[1],
         opacity: card.state === "cooling" ? 0.7 : 1
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
-        <span style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
-          <span style={{ fontSize: typography.scale.base, fontWeight: 700 }}>{card.symbol}</span>
-          <span style={laneBadgeStyle(colors)}>{card.lane}</span>
-        </span>
-        <span style={{ display: "flex", alignItems: "flex-start", gap: spacing[1] }}>
-        <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-          <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: pctTone }}>{fmtPrice(card.price)}</span>
-          {pct != null ? (
-            <span style={{ fontSize: typography.scale.xs, color: pctTone }}>
-              {fmtPct(pct)}
-              {staleDate ? <span style={{ color: colors.textMuted, fontWeight: 400 }}> {staleDate.slice(0, 3).toLowerCase()}</span> : null}
-            </span>
-          ) : null}
-        </span>
-        {onRefresh ? (
+      {onRefresh ? (
+        <div style={{ position: "absolute", top: spacing[3], right: spacing[3], zIndex: 1 }}>
           <CardRefreshButton
             label={`Refresh ${card.symbol} ${card.lane}`}
             busy={refreshing}
             colors={colors}
             onRefresh={onRefresh}
           />
+        </div>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => onSelectCard(card)}
+        style={{
+          width: "100%",
+          textAlign: "left",
+          background: "transparent",
+          border: "none",
+          borderRadius: borderRadius.md,
+          padding: spacing[3],
+          paddingRight: onRefresh ? `calc(${spacing[3]} + 28px)` : spacing[3],
+          cursor: "pointer",
+          display: "flex",
+          flexDirection: "column",
+          gap: spacing[1],
+          color: colors.text
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
+          <span style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
+            <span style={{ fontSize: typography.scale.base, fontWeight: 700 }}>{card.symbol}</span>
+            <span style={laneBadgeStyle(colors)}>{card.lane}</span>
+          </span>
+          <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+            <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: pctTone }}>{fmtPrice(card.price)}</span>
+            {pct != null ? (
+              <span style={{ fontSize: typography.scale.xs, color: pctTone }}>
+                {fmtPct(pct)}
+                {staleDate ? <span style={{ color: colors.textMuted, fontWeight: 400 }}> {staleDate.slice(0, 3).toLowerCase()}</span> : null}
+              </span>
+            ) : null}
+          </span>
+        </div>
+        {card.company ? (
+          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{card.company}</span>
         ) : null}
-        </span>
-      </div>
-      {card.company ? (
-        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{card.company}</span>
-      ) : null}
-      <div style={{ display: "flex", alignItems: "center", gap: spacing[2], marginTop: 2 }}>
-        <span style={biasPillStyle(card.bias, colors)}>
-          {card.bias === "bull" ? "Bullish" : card.bias === "bear" ? "Bearish" : "Neutral"}
-        </span>
-        <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: sTone }}>{STATE_LABEL[card.state]}</span>
-      </div>
-      <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>{card.verdict}</span>
-      {environmentHint ? (
-        <span
-          data-testid={`signal-card-environment-hint-${card.symbol}`}
-          style={{
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: "0.04em",
-            color: colors.caution,
-            lineHeight: 1.35
-          }}
-        >
-          {environmentHint}
-        </span>
-      ) : null}
-      {staleDate ? (
-        <span style={{ fontSize: 10, color: "#c04cf5", marginTop: 2 }}>
-          from {staleDate} · valid through weekend
-        </span>
-      ) : null}
-      <FeedCardUpdatedLine iso={card.lastEvaluatedAt} colors={colors} />
-    </button>
+        <div style={{ display: "flex", alignItems: "center", gap: spacing[2], marginTop: 2 }}>
+          <span style={biasPillStyle(card.bias, colors)}>
+            {card.bias === "bull" ? "Bullish" : card.bias === "bear" ? "Bearish" : "Neutral"}
+          </span>
+          <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: sTone }}>{STATE_LABEL[card.state]}</span>
+        </div>
+        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>{card.verdict}</span>
+        {environmentHint ? (
+          <span
+            data-testid={`signal-card-environment-hint-${card.symbol}`}
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: "0.04em",
+              color: colors.caution,
+              lineHeight: 1.35
+            }}
+          >
+            {environmentHint}
+          </span>
+        ) : null}
+        {staleDate ? (
+          <span style={{ fontSize: 10, color: "#c04cf5", marginTop: 2 }}>
+            from {staleDate} · valid through weekend
+          </span>
+        ) : null}
+        <FeedCardUpdatedLine iso={card.lastEvaluatedAt} colors={colors} />
+      </button>
+    </div>
   );
 }
 
