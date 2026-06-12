@@ -43,7 +43,22 @@ describe("scanner-terminal-present", () => {
         gapPct: 11.4,
         statusLabel: "Gap up",
         note: null,
-        lane: "swing"
+        lane: "swing",
+        gapDollars: 0,
+        prevClose: 100,
+        currentPrice: 111,
+        volumeVsAvg: 2,
+        gapQualityScore: 70,
+        catalystHeadline: null,
+        catalystDescription: null,
+        hasCatalyst: true,
+        noCatalystWarning: null,
+        marketContextWarning: null,
+        fillWatchReason: "",
+        monitorNote: "",
+        isIpoWatch: false,
+        unscored: false,
+        timeHorizon: "multi_session"
       },
       false,
       colors

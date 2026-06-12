@@ -62,6 +62,7 @@ type Props = {
   showPreviewBadge?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
+  bootstrapLoading?: boolean;
   sessionUpdatedAtIso?: string | null;
 };
 
@@ -175,6 +176,31 @@ function FilterPill({
     >
       {label}
     </button>
+  );
+}
+
+function FunnelLoadingSkeleton({
+  lines = 3,
+  colors
+}: {
+  lines?: number;
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  return (
+    <div style={{ display: "grid", gap: spacing[2] }} aria-hidden>
+      {Array.from({ length: lines }).map((_, i) => (
+        <div
+          key={i}
+          className="animate-pulse"
+          style={{
+            height: 68,
+            borderRadius: borderRadius.md,
+            border: `1px solid ${colors.border}`,
+            background: colors.surfaceMuted ?? colors.surface
+          }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -419,6 +445,7 @@ export function ScannerTerminal({
   showPreviewBadge = false,
   onRefresh,
   refreshing = false,
+  bootstrapLoading = false,
   sessionUpdatedAtIso = null
 }: Props) {
   const { colors } = useTheme();
@@ -752,9 +779,15 @@ export function ScannerTerminal({
               colors={colors}
             />
             {openSections.gaps ? (
-              sections.gaps.length === 0 ? (
+              bootstrapLoading && sections.gaps.length === 0 ? (
+                <FunnelLoadingSkeleton lines={4} colors={colors} />
+              ) : sections.gaps.length === 0 ? (
                 <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>No gap flags in this filter.</p>
               ) : (
+                <>
+                  <p style={{ margin: `0 0 ${spacing[2]}`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
+                    Overnight discovery for every desk — Day/Swing pills filter signals below, not gaps.
+                  </p>
                 <GapCardList
                   rows={enrichedGapRows.gaps}
                   selection={selection}
@@ -763,6 +796,7 @@ export function ScannerTerminal({
                   symbolNames={symbolNames}
                   colors={colors}
                 />
+                </>
               )
             ) : null}
           </section>
@@ -797,7 +831,7 @@ export function ScannerTerminal({
             </section>
           ) : null}
 
-          {sections.actionable.length > 0 ? (
+          {bootstrapLoading || sections.actionable.length > 0 ? (
             <section>
               <SectionHeader
                 title="Actionable now — all gates cleared"
@@ -808,6 +842,9 @@ export function ScannerTerminal({
                 colors={colors}
               />
               {openSections.actionable ? (
+                bootstrapLoading && sections.actionable.length === 0 ? (
+                  <FunnelLoadingSkeleton lines={2} colors={colors} />
+                ) : (
                 <div style={{ display: "grid", gap: spacing[2] }}>
                   {sections.actionable.map((row) => (
                     <SignalRow
@@ -821,11 +858,12 @@ export function ScannerTerminal({
                     />
                   ))}
                 </div>
+                )
               ) : null}
             </section>
           ) : null}
 
-          {sections.developing.length > 0 ? (
+          {bootstrapLoading || sections.developing.length > 0 ? (
             <section>
               <SectionHeader
                 title="Developing — building toward actionable"
@@ -836,6 +874,9 @@ export function ScannerTerminal({
                 colors={colors}
               />
               {openSections.developing ? (
+                bootstrapLoading && sections.developing.length === 0 ? (
+                  <FunnelLoadingSkeleton lines={2} colors={colors} />
+                ) : (
                 <div style={{ display: "grid", gap: spacing[2] }}>
                   {sections.developingClosest.length > 0 ? (
                     <>
@@ -867,6 +908,7 @@ export function ScannerTerminal({
                     </>
                   ) : null}
                 </div>
+                )
               ) : null}
             </section>
           ) : null}
@@ -882,7 +924,9 @@ export function ScannerTerminal({
             />
             {openSections.radar ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(12rem, 1fr))", gap: spacing[2] }}>
-                {sections.radar.length === 0 ? (
+                {bootstrapLoading && sections.radar.length === 0 ? (
+                  <FunnelLoadingSkeleton lines={2} colors={colors} />
+                ) : sections.radar.length === 0 ? (
                   <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>Radar themes populate after desk batch runs.</p>
                 ) : (
                   sections.radar.map((group) => (

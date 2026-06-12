@@ -50,7 +50,8 @@ describe("buildThemeSymbolRows", () => {
           monitorNote: "",
           lane: "either",
           isIpoWatch: false,
-          unscored: false
+          unscored: false,
+          timeHorizon: "multi_session"
         }
       ]
     ]);

@@ -1,6 +1,7 @@
 "use client";
 
 import { borderRadius, spacing, typography, type ThemeColors } from "@/lib/design-system";
+import { gapTimeHorizonLabel } from "@/lib/scanner/gap-time-horizon";
 import {
   enrichGapRowFromSnapshot,
   formatGapPriceContext,
@@ -148,6 +149,9 @@ export function ScannerTerminalGapCard({
         ) : enriched.isIpoWatch ? (
           <span style={{ fontSize: 10, color: colors.textMuted }}>Signal engine blocked — day 1</span>
         ) : null}
+        <span style={{ fontSize: 10, color: colors.textMuted }}>
+          ⏱ {gapTimeHorizonLabel(enriched.timeHorizon)}
+        </span>
       </div>
 
       {catalyst ? (

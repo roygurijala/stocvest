@@ -19,8 +19,12 @@ import {
   sparklinePath,
   thresholdY
 } from "@/lib/setup-evolution-analytics";
-import { MATURATION_PROGRESSION_EXPECTATION_LINE } from "@/lib/maturation-expected-frequency";
+import {
+  MATURATION_PROGRESSION_EXPECTATION_LINE,
+  setupEvolutionEmptyWarmingCadence
+} from "@/lib/maturation-expected-frequency";
 import { EMPTY_SETUP_EVOLUTION } from "@/lib/product-empty-states";
+import { AddToWatchlistButton } from "@/components/add-to-watchlist-button";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { WATCHLIST_SYMBOLS_CHANGED_EVENT } from "@/lib/watchlist-membership-client";
@@ -117,9 +121,12 @@ export function SetupEvolutionPanel({ symbol, tradingMode, showSummary: _showSum
           Loading setup history…
         </p>
       ) : data === null ? (
-        <p className="text-sm" style={{ color: colors.textMuted }}>
-          Add {symU} to your default watchlist to track setup evolution over time.
-        </p>
+        <div data-testid="setup-evolution-not-on-watchlist" style={{ display: "flex", flexDirection: "column", gap: spacing[3] }}>
+          <p className="m-0 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
+            Add {symU} to your default watchlist to track setup evolution over time.
+          </p>
+          <AddToWatchlistButton symbol={symU} />
+        </div>
       ) : !hasHistory ? (
         <div data-testid="setup-evolution-warming">
           <p className="m-0 text-sm font-semibold" style={{ color: colors.text }}>
@@ -129,7 +136,7 @@ export function SetupEvolutionPanel({ symbol, tradingMode, showSummary: _showSum
             {EMPTY_SETUP_EVOLUTION.body}
           </p>
           <p className="m-0 mt-2 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-            {EMPTY_SETUP_EVOLUTION.cadence}
+            {setupEvolutionEmptyWarmingCadence(tradingMode)}
           </p>
         </div>
       ) : (
