@@ -106,6 +106,8 @@ class WatchlistMaturationTransitionRepository:
             item["earnings_days_away"] = transition.earnings_days_away
         if transition.price_at_event is not None:
             item["price_at_event"] = _to_decimal(transition.price_at_event)
+        if transition.signal_score is not None:
+            item["signal_score"] = transition.signal_score
         item["gsi1pk"] = _mode_gsi_pk(transition.mode)
         item["gsi1sk"] = _mode_gsi_sk(transition.recorded_at, transition.user_id, transition.symbol)
         self._table.put_item(Item=item)
@@ -219,6 +221,7 @@ def _item_to_transition(item: dict[str, Any]) -> WatchlistMaturationTransition:
         price_at_event=_float(item["price_at_event"])
         if item.get("price_at_event") is not None
         else None,
+        signal_score=_num(item["signal_score"]) if item.get("signal_score") is not None else None,
     )
 
 

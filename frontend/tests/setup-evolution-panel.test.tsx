@@ -11,9 +11,59 @@ vi.mock("@/lib/api/setup-evolution", () => ({
   fetchSetupEvolution: vi.fn()
 }));
 
-import { fetchSetupEvolution } from "@/lib/api/setup-evolution";
+import { fetchSetupEvolution, type SetupEvolutionAnalytics } from "@/lib/api/setup-evolution";
 
 const fetchMock = vi.mocked(fetchSetupEvolution);
+
+function mockAnalytics(overrides: Partial<SetupEvolutionAnalytics> = {}): SetupEvolutionAnalytics {
+  return {
+    actionable_score_threshold: 72,
+    score_trend: [
+      {
+        session_date: "2026-05-19",
+        signal_score: 58,
+        to_state: "developing",
+        layers_aligned: 4,
+        layers_total: 6
+      }
+    ],
+    state_journey: [
+      {
+        state: "developing",
+        started_session: "2026-05-19",
+        ended_session: null,
+        duration_days: 1,
+        entry_score: 58,
+        entry_layers_aligned: 4,
+        current_score: 58,
+        is_current: true
+      }
+    ],
+    inflection: {
+      peak: { session_date: "2026-05-19", signal_score: 58, to_state: "developing", label: "Peak alignment: May 19, score 58" },
+      biggest_jump: null,
+      current_state_streak_days: 1,
+      current_state: "developing",
+      momentum: { direction: "stable", delta_last_sessions: 0, sessions_window: 1, label: "Momentum: → Stable (+0 pts last 1 sessions)" }
+    },
+    layer_stability: [],
+    score_timeline: [
+      {
+        session_date: "2026-05-19",
+        signal_score: 58,
+        score_delta: null,
+        delta_label: "—",
+        to_state: "developing",
+        layers_aligned: 4,
+        state_changed: false,
+        dot: "○",
+        summary: "Tracking started"
+      }
+    ],
+    forward_projection: null,
+    ...overrides
+  };
+}
 
 function wrap(ui: React.ReactElement) {
   return render(<ThemeProvider>{ui}</ThemeProvider>);
@@ -116,7 +166,8 @@ describe("SetupEvolutionPanel", () => {
           transition_counts: { initial: 1, improved: 0, worsened: 0, unchanged: 0 },
           latest_state: "developing",
           latest_layers_aligned: 4
-        }
+        },
+        analytics: mockAnalytics()
       });
 
     wrap(<SetupEvolutionPanel symbol="AMD" tradingMode="swing" />);

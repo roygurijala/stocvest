@@ -101,3 +101,7 @@ def test_setup_evolution_returns_transitions(monkeypatch) -> None:
     assert body["transitions"][0]["to_state"] == "developing"
     assert body["summary"]["latest_state"] == "developing"
     assert body["summary"]["days_tracked"] >= 1
+    assert "analytics" in body
+    assert body["analytics"]["actionable_score_threshold"] == 72
+    assert len(body["analytics"]["score_trend"]) == 1
+    assert len(body["analytics"]["state_journey"]) == 1
