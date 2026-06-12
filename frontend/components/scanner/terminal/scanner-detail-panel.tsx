@@ -170,7 +170,9 @@ export function ScannerDetailPanel({
   radar,
   environment,
   evaluationTrace,
-  colors
+  colors,
+  onRadarSymbolSelect,
+  onRadarThemeBack
 }: Props) {
   if (!selection) return <EmptyState colors={colors} />;
 
