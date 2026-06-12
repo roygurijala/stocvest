@@ -389,7 +389,8 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
         return new Response(
           JSON.stringify({
             error: "rate_limited",
-            message: "Too many requests. Wait a moment and try again."
+            message: "Too many requests. Wait a moment and try again.",
+            retry_after: 0
           }),
           { status: 200, headers: { "content-type": "application/json" } }
         );
@@ -402,6 +403,11 @@ describe("SignalsPageClient — mode toggle clears the screen (load-bearing UX g
     await waitFor(() => expect(screen.getByTestId("signals-setup-service-error")).toBeTruthy());
     expect(screen.queryByTestId("signals-setup-loading")).toBeNull();
     expect(screen.getByText(/Too many requests/i)).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.filter((c) =>
+        String(c[0] ?? "").endsWith("/api/stocvest/signals/composite/swing")
+      ).length
+    ).toBe(3);
   });
 });
 

@@ -146,7 +146,7 @@ async function fetchSignalComposite(
     const transport = getCompositeTransportError(body);
     if (transport?.code === "rate_limited" && attempt < maxAttempts - 1) {
       const waitMs = (transport.retryAfterSec ?? 2) * 1000;
-      await sleep(waitMs);
+      if (waitMs > 0) await sleep(waitMs);
       continue;
     }
     if (!transport && !String(body.error ?? "").trim()) {

@@ -15,6 +15,7 @@ from stocvest.signals.sector_sic_fallback import (
     normalize_sic_digits,
     resolve_sector_bucket_from_sic,
 )
+from stocvest.signals.symbol_sector_overrides import resolve_symbol_sector_override
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -372,12 +373,29 @@ class SectorMapper:
         cls._pending_tasks[sym] = asyncio.create_task(_run())
 
     @classmethod
+    def _apply_symbol_override(
+        cls,
+        sym: str,
+        ticker_ref: Any | None,
+        sector_params: SectorParameters | None,
+    ) -> tuple[str, str, str, SectorResolutionState, SicMappingTier] | None:
+        override = resolve_symbol_sector_override(sym, ticker_ref)
+        if not override:
+            return None
+        bucket, display_label = override
+        mapping = cls._mapping(sector_params)
+        etf = mapping.get(bucket, mapping.get("default", "SPY"))
+        display = str(display_label or ETF_DISPLAY_NAMES.get(etf, etf))
+        return (etf, display, bucket, SectorResolutionState.RESOLVED, SicMappingTier.EXACT)
+
+    @classmethod
     async def get_sector_etf(
         cls,
         symbol: str,
         polygon_client: Any,
         sector_cache: SupportsSectorCache | None = None,
         sector_params: SectorParameters | None = None,
+        ticker_ref: Any | None = None,
     ) -> tuple[str, str, str, SectorResolutionState, SicMappingTier | None]:
         sym = symbol.upper().strip()
         if not sym:
@@ -403,6 +421,21 @@ class SectorMapper:
                 sic_mapping_tier=tier.value,
             )
             return etf, dn, bucket, st, tier
+
+        override_result = cls._apply_symbol_override(sym, ticker_ref, sector_params)
+        if override_result is not None:
+            etf, dn, bucket, st, tier = override_result
+            cls._memory_cache[sym] = override_result
+            cls._log_sector_resolution(
+                symbol=sym,
+                etf=etf,
+                display_name=dn,
+                source="symbol_override",
+                sector_bucket=bucket,
+                resolution_state=st.value,
+                sic_mapping_tier=tier.value,
+            )
+            return override_result
 
         if sector_cache is not None and callable(getattr(sector_cache, "get_sector_cache", None)):
             try:

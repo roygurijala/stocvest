@@ -122,6 +122,34 @@ async def test_empty_sic_spy_skips_dynamo_persist(mock_parameter_store) -> None:
 
 
 @pytest.mark.asyncio
+async def test_symbol_override_maps_ggal_to_kbe(mock_parameter_store) -> None:
+    from datetime import date
+
+    from stocvest.data.ticker_reference import TickerReference
+
+    mock_client = AsyncMock()
+    ref = TickerReference(
+        symbol="GGAL",
+        active=True,
+        market_cap=1e9,
+        security_type="ADRC",
+        locale="us",
+        country_code="AR",
+        primary_exchange="XNYS",
+        list_date=date(2010, 1, 1),
+        name="Grupo Financiero Galicia",
+    )
+    etf, name, bucket, st, tier = await SectorMapper.get_sector_etf(
+        "GGAL", mock_client, None, mock_parameter_store.sector, ticker_ref=ref
+    )
+    assert etf == "KBE"
+    assert bucket == "banks"
+    assert name == "Argentine Banks"
+    assert st == SectorResolutionState.RESOLVED
+    mock_client.get_ticker_details.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_dynamo_cache_miss_resolves_from_polygon_sync(mock_parameter_store) -> None:
     from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
 

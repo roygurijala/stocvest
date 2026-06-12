@@ -81,3 +81,9 @@ def test_no_risk_factors_when_clean_signal() -> None:
 def test_stale_layer_generates_low_severity_factor() -> None:
     out = _base({"stale_layers": [{"name": "Macro", "minutes_ago": 180}]})
     assert any("Stale Layer Data" in x for x in out["risk_factors"])
+
+
+def test_perplexity_headwinds_surface_in_risk_factors() -> None:
+    out = _base({"perplexity_headwinds": ["Q1 earnings miss", "Class action filing"]})
+    assert any("Fundamental Headwind" in x for x in out["risk_factors"])
+    assert any("Q1 earnings miss" in x for x in out["risk_factors"])

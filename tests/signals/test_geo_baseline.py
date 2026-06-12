@@ -84,3 +84,24 @@ def test_news_sentiment_neutral_when_no_articles(monkeypatch: pytest.MonkeyPatch
         )
     )
     assert "unavailable" not in nr.reasoning.lower()
+
+
+def test_adr_geo_prefers_latam_theme_over_empty_baseline() -> None:
+    from datetime import date
+
+    from stocvest.data.ticker_reference import TickerReference
+
+    clear_geo_cache()
+    ref = TickerReference(
+        symbol="GGAL",
+        active=True,
+        market_cap=1e9,
+        security_type="ADRC",
+        locale="us",
+        country_code="AR",
+        primary_exchange="XNYS",
+        list_date=date(2010, 1, 1),
+        name="Grupo Financiero Galicia",
+    )
+    g = GeoAnalyzer().analyze([], sector_bucket="banks", ticker_ref=ref)
+    assert "latam" in str(g.geo_baseline_summary or "").lower() or "argentina" in str(g.geo_baseline_summary or "").lower()

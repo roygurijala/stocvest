@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from stocvest.signals.geo_sector_impact import (
+    country_geo_theme_for_ticker,
     detect_geo_event_scores,
     deterministic_geo_exposure_summary,
     geo_event_details_for_sector,
@@ -198,6 +199,7 @@ class GeoAnalyzer:
         *,
         lookback_hours: int = 8,
         sector_bucket: str | None = None,
+        ticker_ref: Any | None = None,
     ) -> GeoLayerResult:
         now_utc = datetime.now(timezone.utc)
         cutoff = now_utc - timedelta(hours=float(lookback_hours))
@@ -220,6 +222,9 @@ class GeoAnalyzer:
         themes_payload = get_cached_themes()
         active_raw = themes_payload.get("active_themes", []) if isinstance(themes_payload, dict) else []
         active_themes = [t for t in active_raw if isinstance(t, dict)]
+        country_theme = country_geo_theme_for_ticker(ticker_ref)
+        if country_theme:
+            active_themes = [country_theme, *active_themes]
         theme_sig = json.dumps(
             sorted(str(t.get("key", "")) for t in active_themes),
             separators=(",", ":"),
