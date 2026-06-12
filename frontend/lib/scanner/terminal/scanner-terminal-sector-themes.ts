@@ -100,10 +100,16 @@ export function buildSectorThemeGroups(
     .filter((row) => row.symbols.length > 0)
     .sort((a, b) => Math.abs(b.momentum) - Math.abs(a.momentum));
 
-  return rankedEtfs.slice(0, 4).map((row) => ({
-    id: `sector-${row.etf.toLowerCase()}`,
-    title: ETF_DISPLAY[row.etf] ?? row.chip?.label ?? row.etf,
-    symbols: row.symbols.slice(0, 6),
-    note: sectorMomentumNote(row.chip)
-  }));
+  return rankedEtfs.slice(0, 4).map((row) => {
+    const symbols = row.symbols.slice(0, 6);
+    return {
+      id: `sector-${row.etf.toLowerCase()}`,
+      title: ETF_DISPLAY[row.etf] ?? row.chip?.label ?? row.etf,
+      symbols,
+      note: sectorMomentumNote(row.chip),
+      themeKind: "sector" as const,
+      sectorEtf: row.etf,
+      symbolRoles: Object.fromEntries(symbols.map((sym) => [sym, "peer" as const]))
+    };
+  });
 }

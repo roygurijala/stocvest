@@ -20,6 +20,7 @@ def _serialize_ecosystem(eco: IpoEcosystemDefinition) -> dict[str, Any]:
         "index_inclusion_window_end": (
             eco.index_inclusion_window_end.isoformat() if eco.index_inclusion_window_end else None
         ),
+        "ipo_offer_price": eco.ipo_offer_price,
         "corporate_backers": list(eco.corporate_backers),
         "etf_holders": list(eco.etf_holders),
         "theme_peers": list(eco.theme_peers),

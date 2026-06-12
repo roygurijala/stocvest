@@ -32,6 +32,7 @@ class IpoEcosystemDefinition:
     s1_filed_date: date | None = None
     target_ipo_window: str | None = None
     index_inclusion_window_end: date | None = None
+    ipo_offer_price: float | None = None
 
     def all_tradable_peers(self) -> tuple[str, ...]:
         return tuple(
@@ -51,6 +52,7 @@ SPACEX_ECOSYSTEM = IpoEcosystemDefinition(
     registry_key="spacex_ecosystem",
     listed_ticker=SPACEX_LISTED_TICKER,
     ipo_date=date(2026, 6, 12),
+    ipo_offer_price=135.0,
     index_inclusion_window_end=date(2026, 7, 17),
     target_ipo_window="Nasdaq listing targeted June 2026",
     corporate_backers=("GOOGL", "SATS"),

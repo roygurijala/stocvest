@@ -78,11 +78,26 @@ export type ScannerTerminalSignalRow = {
   triggers: string[];
 };
 
+export type ScannerTerminalThemeKind = "ipo_ecosystem" | "sector" | "session";
+
+export type ScannerTerminalSymbolRole = "listed" | "corporate" | "etf" | "peer";
+
 export type ScannerTerminalRadarGroup = {
   id: string;
   title: string;
   symbols: string[];
   note: string | null;
+  themeKind: ScannerTerminalThemeKind;
+  registryKey?: string;
+  triggerEntity?: string;
+  listedTicker?: string | null;
+  ipoDate?: string | null;
+  targetIpoWindow?: string | null;
+  indexInclusionEnd?: string | null;
+  ipoOfferPrice?: number | null;
+  stakeNotes?: Record<string, string>;
+  symbolRoles?: Record<string, ScannerTerminalSymbolRole>;
+  sectorEtf?: string;
 };
 
 export type ScannerTerminalSelection =
@@ -328,7 +343,8 @@ export function buildRadarGroups(
       id: "session-movers",
       title: "Session movers",
       symbols,
-      note: "Largest gap % names in today's desk funnel."
+      note: "Largest gap % names in today's desk funnel.",
+      themeKind: "session"
     });
   }
 
@@ -341,7 +357,8 @@ export function buildRadarGroups(
       id: "building-structure",
       title: "Building structure",
       symbols: quiet.slice(0, 8).map((q) => q.symbol.trim().toUpperCase()),
-      note: quiet[0]?.why_line?.trim() ?? "Quiet leaders — structure forming without a full gap flag."
+      note: quiet[0]?.why_line?.trim() ?? "Quiet leaders — structure forming without a full gap flag.",
+      themeKind: "session"
     });
   }
 

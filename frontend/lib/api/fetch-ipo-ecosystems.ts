@@ -9,6 +9,7 @@ export type IpoEcosystemPayload = {
   s1_filed_date: string | null;
   target_ipo_window: string | null;
   index_inclusion_window_end: string | null;
+  ipo_offer_price: number | null;
   corporate_backers: string[];
   etf_holders: string[];
   theme_peers: string[];

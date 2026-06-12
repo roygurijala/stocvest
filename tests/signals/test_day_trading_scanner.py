@@ -68,7 +68,13 @@ def test_scanner_sorts_by_rank_score_desc():
 
 
 @pytest.mark.unit
-def test_scanner_excludes_unseasoned_known_ipo_without_reference():
+def test_scanner_excludes_unseasoned_known_ipo_without_reference(monkeypatch):
+    from datetime import date
+
+    monkeypatch.setattr(
+        "stocvest.signals.day_trading_scanner._calendar_today",
+        lambda: date(2026, 6, 8),
+    )
     scanner = PremarketGapScanner(min_abs_gap_percent=2.0)
     snaps = [
         snapshot("SPCX", prev_close=100.0, pre_market_price=110.0, day_volume=20_000_000),
@@ -80,7 +86,13 @@ def test_scanner_excludes_unseasoned_known_ipo_without_reference():
 
 
 @pytest.mark.unit
-def test_dynamic_gap_candidates_exclude_unseasoned_known_ipo():
+def test_dynamic_gap_candidates_exclude_unseasoned_known_ipo(monkeypatch):
+    from datetime import date
+
+    monkeypatch.setattr(
+        "stocvest.signals.day_trading_scanner._calendar_today",
+        lambda: date(2026, 6, 8),
+    )
     snaps = [
         Snapshot(
             symbol="SPCX",
@@ -160,6 +172,63 @@ def test_dynamic_gap_candidates_prefers_last_trade_then_open():
     assert [c.symbol for c in out] == ["OPENONLY", "LAST"]
     assert out[0].gap_percent == pytest.approx(4.0)
     assert out[1].gap_percent == pytest.approx(3.0)
+
+
+@pytest.mark.unit
+def test_dynamic_gap_candidates_allows_premarket_gap_when_day_volume_zero_but_prior_liquid(monkeypatch):
+    """SATS-style: Polygon day.v=0 pre-open but lastTrade shows a real gap."""
+    monkeypatch.setattr(
+        "stocvest.signals.day_trading_scanner._is_outside_rth_ny",
+        lambda *_a, **_k: True,
+    )
+    snaps = [
+        Snapshot(
+            symbol="SATS",
+            prev_close=128.13,
+            last_trade_price=135.0,
+            day_open=0.0,
+            day_volume=0.0,
+            prev_day_volume=16_440_624.0,
+        ),
+    ]
+    res = dynamic_gap_candidates_from_snapshots_with_stats(
+        snaps,
+        limit=10,
+        min_abs_gap_percent=2.0,
+        min_day_volume=500_000.0,
+    )
+    assert res.eligible_symbol_count == 1
+    assert res.candidates[0].symbol == "SATS"
+    assert res.candidates[0].gap_percent == pytest.approx(5.36, rel=0.02)
+
+
+@pytest.mark.unit
+def test_ipo_day_listed_ticker_uses_offer_price_when_no_prev_close(monkeypatch):
+    from datetime import date
+
+    monkeypatch.setattr(
+        "stocvest.signals.day_trading_scanner._calendar_today",
+        lambda: date(2026, 6, 12),
+    )
+    snaps = [
+        Snapshot(
+            symbol="SPCX",
+            prev_close=None,
+            last_trade_price=175.5,
+            day_volume=2_000_000.0,
+            prev_day_volume=0.0,
+        ),
+    ]
+    res = dynamic_gap_candidates_from_snapshots_with_stats(
+        snaps,
+        limit=10,
+        min_abs_gap_percent=2.0,
+        min_day_volume=500_000.0,
+    )
+    assert res.eligible_symbol_count == 1
+    assert res.candidates[0].symbol == "SPCX"
+    assert res.candidates[0].prev_close == pytest.approx(135.0)
+    assert res.candidates[0].gap_percent == pytest.approx(30.0, rel=0.02)
 
 
 @pytest.mark.unit

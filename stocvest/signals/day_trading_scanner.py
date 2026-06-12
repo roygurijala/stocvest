@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
@@ -22,6 +22,63 @@ from stocvest.data.symbol_universe_eligibility import (
     snapshot_universe_exclusion_reason,
 )
 from stocvest.utils.config import get_settings
+
+# Polygon `day.v` is often 0 before 9:30 ET; require prior-session liquidity instead.
+_MIN_PRIOR_DAY_VOLUME_PREMARKET_GAP = 1_000_000.0
+
+
+def _calendar_today() -> date:
+    return date.today()
+
+
+def _resolve_prev_close_for_gap(snapshot: Snapshot) -> float | None:
+    """Prior close for gap % — IPO day-1 listed tickers fall back to offer price."""
+    prev = snapshot.prev_close
+    if prev is not None and float(prev) > 0:
+        return float(prev)
+    sym = (snapshot.symbol or "").strip().upper()
+    if not sym:
+        return None
+    try:
+        from stocvest.data.ipo_ecosystem_registry import get_ecosystem_for_symbol
+
+        eco = get_ecosystem_for_symbol(sym)
+        if eco and (eco.listed_ticker or "").upper() == sym:
+            offer = eco.ipo_offer_price
+            if eco.ipo_date == _calendar_today() and offer is not None and float(offer) > 0:
+                return float(offer)
+    except Exception:
+        return None
+    return None
+
+
+def _allows_gap_despite_listing_age(symbol: str) -> bool:
+    """Listed issuer on its IPO calendar day — surface gap vs offer for intelligence."""
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return False
+    try:
+        from stocvest.data.ipo_ecosystem_registry import get_ecosystem_for_symbol
+
+        eco = get_ecosystem_for_symbol(sym)
+        return bool(
+            eco
+            and (eco.listed_ticker or "").upper() == sym
+            and eco.ipo_date == _calendar_today()
+        )
+    except Exception:
+        return False
+
+
+def _is_outside_rth_ny(now_utc: datetime | None = None) -> bool:
+    """True before 9:30 or after 16:00 ET Mon–Fri, or on weekends."""
+    ny = (now_utc or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+    if ny.weekday() >= 5:
+        return True
+    mins = ny.hour * 60 + ny.minute
+    open_mins = 9 * 60 + 30
+    close_mins = 16 * 60
+    return mins < open_mins or mins >= close_mins
 
 
 @dataclass(frozen=True)
@@ -40,6 +97,40 @@ class GapCandidateScanResult(NamedTuple):
 
     candidates: list[PremarketGapCandidate]
     eligible_symbol_count: int
+
+
+def _resolve_session_price_for_gap(snapshot: Snapshot) -> float | None:
+    """Session price for gap % — prefer extended-hours print, then RTH last/open."""
+    if snapshot.pre_market_price is not None and float(snapshot.pre_market_price) > 0:
+        return float(snapshot.pre_market_price)
+    last = snapshot.last_trade_price
+    if last is not None and float(last) > 0:
+        return float(last)
+    o = snapshot.day_open
+    if o is not None and float(o) > 0:
+        return float(o)
+    return None
+
+
+def _passes_min_day_volume_for_gap(
+    snapshot: Snapshot,
+    min_day_volume: float,
+    *,
+    now_utc: datetime | None = None,
+) -> bool:
+    """
+    Polygon snapshots often report ``day_volume=0`` before the regular session opens.
+
+    Outside RTH, accept symbols that gapped on pre-market prints when the **prior**
+    session was liquid (same 1M-share floor as the intraday gap scan).
+    """
+    vol = float(snapshot.day_volume or 0.0)
+    if vol >= min_day_volume:
+        return True
+    if not _is_outside_rth_ny(now_utc):
+        return False
+    prev_vol = float(snapshot.prev_day_volume or 0.0)
+    return prev_vol >= _MIN_PRIOR_DAY_VOLUME_PREMARKET_GAP
 
 
 def _cheap_gap_rank_score(
@@ -110,16 +201,11 @@ def dynamic_gap_candidates_from_snapshots_with_stats(
     """
     scored: list[tuple[float, PremarketGapCandidate]] = []
     for snap in snapshots:
-        prev = snap.prev_close
+        prev = _resolve_prev_close_for_gap(snap)
         if prev is None or prev <= 0:
             continue
-        last = snap.last_trade_price
-        o = snap.day_open
-        if last is not None and last > 0:
-            price = float(last)
-        elif o is not None and o > 0:
-            price = float(o)
-        else:
+        price = _resolve_session_price_for_gap(snap)
+        if price is None or price <= 0:
             continue
         universe_reason = snapshot_universe_exclusion_reason(
             snap.symbol,
@@ -130,11 +216,13 @@ def dynamic_gap_candidates_from_snapshots_with_stats(
         )
         if universe_reason:
             continue
-        if listing_age_exclusion_reason(snap.symbol, None):
+        if listing_age_exclusion_reason(snap.symbol, None) and not _allows_gap_despite_listing_age(
+            snap.symbol
+        ):
+            continue
+        if not _passes_min_day_volume_for_gap(snap, min_day_volume):
             continue
         vol = float(snap.day_volume or 0.0)
-        if vol < min_day_volume:
-            continue
         gap_pct = (price - float(prev)) / float(prev) * 100.0
         if is_corporate_action_session_move(
             float(prev),
@@ -156,7 +244,7 @@ def dynamic_gap_candidates_from_snapshots_with_stats(
         cand = PremarketGapCandidate(
             symbol=snap.symbol,
             prev_close=float(prev),
-            premarket_price=price,
+            premarket_price=float(price),
             gap_percent=round(gap_pct, 4),
             day_volume=vol,
             direction=direction,
@@ -230,7 +318,7 @@ class PremarketGapScanner:
                 continue
             if abs(candidate.gap_percent) < self._min_abs_gap_percent:
                 continue
-            if candidate.day_volume < self._min_day_volume:
+            if not _passes_min_day_volume_for_gap(snapshot, self._min_day_volume):
                 continue
             candidates.append(candidate)
 
@@ -238,13 +326,15 @@ class PremarketGapScanner:
         return candidates[: max(0, limit)]
 
     def _to_candidate(self, snapshot: Snapshot) -> PremarketGapCandidate | None:
-        prev_close = snapshot.prev_close
+        prev_close = _resolve_prev_close_for_gap(snapshot)
         premarket_price = self._resolve_premarket_price(snapshot)
         if prev_close is None or prev_close <= 0 or premarket_price is None or premarket_price <= 0:
             return None
         if float(premarket_price) < self._min_trade_price:
             return None
-        if listing_age_exclusion_reason(snapshot.symbol, None):
+        if listing_age_exclusion_reason(snapshot.symbol, None) and not _allows_gap_despite_listing_age(
+            snapshot.symbol
+        ):
             return None
 
         gp = gap_percent(prev_close, premarket_price)
@@ -275,11 +365,7 @@ class PremarketGapScanner:
 
     @staticmethod
     def _resolve_premarket_price(snapshot: Snapshot) -> float | None:
-        return (
-            snapshot.pre_market_price
-            if snapshot.pre_market_price is not None
-            else snapshot.last_trade_price
-        )
+        return _resolve_session_price_for_gap(snapshot)
 
 
 @dataclass(frozen=True)
