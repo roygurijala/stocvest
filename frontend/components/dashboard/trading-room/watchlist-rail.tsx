@@ -229,6 +229,7 @@ function RailCard({
   return (
     <div
       style={{
+        position: "relative",
         background: active ? colors.surfaceMuted : colors.surface,
         border: `1px solid ${active ? colors.accent : colors.border}`,
         borderLeft: `3px solid ${biasAccent}`,
@@ -237,6 +238,16 @@ function RailCard({
         opacity: card.state === "cooling" ? 0.78 : 1
       }}
     >
+      {onRefresh ? (
+        <div style={{ position: "absolute", top: spacing[2], right: spacing[2], zIndex: 1 }}>
+          <CardRefreshButton
+            label={`Refresh ${card.symbol}`}
+            busy={refreshing}
+            colors={colors}
+            onRefresh={onRefresh}
+          />
+        </div>
+      ) : null}
       <button
         type="button"
         onClick={onSelect}
@@ -247,6 +258,7 @@ function RailCard({
           border: "none",
           cursor: "pointer",
           padding: spacing[2],
+          paddingRight: onRefresh ? `calc(${spacing[2]} + 28px)` : spacing[2],
           display: "flex",
           flexDirection: "column",
           gap: 3,
@@ -258,7 +270,6 @@ function RailCard({
             <span style={{ fontSize: typography.scale.sm, fontWeight: 700 }}>{card.symbol}</span>
             <span style={laneBadgeStyle(colors)}>{card.lane}</span>
           </span>
-          <span style={{ display: "flex", alignItems: "flex-start", gap: spacing[1] }}>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
             <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: pctTone }}>
               {card.price != null ? `$${card.price.toFixed(2)}` : "—"}
@@ -266,15 +277,6 @@ function RailCard({
             {pct != null ? (
               <span style={{ fontSize: 9, color: pctTone }}>{`${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`}</span>
             ) : null}
-          </span>
-          {onRefresh ? (
-            <CardRefreshButton
-              label={`Refresh ${card.symbol}`}
-              busy={refreshing}
-              colors={colors}
-              onRefresh={onRefresh}
-            />
-          ) : null}
           </span>
         </div>
         {company ? (

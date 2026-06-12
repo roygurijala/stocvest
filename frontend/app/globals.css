@@ -247,12 +247,18 @@ a {
  * `.zone { overflow-y: auto }`) so side panes never ghost below the footer when
  * the center column is taller than the viewport. */
 @media (min-width: 900px) {
-  .trading-room-columns {
-    min-height: 20rem;
+  .stocvest-dashboard-v2 {
     overflow: hidden;
+  }
+  .trading-room-columns {
+    min-height: 0;
+    overflow: hidden;
+    grid-template-rows: minmax(0, 1fr);
   }
   .trading-room-column {
     min-height: 0;
+    min-width: 0;
+    height: 100%;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
