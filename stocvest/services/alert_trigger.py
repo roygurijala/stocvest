@@ -241,7 +241,7 @@ class AlertTriggerService:
         symbol: str,
         mode: str,
         scenario: dict[str, Any],
-        on_watchlist: bool = True,
+        desk_funnel: bool = False,
     ) -> None:
         """Email when a symbol crosses into execution-actionable (ledger + in-zone R/R)."""
         prefs = self.alert_store.get_preferences(user_id)
@@ -249,7 +249,7 @@ class AlertTriggerService:
             return
         sym_u = symbol.strip().upper()
         mode_s = str(mode or "").strip().lower()
-        if prefs.watchlist_only and not on_watchlist:
+        if prefs.watchlist_only and not on_watchlist and not desk_funnel:
             return
         if self._in_quiet_hours(prefs):
             _LOG.debug("execution_actionable alert skipped: quiet hours user=%s", user_ref_for_logs(user_id))

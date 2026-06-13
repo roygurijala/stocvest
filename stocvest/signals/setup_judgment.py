@@ -72,18 +72,6 @@ def _count_aligned(layers: list[dict[str, Any]], *, composite_bias: str) -> int:
     return n
 
 
-def _display_aligned_count(
-    binary_aligned: int,
-    alignment_ratio: float | None,
-    total: int,
-) -> int:
-    """Match Signals / Evidence KPI — weighted ``alignment_ratio`` rounded to layer count."""
-    if alignment_ratio is not None:
-        ar = max(0.0, min(1.0, float(alignment_ratio)))
-        return max(0, min(total, int(round(ar * total))))
-    return binary_aligned
-
-
 def _process_tier(aligned: int, total: int = 6) -> ProcessTier:
     if aligned >= 5:
         return "actionable"
@@ -278,7 +266,8 @@ def build_setup_judgment(
     total = len(MATURATION_LAYER_KEYS)
     summary = (signal_summary or "neutral").strip().lower()
     binary_aligned = _count_aligned(layers, composite_bias=summary)
-    aligned = _display_aligned_count(binary_aligned, alignment_ratio, total)
+    # Setup progress uses directional agreement (verdict matches bias), not weighted ratio.
+    aligned = binary_aligned
     tier = _process_tier(aligned, total)
     missing = derive_missing_layers(layers, composite_bias=composite_bias_from_summary(summary))
 
