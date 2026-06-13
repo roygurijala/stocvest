@@ -241,6 +241,7 @@ class AlertTriggerService:
         symbol: str,
         mode: str,
         scenario: dict[str, Any],
+        on_watchlist: bool = False,
         desk_funnel: bool = False,
     ) -> None:
         """Email when a symbol crosses into execution-actionable (ledger + in-zone R/R)."""
