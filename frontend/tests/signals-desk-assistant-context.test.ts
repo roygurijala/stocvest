@@ -43,7 +43,8 @@ describe("enrichSignalsDeskAssistantContext", () => {
       }
     });
     expect(enriched.setup_bias).toBe("Bullish");
-    expect(enriched.alignment_display).toContain("Strong");
+    expect(enriched.alignment_display).toContain("Near ready");
+    expect(enriched.alignment_display).toContain("4/6");
     expect(enriched.execution_readiness_label).toBe("Not actionable yet");
     expect(enriched.decision_reinforcements?.[0]).toContain("caution flag");
     expect(enriched.maturation_label).toBe("Strong (5/6)");

@@ -125,13 +125,21 @@ describe("SignalsSetupRead", () => {
   });
 
   test("execution detail toggle reveals primary blocker", () => {
+    const bullishRows: SignalsLayerRowInput[] = [
+      { key: "technical", name: "Technical", status: "Bullish", explanation: "", score: 72 },
+      { key: "news", name: "News", status: "Bullish", explanation: "", score: 68 },
+      { key: "macro", name: "Macro", status: "Bullish", explanation: "", score: 65 },
+      { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 70 },
+      { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 52 },
+      { key: "internals", name: "Market Internals", status: "Bullish", explanation: "", score: 66 }
+    ];
     render(
       <SignalsSetupRead
         symbol="AAPL"
         tradingMode="swing"
         bias="Bullish"
-        rows={rows}
-        previewLayers={rows.slice(0, 2)}
+        rows={bullishRows}
+        previewLayers={bullishRows.slice(0, 2)}
         decision={{
           state: "monitor",
           line: "Final confirmation and/or risk conditions not yet satisfied",
