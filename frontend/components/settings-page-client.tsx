@@ -24,6 +24,7 @@ type AlertPrefs = {
   on_pdt_blocked: boolean;
   on_gap_detected: boolean;
   on_watchlist_maturation: boolean;
+  on_execution_actionable?: boolean;
   watchlist_only: boolean;
   quiet_hours_enabled: boolean;
   quiet_hours_start: string;
@@ -49,7 +50,8 @@ function alertHistoryTypeLabel(raw: string | null | undefined): string {
     pdt_blocked: "PDT blocked",
     gap_detected: "Gap",
     signal_expired: "Expired",
-    watchlist_maturation: "Maturation"
+    watchlist_maturation: "Maturation",
+    execution_actionable: "Execution actionable"
   };
   return map[t] ?? t.replace(/_/g, " ");
 }
@@ -348,6 +350,20 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
             <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
               When a symbol on your default watchlist moves between maturation states after you run evidence (e.g. Developing →
               Actionable).
+            </p>
+            <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
+              <span>Execution actionable (desk funnel)</span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                disabled={!prefs.email_enabled}
+                checked={prefs.on_execution_actionable ?? true}
+                onChange={(e) => void patchPref({ on_execution_actionable: e.target.checked })}
+              />
+            </label>
+            <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
+              Email when any symbol crosses into execution-ready on the opportunity desk (ledger gates + price in entry zone).
+              One email per symbol per day.
             </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
               <span>

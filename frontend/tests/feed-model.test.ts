@@ -68,4 +68,33 @@ describe("buildFeedCards", () => {
     });
     expect(cards.every((c) => c.lane === "swing")).toBe(true);
   });
+
+  test("high alignment without execution flag is near not actionable", () => {
+    const dayDesk: DeskTodayData = {
+      discovery: [
+        {
+          symbol: "ASTN",
+          gap_percent: 26,
+          direction: "up",
+          rank_score: 90,
+          desk: "swing",
+          alignment_ratio: 1.0,
+          decision_state: "blocked",
+          execution_actionable: false
+        }
+      ],
+      movers_radar: []
+    };
+    const cards = buildFeedCards({
+      mode: "swing",
+      swingDesk: dayDesk,
+      dayDesk: null,
+      swingSetups: [],
+      daySetups: [],
+      snapshotsBySymbol: new Map(),
+      dayTradingSurfaces: true
+    });
+    const astn = cards.find((c) => c.symbol === "ASTN");
+    expect(astn?.state).toBe("cooling");
+  });
 });

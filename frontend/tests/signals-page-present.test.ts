@@ -62,7 +62,7 @@ describe("signals-page-present", () => {
     expect(resolved.displayLine).toBe("Balanced");
   });
 
-  test("resolveSignalsLayerAlignment prefers alignment_ratio over chip count", () => {
+  test("resolveSignalsLayerAlignment uses ratio for neutral bias only", () => {
     const neutralRows: SignalsLayerRowInput[] = bearishRows.map((r) => ({
       ...r,
       status: "Neutral" as const
@@ -75,6 +75,24 @@ describe("signals-page-present", () => {
     });
     expect(resolved.aligned).toBe(4);
     expect(formatSignalsAlignmentDisplayLine(resolved, "Neutral")).toBe("Balanced");
+  });
+
+  test("resolveSignalsLayerAlignment ignores alignment_ratio for directional bias", () => {
+    const rows: SignalsLayerRowInput[] = [
+      { key: "technical", name: "Technical", status: "Bullish", explanation: "", score: 72 },
+      { key: "news", name: "News", status: "Neutral", explanation: "", score: 50 },
+      { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
+      { key: "sector", name: "Sector", status: "Bullish", explanation: "", score: 70 },
+      { key: "geopolitical", name: "Geopolitical", status: "Bullish", explanation: "", score: 68 },
+      { key: "internals", name: "Market Internals", status: "Bearish", explanation: "", score: 40 }
+    ];
+    const resolved = resolveSignalsLayerAlignment({
+      rows,
+      bias: "Bullish",
+      alignmentRatio: 1
+    });
+    expect(resolved.aligned).toBe(3);
+    expect(resolved.label).toBe("Partially aligned");
   });
 
   test("neutral alignment subline is verdict copy not dual n/6", () => {

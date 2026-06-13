@@ -271,8 +271,8 @@ export function countLayerAlignment(
 }
 
 /**
- * Signals X/6 — prefers composite `alignment_ratio` (weighted layer agreement) so the
- * headline matches trade-decision gates and the radar Δ chart is not mistaken for alignment.
+ * Signals X/6 — directional setups count layers whose verdict matches setup bias.
+ * Neutral composites may use consistency (ratio-backed when provided).
  */
 export function resolveSignalsLayerAlignment(input: {
   rows: SignalsLayerRowInput[];
@@ -296,22 +296,17 @@ export function resolveSignalsLayerAlignment(input: {
             : "Mixed direction";
     return { aligned: dir.consistency, total: dir.total, label };
   }
-  const fromRatio = alignedLayersFromAlignmentRatio(input.alignmentRatio);
-  if (fromRatio != null) {
-    const total = SIGNAL_LAYER_ALIGN_TOTAL;
-    if (input.bias === "Neutral") {
+  if (input.bias === "Neutral") {
+    const fromRatio = alignedLayersFromAlignmentRatio(input.alignmentRatio);
+    if (fromRatio != null) {
+      const total = SIGNAL_LAYER_ALIGN_TOTAL;
       return {
         aligned: fromRatio,
         total,
         label: fromRatio >= 4 ? "Mostly neutral" : "Mixed direction"
       };
     }
-    return {
-      aligned: fromRatio,
-      total,
-      label:
-        fromRatio >= 4 ? "Aligned" : fromRatio >= 2 ? "Partially aligned" : "Not aligned"
-    };
+    return countLayerAlignment(input.rows, input.bias);
   }
   return countLayerAlignment(input.rows, input.bias);
 }
@@ -700,10 +695,13 @@ export function buildSignalsPageDecision(input: {
     alignmentRatio != null && Number.isFinite(alignmentRatio)
       ? Math.round(Math.max(0, Math.min(1, alignmentRatio)) * 100)
       : null;
-  const weakAgreement = agreementPct != null ? agreementPct < 52 : directionalLayers < 3;
+  const weakAgreement =
+    alignment.aligned < 3 ||
+    (agreementPct != null ? agreementPct < 52 : directionalLayers < 3);
   const lowReadiness = alignment.aligned < 3;
   const strongReadiness = alignment.aligned >= 5;
-  const strongAgreement = agreementPct != null ? agreementPct >= 60 : directionalLayers >= 4;
+  const strongAgreement =
+    alignment.aligned >= 5 && (agreementPct != null ? agreementPct >= 52 : directionalLayers >= 4);
   const goodCoverage = availableLayers >= 5;
   const hasInsufficient = !isComplete;
   const rrFail = rrWarning || isRrBelowVerdictThreshold(riskReward, mode);

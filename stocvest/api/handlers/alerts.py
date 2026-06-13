@@ -20,6 +20,7 @@ _BOOL_KEYS = frozenset(
         "on_pdt_blocked",
         "on_gap_detected",
         "on_watchlist_maturation",
+        "on_execution_actionable",
         "watchlist_only",
         "quiet_hours_enabled",
     }

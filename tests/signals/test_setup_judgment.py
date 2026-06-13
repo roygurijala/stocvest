@@ -15,7 +15,7 @@ def _bullish_layer(lid: str, score: int = 70) -> dict:
     }
 
 
-def test_process_uses_alignment_ratio_for_display_count() -> None:
+def test_process_uses_directional_count_not_alignment_ratio() -> None:
     layers = [_bullish_layer(lid) for lid in ("technical", "news", "macro", "sector")]
     layers.append({"layer": "geopolitical", "status": "available", "score": 40, "verdict": "neutral"})
     layers.append({"layer": "internals", "status": "available", "score": 35, "verdict": "bearish"})
@@ -25,8 +25,8 @@ def test_process_uses_alignment_ratio_for_display_count() -> None:
         signal_summary="bullish",
         alignment_ratio=0.83,
     )
-    assert j["process"]["layers_aligned"] == 5
-    assert j["process"]["tier"] == "actionable"
+    assert j["process"]["layers_aligned"] == 4
+    assert j["process"]["tier"] == "near_ready"
 
 
 def test_near_ready_process_with_missing_layers() -> None:

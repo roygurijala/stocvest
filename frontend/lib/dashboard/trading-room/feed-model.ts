@@ -98,9 +98,6 @@ function leaderState(leader: DeskDiscoveryLeader): FeedState {
   if (decision === "monitor") return "near";
   if (decision === "blocked") return "cooling";
   const status = (leader.composite_status || leader.verdict || "").trim().toLowerCase();
-  if (status.includes("actionable") || status.includes("qualified") || status.includes("ready")) {
-    return "actionable";
-  }
   if (status.includes("cool") || status.includes("faded") || status.includes("expired")) {
     return "cooling";
   }
@@ -109,7 +106,6 @@ function leaderState(leader: DeskDiscoveryLeader): FeedState {
   }
   const ratio = cleanNum(leader.alignment_ratio);
   if (ratio != null) {
-    if (ratio >= 0.8) return "actionable";
     if (ratio >= 0.55) return "near";
     return "potential";
   }

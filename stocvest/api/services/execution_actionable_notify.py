@@ -26,8 +26,8 @@ def notify_execution_actionable_transition(
     Email users when a symbol becomes execution-actionable.
 
     Delivers when:
-    - symbol is on the user's default watchlist, OR
-    - ``funnel_symbol`` and user has ``watchlist_only=False`` (desk-wide funnel alerts).
+    - ``funnel_symbol`` is true (desk batch): all users with email alerts enabled, or
+    - symbol is on the user's default watchlist when ``funnel_symbol`` is false.
 
     Returns count of send attempts.
     """
@@ -52,8 +52,8 @@ def notify_execution_actionable_transition(
             syms = {s.strip().upper() for s in (wl.symbols if wl else item.symbols or [])}
             on_watchlist = sym in syms
             prefs = trig.alert_store.get_preferences(uid)
-            desk_wide = funnel_symbol and not prefs.watchlist_only
-            if not on_watchlist and not desk_wide:
+            # Desk funnel crosses email all opted-in users; watchlist_only applies to other alerts.
+            if not on_watchlist and not funnel_symbol:
                 continue
             try:
                 trig.trigger_execution_actionable(
@@ -63,6 +63,7 @@ def notify_execution_actionable_transition(
                     mode=mode,
                     scenario=scenario,
                     on_watchlist=on_watchlist,
+                    desk_funnel=funnel_symbol,
                 )
                 sent += 1
             except Exception as exc:  # noqa: BLE001
