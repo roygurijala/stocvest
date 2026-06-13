@@ -363,7 +363,7 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
             </label>
             <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
               Email when any symbol crosses into execution-ready on the opportunity desk (ledger gates + price in entry zone).
-              One email per symbol per day.
+              Applies to the whole desk — not limited by “Watchlist symbols only” below. One email per symbol per day.
             </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
               <span>
@@ -377,6 +377,10 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
                 onChange={(e) => void patchPref({ watchlist_only: e.target.checked })}
               />
             </label>
+            <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
+              Limits signal-fired, confluence, gap, and maturation emails to your default watchlist. Does not limit
+              execution-actionable desk alerts above.
+            </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
               <span>Enable quiet hours</span>
               <input
