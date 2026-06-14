@@ -38,6 +38,8 @@ from stocvest.signals.composite_score import CompositeVerdict
 
 # Display-scale score: round((composite.score + 1) * 50), same as composite engines.
 MIN_ACTIONABLE_SCORE_0_100 = 72
+# Day-desk soak (2026-06): lowered from 72 — shadow telemetry showed a cluster at 61–69.
+MIN_ACTIONABLE_SCORE_DAY_0_100 = 70
 MIN_ALIGNMENT_RATIO = 0.52
 MIN_RISK_REWARD_SWING = 2.0
 MIN_RISK_REWARD_DAY = 1.3
@@ -201,6 +203,8 @@ def evaluate_swing_ledger_entry(
     sec = _sector_score_for_gate(sector_layer_score=sector_layer_score, layer_scores=layer_scores)
     if sec is None:
         gates["sector_gate"] = {"pass": True, "value": None, "reason": "sector_unavailable"}
+    elif is_composite_layer_signal_scale(sec):
+        gates["sector_gate"] = {"pass": True, "value": None, "reason": "sector_unavailable"}
     elif sec < MIN_SECTOR_LAYER_SCORE:
         gates["sector_gate"] = {"pass": False, "value": sec, "min": MIN_SECTOR_LAYER_SCORE}
         ok = False
@@ -255,8 +259,9 @@ def evaluate_day_ledger_entry(
         ok = False
 
     s100 = _score_0_100_from_composite(composite_score)
-    if s100 < MIN_ACTIONABLE_SCORE_0_100:
-        gates["decision_score"] = {"pass": False, "value": s100, "min": MIN_ACTIONABLE_SCORE_0_100}
+    min_score = MIN_ACTIONABLE_SCORE_DAY_0_100
+    if s100 < min_score:
+        gates["decision_score"] = {"pass": False, "value": s100, "min": min_score}
         ok = False
     else:
         gates["decision_score"] = {"pass": True, "value": s100}

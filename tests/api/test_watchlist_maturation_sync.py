@@ -362,6 +362,33 @@ def test_sync_skips_transition_when_nothing_changed() -> None:
     assert len(trans_repo.list_for_symbol("u1", "AAPL", "swing")) == 1
 
 
+def test_sync_ledger_qualified_promotes_actionable_despite_low_alignment_ratio() -> None:
+    table = _FakeDynamoTable()
+    repo = WatchlistMaturationRepository(table)
+    store = InMemoryWatchlistStore()
+    store.create_watchlist("u1", "Main", ["VELO"], is_default=True)
+    body = {
+        "symbol": "VELO",
+        "signal_summary": "bullish",
+        "ledger_qualified": True,
+        "alignment_ratio": 0.52,
+        "layers": _six_layers(verdict="bullish"),
+    }
+    status = sync_watchlist_maturation_from_composite(
+        user_id="u1",
+        symbol="VELO",
+        mode="day",
+        composite_body=body,
+        maturation_repo=repo,
+        watchlist_store=store,
+    )
+    assert status == "written"
+    got = repo.get_entry("u1", "VELO", "day")
+    assert got is not None
+    assert got.state == WatchlistState.ACTIONABLE
+    assert got.layers_aligned >= 5
+
+
 def test_sync_skips_notify_when_email_on_state_change_false(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[int] = []
 

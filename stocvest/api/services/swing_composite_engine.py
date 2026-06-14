@@ -540,6 +540,10 @@ async def build_swing_composite_response(
         response_body["market_context_dampening"] = damp_meta
     response_body["alignment"] = alignment_to_response_dict(alignment)
     response_body.update(composite_direction_fields(response_body))
+    response_body["decision_state"] = derive_decision_state(
+        response_status=str(response_body.get("status") or "active"),
+        verdict=composite.verdict,
+    )
     response_body["weekly_timeframe"] = weekly_timeframe
     response_body["timeframe_alignment"] = timeframe_alignment
     response_body["causal_narrative"] = build_causal_narrative(

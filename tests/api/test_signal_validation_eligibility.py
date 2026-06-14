@@ -7,6 +7,7 @@ from stocvest.api.services.signal_validation_eligibility import (
     DECISION_STATE_ACTIONABLE,
     DECISION_STATE_BLOCKED,
     DECISION_STATE_MONITOR,
+    MIN_ACTIONABLE_SCORE_DAY_0_100,
     MIN_RISK_REWARD_DAY,
     MIN_RISK_REWARD_SWING,
     derive_decision_state,
@@ -78,6 +79,41 @@ def test_day_rr_passes_at_floor() -> None:
     )
     assert ok
     assert gates["risk_reward"]["pass"] is True
+
+
+def test_day_score_passes_at_70_floor() -> None:
+    # 0.40 composite → display score 70
+    ok, gates = evaluate_day_ledger_entry(
+        response_status="active",
+        verdict=CompositeVerdict.BULLISH,
+        composite_score=0.40,
+        alignment_ratio=0.6,
+        macro_market_regime="bull",
+        risk_reward=MIN_RISK_REWARD_DAY,
+        intraday_bar_count=25,
+        orb_signal="orb_long",
+        vwap_state=None,
+    )
+    assert gates["decision_score"]["pass"] is True
+    assert gates["decision_score"]["value"] == MIN_ACTIONABLE_SCORE_DAY_0_100
+    assert ok
+
+
+def test_day_score_rejects_69() -> None:
+    ok, gates = evaluate_day_ledger_entry(
+        response_status="active",
+        verdict=CompositeVerdict.BULLISH,
+        composite_score=0.38,
+        alignment_ratio=0.6,
+        macro_market_regime="bull",
+        risk_reward=MIN_RISK_REWARD_DAY,
+        intraday_bar_count=25,
+        orb_signal="orb_long",
+        vwap_state=None,
+    )
+    assert not ok
+    assert gates["decision_score"]["pass"] is False
+    assert gates["decision_score"]["value"] == 69
 
 
 def test_swing_crisis_environment_blocks_ledger() -> None:

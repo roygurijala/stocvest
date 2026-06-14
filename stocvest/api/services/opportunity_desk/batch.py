@@ -61,9 +61,9 @@ def opportunity_desk_redis_key(mode: DeskMode) -> str:
 @dataclass
 class OpportunityDeskBatchConfig:
     funnel: OpportunityDeskFunnelConfig = field(default_factory=OpportunityDeskFunnelConfig)
-    composite_limit_swing: int = 12
-    composite_limit_day: int = 8
-    composite_concurrency: int = 3
+    composite_limit_swing: int = 25
+    composite_limit_day: int = 20
+    composite_concurrency: int = 5
     """Extra retained-pool symbols to composite per full batch (round-robin through survivors)."""
     retained_pool_track_limit: int = 30
 
