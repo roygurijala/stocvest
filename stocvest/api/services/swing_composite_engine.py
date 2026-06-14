@@ -49,6 +49,11 @@ from stocvest.api.services.swing_composite_evidence import (
     build_swing_composite_evidence_fields,
     serialize_daily_bars_for_range,
 )
+from stocvest.api.services.benzinga_feed_health import (
+    apply_news_degraded_if_feed_failed,
+    composite_layers_meta,
+    layer_available_for_composite,
+)
 from stocvest.api.services.symbol_perplexity_enrichment import (
     maybe_apply_perplexity_layers,
     perplexity_risk_factor_lines,
@@ -276,6 +281,7 @@ async def build_swing_composite_response(
         benzinga_data=bz_data,
         current_price=_snapshot_mark_price(sym_snap),
     )
+    news = apply_news_degraded_if_feed_failed(news, bz_data)
     macro_ctx = await get_macro_context(polygon_econ_events=econ)
     macro = MacroAnalyzer().analyze(
         spy_snap,
@@ -338,7 +344,7 @@ async def build_swing_composite_response(
 
     layer_results = [tech, news, macro, sector, geo, internals]
     layer_ids = ["technical", "news", "macro", "sector", "geopolitical", "internals"]
-    available = [r for r in layer_results if getattr(r, "status", "") == "available"]
+    available = [r for r in layer_results if layer_available_for_composite(getattr(r, "status", ""))]
     swing_composite = resolve_composite_block(params, mode="swing")
     min_layers = int(swing_composite.min_available_layers)
     if len(available) < min_layers:
@@ -435,7 +441,12 @@ async def build_swing_composite_response(
         }
         if lid == "news":
             row["wim_summary"] = getattr(res, "wim_summary", None)
-            row["data_state"] = getattr(res, "data_state", "fresh")
+            ds = str(getattr(res, "data_state", "fresh") or "fresh")
+            row["data_state"] = ds
+            if ds == "supplementary_context":
+                row["supplementary_context"] = True
+            if str(getattr(res, "status", "")).strip().lower() == "degraded":
+                row["excluded_from_composite"] = True
             row["article_count"] = int(getattr(res, "article_count", 0) or 0)
             row["latest_rating"] = getattr(res, "latest_rating", None)
             row["latest_guidance"] = getattr(res, "latest_guidance", None)
@@ -523,6 +534,8 @@ async def build_swing_composite_response(
         "conflicted_layers": list(composite.conflicted_layers or []),
         "market_context_flags": resolve_market_context_flags(sym, reference=ticker_ref),
     }
+    response_body.update(composite_layers_meta(layer_results, layer_ids))
+    response_body["benzinga_feed_health"] = bz_data.feed_health.as_dict()
     if damp_meta:
         response_body["market_context_dampening"] = damp_meta
     response_body["alignment"] = alignment_to_response_dict(alignment)

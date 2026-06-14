@@ -635,6 +635,15 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
 
       <section>
         <h3 style={{ marginTop: 0 }}>Layer breakdown</h3>
+        {evidence.layersExcludedNote ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="layers-excluded-note"
+            style={{ margin: "0 0 12px" }}
+          >
+            {evidence.layersExcludedNote}
+          </p>
+        ) : null}
         <div style={{ display: "grid", gap: spacing[3] }}>
           {/* B35 (BRK.B feedback, 2026-05-13): the layer-breakdown
               grid now applies an emphasis hierarchy and consolidates
@@ -1005,7 +1014,15 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                       Analyst feed unavailable
                     </span>
                   ) : null}
-                  {layer.news_data_state === "stale" && (layer.articles_count === 0 || layer.articles_count === undefined) ? (
+                  {layer.news_data_state === "degraded" ? (
+                    <p className="text-sm text-muted-foreground" style={{ margin: 0 }}>
+                      News feed unavailable — excluded from composite scoring.
+                    </p>
+                  ) : layer.news_data_state === "supplementary_context" ? (
+                    <p className="text-sm text-muted-foreground" style={{ margin: 0 }}>
+                      Supplementary AI context for thin headline coverage — not a structured news feed.
+                    </p>
+                  ) : layer.news_data_state === "stale" && (layer.articles_count === 0 || layer.articles_count === undefined) ? (
                     <p className="text-sm text-muted-foreground" style={{ margin: 0 }}>
                       {pickNewsEmptyCopy(evidence.symbol)}
                     </p>

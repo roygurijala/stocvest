@@ -1,10 +1,14 @@
-"""Perplexity Sonar backfill for news and macro layers when Polygon/Benzinga are thin."""
+"""Perplexity Sonar supplementary context for news and macro when Benzinga/Polygon are thin."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
 
+from stocvest.api.services.benzinga_feed_health import (
+    benzinga_news_feed_degraded,
+    qualifies_for_supplementary_news_context,
+)
 from stocvest.data.benzinga_client import BenzingaMultiResult
 from stocvest.data.perplexity_client import perplexity_cache_key, perplexity_sonar_json
 from stocvest.data.ticker_reference import TickerReference
@@ -49,12 +53,23 @@ def _company_label(symbol: str, ticker_ref: TickerReference | None) -> str:
     return " — ".join(parts)
 
 
-def needs_perplexity_news(news: NewsLayerResult, benzinga_data: BenzingaMultiResult | None) -> bool:
+def needs_perplexity_news(
+    news: NewsLayerResult,
+    benzinga_data: BenzingaMultiResult | None,
+    *,
+    ticker_ref: TickerReference | None = None,
+) -> bool:
     if news.article_count > 0:
+        return False
+    if str(news.status or "").strip().lower() == "degraded":
+        return False
+    if benzinga_news_feed_degraded(benzinga_data):
         return False
     if news.data_state == "fresh" and news.analyst_sub_score not in (None, 0.0):
         return False
     if benzinga_data and benzinga_data.wim and str(benzinga_data.wim.reason or "").strip():
+        return False
+    if not qualifies_for_supplementary_news_context(ticker_ref=ticker_ref, benzinga_data=benzinga_data):
         return False
     return news.data_state in ("stale", "fresh")
 
@@ -195,13 +210,14 @@ def apply_perplexity_news_enrichment(
     *,
     params_bullish_threshold: int,
     params_bearish_threshold: int,
+    ticker_ref: TickerReference | None = None,
 ) -> NewsLayerResult:
-    """Adjust an existing news layer with Perplexity backfill (does not replace Benzinga)."""
-    base = _sentiment_to_score(enrich.sentiment)
+    """Supplementary AI context for thin-coverage names — labeled, reduced-weight blend."""
+    base = _sentiment_to_score(enrich.sentiment) * 0.65
     if enrich.headwinds and enrich.sentiment == "neutral":
-        base -= min(0.2, 0.05 * len(enrich.headwinds))
+        base -= min(0.12, 0.03 * len(enrich.headwinds))
     if enrich.catalysts and enrich.sentiment == "neutral":
-        base += min(0.2, 0.05 * len(enrich.catalysts))
+        base += min(0.12, 0.03 * len(enrich.catalysts))
     weighted = max(-1.0, min(1.0, float(news.weighted_sentiment or 0.0) + base))
     score = int(round((weighted + 1.0) / 2.0 * 100.0))
     if score >= params_bullish_threshold:
@@ -213,7 +229,12 @@ def apply_perplexity_news_enrichment(
 
     chips = list(news.chips or [])
     chips = [c for c in chips if c != "No qualifying headlines"]
-    chips.append("News: Perplexity backfill")
+    adr = ticker_ref and ticker_ref.is_adr() and str(ticker_ref.country_code or "").strip().upper() not in ("", "US")
+    chips.append(
+        "News: supplementary AI context (ADR)"
+        if adr
+        else "News: supplementary AI context (thin coverage)"
+    )
     if enrich.headwinds:
         chips.append(f"Headwind: {enrich.headwinds[0][:48]}")
     if enrich.catalysts:
@@ -228,7 +249,7 @@ def apply_perplexity_news_enrichment(
     news.score = score
     news.verdict = verdict
     news.weighted_sentiment = weighted
-    news.data_state = "perplexity_enriched"
+    news.data_state = "supplementary_context"
     news.reasoning = " ".join(reasoning_parts)[:900]
     news.chips = chips
     if enrich.catalysts and not news.catalyst_headline:
@@ -253,7 +274,7 @@ def apply_perplexity_macro_enrichment(macro: MacroLayerResult, enrich: Perplexit
         macro.verdict = "neutral"
 
     chips = list(macro.chips or [])
-    chips.append("Macro: Perplexity context")
+    chips.append("Macro: supplementary AI context")
     if enrich.upcoming_events:
         chips.append(f"Event watch: {enrich.upcoming_events[0][:40]}")
     macro.chips = chips
@@ -288,11 +309,11 @@ async def maybe_apply_perplexity_layers(
     news_bullish_threshold: int,
     news_bearish_threshold: int,
 ) -> tuple[NewsLayerResult, MacroLayerResult, PerplexityNewsEnrichment | None, PerplexityMacroEnrichment | None]:
-    """Fetch and apply Perplexity backfill when Polygon/Benzinga layers are thin."""
+    """Fetch supplementary Perplexity context for ADR / thin-coverage names only."""
     news_enrich: PerplexityNewsEnrichment | None = None
     macro_enrich: PerplexityMacroEnrichment | None = None
 
-    if needs_perplexity_news(news, benzinga_data):
+    if needs_perplexity_news(news, benzinga_data, ticker_ref=ticker_ref):
         news_enrich = await fetch_news_enrichment(symbol, ticker_ref)
         if news_enrich is not None:
             news = apply_perplexity_news_enrichment(
@@ -300,8 +321,14 @@ async def maybe_apply_perplexity_layers(
                 news_enrich,
                 params_bullish_threshold=news_bullish_threshold,
                 params_bearish_threshold=news_bearish_threshold,
+                ticker_ref=ticker_ref,
             )
-            _LOG.info("perplexity_news_enriched symbol=%s sentiment=%s", symbol, news_enrich.sentiment)
+            _LOG.info(
+                "perplexity_news_supplementary symbol=%s sentiment=%s adr=%s",
+                symbol,
+                news_enrich.sentiment,
+                bool(ticker_ref and ticker_ref.is_adr()),
+            )
 
     if needs_perplexity_macro(macro, ticker_ref=ticker_ref, economic_event_count=economic_event_count):
         macro_enrich = await fetch_macro_enrichment(symbol, ticker_ref)

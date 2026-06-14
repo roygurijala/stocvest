@@ -56,6 +56,12 @@ export function evidenceLayerPlainEnglishExplanation(layer: EvidenceLayer): stri
 
   if (layer.key === "news") {
     const n = layer.articles_count;
+    if (layer.news_data_state === "degraded") {
+      return "News feed unavailable — excluded from composite scoring.";
+    }
+    if (layer.news_data_state === "supplementary_context") {
+      return "Supplementary AI context (thin coverage) — not a structured headline feed.";
+    }
     const scope =
       n != null && n > 0
         ? `Headlines from ${n} recent article${n === 1 ? "" : "s"}`
