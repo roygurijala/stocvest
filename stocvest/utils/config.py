@@ -321,7 +321,6 @@ def get_settings() -> Settings:
         and settings.benzinga_news_api_key
         and settings.benzinga_analyst_key
         and settings.benzinga_wim_key
-        and settings.benzinga_press_key
         and settings.perplexity_api_key
         and str(settings.upstash_redis_rest_url or "").strip()
         and str(settings.upstash_redis_rest_token or "").strip()

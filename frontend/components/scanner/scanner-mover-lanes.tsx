@@ -6,6 +6,7 @@ import type { GapIntelligenceItem, IntradaySetupPayload } from "@/lib/api/scanne
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
 import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
 import { useSymbolNames } from "@/lib/hooks/use-symbol-names";
+import { dashboardTradingRoomHref } from "@/lib/nav/dashboard-trading-room-deeplink";
 import { useTheme } from "@/lib/theme-provider";
 
 type LaneRow = {
@@ -39,8 +40,7 @@ function uniqueRows(rows: LaneRow[], limit = PER_LANE_LIMIT): LaneRow[] {
 }
 
 function laneHref(symbol: string): string {
-  const sym = encodeURIComponent(symbol.trim().toUpperCase());
-  return `/dashboard/signals?symbol=${sym}&ref=scanner`;
+  return dashboardTradingRoomHref(symbol.trim().toUpperCase(), "swing", { ref: "scanner" });
 }
 
 function actionableRows(setups: IntradaySetupPayload[]): LaneRow[] {

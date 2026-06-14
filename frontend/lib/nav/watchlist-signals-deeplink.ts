@@ -1,29 +1,26 @@
 /**
- * Deep-link from watchlist-related UI to `/dashboard/signals` with contextual prefill.
- * `ref=watchlist` is required so `app/dashboard/signals/page.tsx` honors `symbol` (see
- * `CONTEXTUAL_SIGNALS_REFS`).
- *
- * `trading_mode` is optional; when omitted the Signals client keeps its existing default
- * (typically from localStorage).
- *
- * Blank `symbol` (after trim) returns `/dashboard/signals` with no query — avoids
- * invalid `symbol=` deep links.
+ * Deep-link from watchlist/scanner UI into Trading Room deep-dive (replaces `/dashboard/signals`).
  */
+import {
+  dashboardTradingRoomHref,
+  tradingRoomLaneFromMode
+} from "@/lib/nav/dashboard-trading-room-deeplink";
+
 export type SignalsContextRef = "watchlist" | "scanner" | "validation" | "journal";
 
-/** Deep-link to Signals with symbol + contextual ref (honored by `page.tsx`). */
+function laneForMode(tradingMode?: "day" | "swing") {
+  return tradingRoomLaneFromMode(tradingMode);
+}
+
+/** Deep-link to Trading Room deep-dive with symbol + contextual ref. */
 export function contextualSignalsHref(
   symbol: string,
   ref: SignalsContextRef,
   tradingMode?: "day" | "swing"
 ): string {
   const sym = symbol.trim().toUpperCase();
-  if (!sym) return "/dashboard/signals";
-  const q = new URLSearchParams();
-  q.set("symbol", sym);
-  q.set("ref", ref);
-  if (tradingMode) q.set("trading_mode", tradingMode);
-  return `/dashboard/signals?${q.toString()}`;
+  if (!sym) return "/dashboard";
+  return dashboardTradingRoomHref(sym, laneForMode(tradingMode), { ref });
 }
 
 export function watchlistToSignalsHref(symbol: string, tradingMode?: "day" | "swing"): string {
@@ -34,28 +31,21 @@ export function scannerToSignalsHref(symbol: string, tradingMode?: "day" | "swin
   return contextualSignalsHref(symbol, "scanner", tradingMode);
 }
 
-/** Deep-link to Signals with symbol prefill and auto-open Evidence modal on load. */
+/** Evidence modal replaced by deep-dive — same destination as contextual href. */
 export function contextualSignalsOpenEvidenceHref(
   symbol: string,
   ref: SignalsContextRef,
   tradingMode?: "day" | "swing"
 ): string {
-  const sym = symbol.trim().toUpperCase();
-  if (!sym) return "/dashboard/signals";
-  const q = new URLSearchParams();
-  q.set("symbol", sym);
-  q.set("ref", ref);
-  if (tradingMode) q.set("trading_mode", tradingMode);
-  q.set("open_evidence", "1");
-  return `/dashboard/signals?${q.toString()}`;
+  return contextualSignalsHref(symbol, ref, tradingMode);
 }
 
 export function scannerOpenEvidenceHref(symbol: string, tradingMode?: "day" | "swing"): string {
   return contextualSignalsOpenEvidenceHref(symbol, "scanner", tradingMode);
 }
 
-/** Screen-reader label for a ticker link into Signals from watchlist context. */
+/** Screen-reader label for a ticker link into Trading Room from watchlist context. */
 export function watchlistSignalsOpenAriaLabel(ticker: string): string {
   const t = ticker.trim().toUpperCase();
-  return t ? `Open ${t} on Signals` : "Open Signals";
+  return t ? `Open ${t} in Trading Room` : "Open Trading Room";
 }

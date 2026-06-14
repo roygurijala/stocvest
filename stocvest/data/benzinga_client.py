@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -17,6 +17,28 @@ from stocvest.utils.logging import get_logger
 _LOG = get_logger(__name__)
 
 BENZINGA_BASE = "https://api.benzinga.com/api"
+
+FeedState = Literal["ok", "empty", "error", "unconfigured", "timeout"]
+
+
+@dataclass(frozen=True)
+class BenzingaFeedHealth:
+    news: FeedState = "unconfigured"
+    wim: FeedState = "unconfigured"
+    ratings: FeedState = "unconfigured"
+    guidance: FeedState = "unconfigured"
+    earnings: FeedState = "unconfigured"
+    bundle: FeedState = "ok"
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "news": self.news,
+            "wim": self.wim,
+            "ratings": self.ratings,
+            "guidance": self.guidance,
+            "earnings": self.earnings,
+            "bundle": self.bundle,
+        }
 
 
 @dataclass
@@ -81,12 +103,14 @@ class BenzingaMultiResult:
     guidance: list[BenzingaGuidance] = field(default_factory=list)
     earnings: list[BenzingaEarningsResult] = field(default_factory=list)
     analyst_feed_configured: bool = False
+    feed_health: BenzingaFeedHealth = field(default_factory=BenzingaFeedHealth)
 
 
-def benzinga_multi_shell() -> BenzingaMultiResult:
+def benzinga_multi_shell(*, bundle: FeedState = "ok") -> BenzingaMultiResult:
     """Empty Benzinga bundle that still reflects whether the analyst calendar key is configured."""
     return BenzingaMultiResult(
-        analyst_feed_configured=bool(get_settings().benzinga_analyst_key.strip())
+        analyst_feed_configured=bool(get_settings().benzinga_analyst_key.strip()),
+        feed_health=BenzingaFeedHealth(bundle=bundle),
     )
 
 
@@ -111,6 +135,7 @@ async def ensure_analyst_feed(
             guidance=data.guidance,
             earnings=data.earnings,
             analyst_feed_configured=True,
+            feed_health=data.feed_health,
         )
 
     try:
@@ -125,6 +150,7 @@ async def ensure_analyst_feed(
         guidance=data.guidance,
         earnings=data.earnings,
         analyst_feed_configured=True,
+        feed_health=data.feed_health,
     )
 
 
@@ -307,18 +333,29 @@ class BenzingaClient:
         out.sort(key=lambda a: a.published_at, reverse=True)
         return out[: max(1, min(50, int(limit)))]
 
-    async def get_news_with_fallback(self, symbol: str, mode: str = "day") -> list[BenzingaArticle]:
+    async def get_news_with_fallback(self, symbol: str, mode: str = "day") -> tuple[list[BenzingaArticle], FeedState]:
         sym = symbol.strip().upper()
         mode_n = (mode or "day").strip().lower()
+        token = (self._settings.benzinga_news_api_key or self._settings.benzinga_api_key).strip()
+        if not token:
+            return [], "unconfigured"
         if mode_n == "swing":
             base_hours = 120
             base_limit = 30
         else:
             base_hours = 8
             base_limit = 12
-        rows = await self.get_news(sym, hours=base_hours, limit=base_limit)
+        try:
+            rows = await self.get_news(sym, hours=base_hours, limit=base_limit)
+        except Exception as exc:
+            _LOG.warning("benzinga_news_fetch_error symbol=%s error=%s", sym, type(exc).__name__)
+            return [], "error"
         if mode_n == "day" and len(rows) < 2:
-            ext = await self.get_news(sym, hours=48, limit=30)
+            try:
+                ext = await self.get_news(sym, hours=48, limit=30)
+            except Exception as exc:
+                _LOG.warning("benzinga_news_extended_fetch_error symbol=%s error=%s", sym, type(exc).__name__)
+                ext = []
             now = datetime.now(timezone.utc)
             weighted: list[BenzingaArticle] = []
             for r in ext:
@@ -349,7 +386,7 @@ class BenzingaClient:
                 weighted.append(BenzingaArticle(**{**r.__dict__, "weight": w}))
             rows = weighted
         if rows:
-            return rows
+            return rows, "ok"
         try:
             _LOG.info("news_source_fallback symbol=%s source=polygon", sym)
             _LOG.info("news_benzinga_empty_fallback_polygon symbol=%s", sym)
@@ -371,9 +408,13 @@ class BenzingaClient:
                         url=str(row.get("article_url") or "").strip() or None,
                     )
                 )
-            return [r for r in out if r.title]
-        except Exception:
-            return []
+            filtered = [r for r in out if r.title]
+            if filtered:
+                return filtered, "ok"
+            return [], "empty"
+        except Exception as exc:
+            _LOG.warning("polygon_news_fallback_error symbol=%s error=%s", sym, type(exc).__name__)
+            return [], "error"
 
     async def get_why_is_it_moving(self, symbol: str) -> BenzingaWIMEntry | None:
         token = self._settings.benzinga_wim_key.strip()
@@ -585,32 +626,103 @@ class BenzingaClient:
         return sorted(set(out))
 
     async def get_multi(self, symbol: str, mode: str = "day") -> BenzingaMultiResult:
+        sym = symbol.strip().upper()
+        settings = self._settings
+
+        async def _news_task() -> tuple[list[BenzingaArticle], FeedState]:
+            return await self.get_news_with_fallback(sym, mode)
+
+        async def _wim_task() -> tuple[BenzingaWIMEntry | None, FeedState]:
+            if not settings.benzinga_wim_key.strip():
+                return None, "unconfigured"
+            try:
+                row = await self.get_why_is_it_moving(sym)
+                return row, "ok" if row is not None else "empty"
+            except Exception as exc:
+                _LOG.warning("benzinga_feed_failed feed=wim symbol=%s error=%s", sym, type(exc).__name__)
+                return None, "error"
+
+        async def _ratings_task() -> tuple[list[BenzingaRating], FeedState]:
+            if not settings.benzinga_analyst_key.strip():
+                return [], "unconfigured"
+            try:
+                rows = await self.get_analyst_ratings(sym)
+                return rows, "ok" if rows else "empty"
+            except Exception as exc:
+                _LOG.warning("benzinga_feed_failed feed=ratings symbol=%s error=%s", sym, type(exc).__name__)
+                return [], "error"
+
+        async def _guidance_task() -> tuple[list[BenzingaGuidance], FeedState]:
+            if not settings.benzinga_analyst_key.strip():
+                return [], "unconfigured"
+            try:
+                rows = await self.get_corporate_guidance(sym)
+                return rows, "ok" if rows else "empty"
+            except Exception as exc:
+                _LOG.warning("benzinga_feed_failed feed=guidance symbol=%s error=%s", sym, type(exc).__name__)
+                return [], "error"
+
+        async def _earnings_task() -> tuple[list[BenzingaEarningsResult], FeedState]:
+            if not settings.benzinga_analyst_key.strip():
+                return [], "unconfigured"
+            try:
+                rows = await self.get_earnings_results(sym)
+                return rows, "ok" if rows else "empty"
+            except Exception as exc:
+                _LOG.warning("benzinga_feed_failed feed=earnings symbol=%s error=%s", sym, type(exc).__name__)
+                return [], "error"
+
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(
-                    self.get_news_with_fallback(symbol, mode),
-                    self.get_why_is_it_moving(symbol),
-                    self.get_analyst_ratings(symbol),
-                    self.get_corporate_guidance(symbol),
-                    self.get_earnings_results(symbol),
+                    _news_task(),
+                    _wim_task(),
+                    _ratings_task(),
+                    _guidance_task(),
+                    _earnings_task(),
                     return_exceptions=True,
                 ),
                 timeout=6.0,
             )
         except Exception as exc:
-            _LOG.warning("benzinga_multi_failed symbol=%s error=%s", symbol, type(exc).__name__)
-            return benzinga_multi_shell()
+            _LOG.warning("benzinga_multi_failed symbol=%s error=%s", sym, type(exc).__name__)
+            return benzinga_multi_shell(bundle="timeout")
 
-        def safe(val: Any, default: Any) -> Any:
-            return default if isinstance(val, Exception) else val
+        def _unpack(
+            val: Any,
+            *,
+            feed: str,
+            empty_default: Any,
+        ) -> tuple[Any, FeedState]:
+            if isinstance(val, Exception):
+                _LOG.warning("benzinga_feed_failed feed=%s symbol=%s error=%s", feed, sym, type(val).__name__)
+                return empty_default, "error"
+            if isinstance(val, tuple) and len(val) == 2:
+                payload, state = val
+                return payload, state  # type: ignore[return-value]
+            return empty_default, "error"
 
-        analyst_configured = bool(self._settings.benzinga_analyst_key.strip())
+        news, news_state = _unpack(results[0], feed="news", empty_default=[])
+        wim, wim_state = _unpack(results[1], feed="wim", empty_default=None)
+        ratings, ratings_state = _unpack(results[2], feed="ratings", empty_default=[])
+        guidance, guidance_state = _unpack(results[3], feed="guidance", empty_default=[])
+        earnings, earnings_state = _unpack(results[4], feed="earnings", empty_default=[])
+
+        analyst_configured = bool(settings.benzinga_analyst_key.strip())
         return BenzingaMultiResult(
-            news=safe(results[0], []),
-            wim=safe(results[1], None),
-            ratings=safe(results[2], []),
-            guidance=safe(results[3], []),
-            earnings=safe(results[4], []),
+            news=news,
+            wim=wim,
+            ratings=ratings,
+            guidance=guidance,
+            earnings=earnings,
             analyst_feed_configured=analyst_configured,
+            feed_health=BenzingaFeedHealth(
+                news=news_state,
+                wim=wim_state,
+                ratings=ratings_state,
+                guidance=guidance_state,
+                earnings=earnings_state,
+                bundle="ok",
+            ),
         )
 

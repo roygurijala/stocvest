@@ -39,15 +39,16 @@ describe("AlignmentDrilldownLinks", () => {
     expect(onEvolution).toHaveBeenCalledTimes(1);
   });
 
-  test("links to signals evidence and setup evolution hub", () => {
+  test("links to trading room deep-dive and setup evolution hub", () => {
     render(
       <ThemeProvider>
         <AlignmentDrilldownLinks symbol="nvda" mode="day" />
       </ThemeProvider>
     );
-    expect(screen.getByTestId("alignment-drilldown-links-evidence").getAttribute("href")).toContain(
-      "open_evidence=1"
-    );
+    const evidenceHref = screen.getByTestId("alignment-drilldown-links-evidence").getAttribute("href");
+    expect(evidenceHref).toContain("symbol=NVDA");
+    expect(evidenceHref).toContain("lane=day");
+    expect(evidenceHref).toContain("ref=setup-evolution");
     expect(screen.getByTestId("alignment-drilldown-links-evolution").getAttribute("href")).toContain(
       "/dashboard/setup-evolution"
     );

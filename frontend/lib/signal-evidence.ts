@@ -299,6 +299,8 @@ export interface SignalEvidenceData {
   apiDecisionState?: import("@/lib/signal-evidence/trade-decision").TradeDecisionState | null;
   /** Raw composite JSON used for enrichment (weekly / timeframe fields). */
   compositePayload?: Record<string, unknown> | null;
+  /** When a layer failed fetch and was excluded from composite scoring. */
+  layersExcludedNote?: string | null;
   /** Quality vs tradeability judgment (no hero score — process, phase, blockers). */
   setupJudgment?: SetupJudgment | null;
 }
@@ -557,6 +559,15 @@ function evidencePatchFromApiLayer(match: Record<string, unknown>, layerKey?: st
   const raw = match.score;
   const layerStatus = String(match.status ?? "").trim().toLowerCase();
   const lk = (layerKey ?? "").trim().toLowerCase();
+  if (layerStatus === "degraded") {
+    patch.contributionScore = null;
+    patch.status = "Unavailable";
+    if (lk === "news") {
+      const ds = typeof match.data_state === "string" ? match.data_state.trim() : "";
+      patch.news_data_state = ds || "degraded";
+    }
+    return patch;
+  }
   if (layerStatus === "as_of_close") {
     if (typeof raw === "number" && Number.isFinite(raw)) {
       patch.contributionScore = clamp(Math.round(raw), 0, 100);
@@ -2015,6 +2026,11 @@ export function applySwingCompositeEnrichment(
       inDayDipWindow: modeForGates === "day" ? isInDayDipWindowEt() : undefined
     });
 
+  const layersExcludedNote =
+    typeof body.layers_excluded_note === "string" && body.layers_excluded_note.trim()
+      ? body.layers_excluded_note.trim()
+      : evidence.layersExcludedNote ?? null;
+
   return {
     ...evidence,
     compositeMode: cm ?? evidence.compositeMode,
@@ -2038,6 +2054,7 @@ export function applySwingCompositeEnrichment(
     ledgerGateSummary,
     apiDecisionState,
     compositePayload: body,
+    layersExcludedNote,
     setupJudgment
   };
 }

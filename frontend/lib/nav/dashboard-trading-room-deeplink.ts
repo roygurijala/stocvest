@@ -53,13 +53,39 @@ export function readDashboardDeepLinkKeyFromLocation(): string | null {
   return parseDashboardTradingRoomDeepLink(new URLSearchParams(window.location.search))?.key ?? null;
 }
 
-export function dashboardTradingRoomHref(symbol: string, lane: FeedLane = "swing"): string {
+export function dashboardTradingRoomHref(
+  symbol: string,
+  lane: FeedLane = "swing",
+  opts?: { ref?: string }
+): string {
   const sym = symbol.trim().toUpperCase();
   if (!sym) return "/dashboard";
   const q = new URLSearchParams();
   q.set("symbol", sym);
   q.set("lane", lane);
+  if (opts?.ref?.trim()) q.set("ref", opts.ref.trim());
   return `/dashboard?${q.toString()}`;
+}
+
+/** Map legacy `trading_mode` query values to trading-room `lane`. */
+export function tradingRoomLaneFromMode(mode: string | null | undefined): FeedLane {
+  return mode === "day" ? "day" : "swing";
+}
+
+/**
+ * Server/client redirect target for deprecated `/dashboard/signals` URLs.
+ * Preserves symbol + desk mode; drops evidence-modal params (deep-dive replaces Signals).
+ */
+export function legacySignalsRedirectHref(params: {
+  symbol?: string | null;
+  trading_mode?: string | null;
+  ref?: string | null;
+}): string {
+  const sym = (params.symbol ?? "").trim().toUpperCase();
+  if (!sym) return "/dashboard";
+  return dashboardTradingRoomHref(sym, tradingRoomLaneFromMode(params.trading_mode), {
+    ref: params.ref ?? undefined
+  });
 }
 
 /** Build a dashboard URL preserving unrelated query params. */

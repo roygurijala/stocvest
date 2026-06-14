@@ -40,6 +40,11 @@ from stocvest.api.services.swing_composite_evidence import (
     build_swing_composite_evidence_fields,
     serialize_daily_bars_for_range,
 )
+from stocvest.api.services.benzinga_feed_health import (
+    apply_news_degraded_if_feed_failed,
+    composite_layers_meta,
+    layer_available_for_composite,
+)
 from stocvest.api.services.symbol_perplexity_enrichment import (
     maybe_apply_perplexity_layers,
     perplexity_risk_factor_lines,
@@ -183,10 +188,12 @@ def _benzinga_articles_to_rows(items: list[Any]) -> list[dict[str, Any]]:
 
 
 def _layer_available_for_composite(status: str) -> bool:
-    return str(status or "").strip().lower() in ("available", "as_of_close")
+    return layer_available_for_composite(status)
 
 
 def _score_to_layer_signal(layer: str, score: int | None, status: str) -> LayerSignal | None:
+    if str(status or "").strip().lower() == "degraded":
+        return None
     if score is None:
         return None
     confidence = composite_confidence_for_technical_status(status) if layer == "technical" else (
@@ -275,6 +282,7 @@ class RealCompositeEnginePhase:
     ticker_ref: TickerReference | None = None
     market_context_dampening: dict[str, Any] | None = None
     perplexity_headwinds: tuple[str, ...] = ()
+    benzinga_feed_health: dict[str, str] | None = None
 
 
 async def run_real_composite_engine_phase(
@@ -433,6 +441,7 @@ async def run_real_composite_engine_phase(
         benzinga_data=bz_data,
         current_price=_snapshot_mark_price(sym_snap),
     )
+    news = apply_news_degraded_if_feed_failed(news, bz_data)
     macro_ctx = await get_macro_context(polygon_econ_events=econ)
     macro = MacroAnalyzer().analyze(
         spy_snap, qqq_snap, vix_snap, econ, params.macro, events_lookback_days=1, macro_context=macro_ctx
@@ -561,6 +570,7 @@ async def run_real_composite_engine_phase(
         ticker_ref=ticker_ref,
         market_context_dampening=damp_meta,
         perplexity_headwinds=tuple(perplexity_headwinds),
+        benzinga_feed_health=bz_data.feed_health.as_dict(),
     )
 
 
@@ -641,7 +651,12 @@ async def build_real_composite_response(
         }
         if lid == "news":
             row["wim_summary"] = getattr(res, "wim_summary", None)
-            row["data_state"] = getattr(res, "data_state", "fresh")
+            ds = str(getattr(res, "data_state", "fresh") or "fresh")
+            row["data_state"] = ds
+            if ds == "supplementary_context":
+                row["supplementary_context"] = True
+            if str(getattr(res, "status", "")).strip().lower() == "degraded":
+                row["excluded_from_composite"] = True
             row["article_count"] = int(getattr(res, "article_count", 0) or 0)
             row["latest_rating"] = getattr(res, "latest_rating", None)
             row["latest_guidance"] = getattr(res, "latest_guidance", None)
@@ -721,6 +736,9 @@ async def build_real_composite_response(
         "conflicted_layers": list(composite.conflicted_layers or []),
         "market_context_flags": resolve_market_context_flags(sym, reference=phase.ticker_ref),
     }
+    response_body.update(composite_layers_meta(phase.layer_results, phase.layer_ids))
+    if phase.benzinga_feed_health:
+        response_body["benzinga_feed_health"] = phase.benzinga_feed_health
     if phase.market_context_dampening:
         response_body["market_context_dampening"] = phase.market_context_dampening
     if alignment is not None:

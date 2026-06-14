@@ -102,8 +102,9 @@ async def test_get_news_fallback_polygon_when_benzinga_empty(fake_settings: Magi
             return fake_poly_news
 
     monkeypatch.setattr(bzc, "PolygonClient", FakePoly)
-    rows = await BenzingaClient().get_news_with_fallback("NVDA", mode="day")
-    assert any(r.source == "polygon" for r in rows)
+    articles, state = await BenzingaClient().get_news_with_fallback("NVDA", mode="day")
+    assert any(r.source == "polygon" for r in articles)
+    assert state == "ok"
 
 
 @pytest.mark.asyncio
@@ -136,10 +137,10 @@ async def test_decay_day_extended_window_weights_old_article(fake_settings: Magi
     fake_dt.now = MagicMock(side_effect=lambda tz=None: now)
     monkeypatch.setattr(bzc, "datetime", fake_dt)
 
-    weighted = await BenzingaClient().get_news_with_fallback("X", mode="day")
+    articles, _state = await BenzingaClient().get_news_with_fallback("X", mode="day")
 
     assert calls.get("hours", 0) >= 48
-    assert weighted and getattr(weighted[0], "weight") == pytest.approx(0.40)
+    assert articles and getattr(articles[0], "weight") == pytest.approx(0.40)
 
 
 @pytest.mark.asyncio
@@ -220,17 +221,20 @@ async def test_earnings_beat_and_miss(fake_settings: MagicMock, monkeypatch: pyt
 
 @pytest.mark.asyncio
 async def test_get_multi_wrapsFailures(fake_settings: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
-    async def ok_news(self: BenzingaClient, symbol: str, mode: str = "day") -> list:
-        return [
-            BenzingaArticle(
-                article_id="1",
-                title="t",
-                body=None,
-                published_at=datetime.now(timezone.utc),
-                tickers=[symbol.upper()],
-                channels=[],
-            )
-        ]
+    async def ok_news(self: BenzingaClient, symbol: str, mode: str = "day") -> tuple[list, str]:
+        return (
+            [
+                BenzingaArticle(
+                    article_id="1",
+                    title="t",
+                    body=None,
+                    published_at=datetime.now(timezone.utc),
+                    tickers=[symbol.upper()],
+                    channels=[],
+                )
+            ],
+            "ok",
+        )
 
     async def fail(self: BenzingaClient, *args: object, **kwargs: object) -> None:
         raise RuntimeError("x")
@@ -245,6 +249,8 @@ async def test_get_multi_wrapsFailures(fake_settings: MagicMock, monkeypatch: py
     assert len(res.news) == 1
     assert isinstance(res, BenzingaMultiResult)
     assert res.analyst_feed_configured is True
+    assert res.feed_health.news == "ok"
+    assert res.feed_health.wim == "error"
 
 
 @pytest.mark.asyncio
@@ -257,6 +263,7 @@ async def test_get_multi_timeout_preserves_analyst_configured(fake_settings: Mag
     res = await BenzingaClient().get_multi("MRVL")
     assert res.analyst_feed_configured is True
     assert res.ratings == []
+    assert res.feed_health.bundle == "timeout"
 
 
 @pytest.mark.asyncio

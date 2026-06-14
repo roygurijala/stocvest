@@ -215,6 +215,9 @@ function layerMetadataFromEntry(
 
 function verdictToLayerStatus(verdict: string, status: string): LayerStatus {
   const s = status.toLowerCase();
+  if (s === "degraded") {
+    return "Unavailable";
+  }
   if (s === "as_of_close") {
     return "As of close";
   }

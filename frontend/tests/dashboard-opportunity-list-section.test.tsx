@@ -17,7 +17,7 @@ function row(symbol: string): OpportunityRowModel {
     gapTone: "bullish",
     badgeLabel: "R/R blocks entry",
     sourceLabel: "Quiet",
-    href: `/dashboard/signals?symbol=${symbol}`,
+    href: `/dashboard?symbol=${symbol}&lane=swing`,
     peek: "peek"
   };
 }

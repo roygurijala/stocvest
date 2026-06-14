@@ -178,7 +178,7 @@ describe("<ScannerNearQualificationSection />", () => {
     expect(section.textContent).toContain("layer");
     const signalsLink = within(section).getByText("Open Signals →");
     expect(signalsLink.getAttribute("href")).toContain("symbol=AMD");
-    expect(signalsLink.getAttribute("href")).toContain("trading_mode=day");
+    expect(signalsLink.getAttribute("href")).toContain("lane=day");
   });
 
   test("renders watchlist progression lane separately from near qualification", () => {

@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { NAV_COMPACT_MAX_PX, PAGE_STACK_MAX_PX } from "@/lib/layout-breakpoints";
+
+export { NAV_COMPACT_MAX_PX, PAGE_STACK_MAX_PX };
 
 /**
  * Stacks layout into a single column below `maxPx` (default 899 — nav rail breakpoint).
@@ -8,7 +11,7 @@ import { useEffect, useState } from "react";
  * Returns `false` on the server and on the first client paint so SSR markup matches
  * hydration; flips to the real viewport match after mount (avoids hydration errors).
  */
-export function useStackedLayout(maxPx = 899): boolean {
+export function useStackedLayout(maxPx = NAV_COMPACT_MAX_PX): boolean {
   const [stacked, setStacked] = useState(false);
   const [ready, setReady] = useState(false);
 

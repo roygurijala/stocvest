@@ -185,6 +185,12 @@ export function layerHasActiveContent(layer: EvidenceLayer): boolean {
       ) {
         return true;
       }
+      if (layer.news_data_state === "supplementary_context") {
+        return true;
+      }
+      if (layer.news_data_state === "degraded") {
+        return true;
+      }
       return false;
     }
     case "sector": {

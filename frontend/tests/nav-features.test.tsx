@@ -54,6 +54,11 @@ describe("NAV_FEATURES sidebar", () => {
     expect(screen.queryByText("Futures")).not.toBeInTheDocument();
   });
 
+  test("test_nav_hides_signals_from_sidebar", () => {
+    wrap(<Sidebar userLabel="u@example.com" />);
+    expect(screen.queryByText("Signals")).not.toBeInTheDocument();
+  });
+
   test("test_nav_shows_dashboard_always", () => {
     wrap(<Sidebar userLabel="u@example.com" />);
     expect(screen.getByText("Dashboard")).toBeInTheDocument();

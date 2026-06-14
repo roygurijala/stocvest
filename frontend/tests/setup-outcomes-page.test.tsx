@@ -57,6 +57,48 @@ describe("SetupOutcomesPageClient", () => {
     expect(screen.getByText(/Setup outcomes/i)).toBeTruthy();
   });
 
+  test("renders dashboard when dataset is ready", async () => {
+    const { fetchSetupOutcomes } = await import("@/lib/api/setup-outcomes");
+    vi.mocked(fetchSetupOutcomes).mockResolvedValueOnce({
+      mode: "swing",
+      days: 30,
+      has_full_access: true,
+      watchlist_symbol_count: 3,
+      stats: {
+        total_events: 12,
+        building_dataset: false,
+        by_kind: { setup_continuation: 2, alignment_held: 4, alignment_weakened: 3, state_improved: 3 },
+        alignment_held_rate: 50,
+        setup_continuation_rate: 16.7,
+        symbols_with_events: 4
+      },
+      events: [
+        {
+          symbol: "MSFT",
+          mode: "swing",
+          session_date: "2026-06-08",
+          event_state: "developing",
+          layers_aligned: 4,
+          layers_total: 6,
+          bias: "long",
+          outcome_kind: "setup_continuation",
+          next_session_date: "2026-06-09",
+          next_layers_aligned: 5,
+          next_state: "developing"
+        }
+      ],
+      disclaimer: "Observational only."
+    });
+    render(
+      <ThemeProvider>
+        <SetupOutcomesPageClient />
+      </ThemeProvider>
+    );
+    expect(await screen.findByTestId("setup-outcomes-dashboard")).toBeTruthy();
+    expect(screen.getByTestId("setup-outcomes-bias-highlight")).toBeTruthy();
+    expect(screen.getByTestId("setup-outcomes-list")).toBeTruthy();
+  });
+
   test("admins see link to D2 stratified validation", async () => {
     render(
       <ThemeProvider>

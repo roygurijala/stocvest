@@ -246,11 +246,11 @@ a {
 /* Trading Room desktop: each zone scrolls inside a viewport-tall shell (prototype
  * `.zone { overflow-y: auto }`) so side panes never ghost below the footer when
  * the center column is taller than the viewport. */
-@media (min-width: 900px) {
+@media (min-width: 1024px) {
   .stocvest-dashboard-v2 {
     overflow: hidden;
   }
-  .trading-room-columns {
+  .trading-room-layout {
     min-height: 0;
     overflow: hidden;
     grid-template-rows: minmax(0, 1fr);
@@ -1237,4 +1237,104 @@ a {
 .watchlist-row-highlight {
   border-radius: 0.75rem;
   animation: watchlist-row-highlight-pulse 0.9s ease-in-out 2;
+}
+
+/* ── Mobile / narrow viewport layout (phones + small tablets) ───────────── */
+
+/* Trading Room: stack panels before JS hydration (inline desktop grid is overridden). */
+@media (max-width: 1023px) {
+  .stocvest-dashboard-v2 {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .trading-room-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    flex: unset !important;
+  }
+  .trading-room-panel--feed {
+    order: 2;
+  }
+  .trading-room-panel--center {
+    order: 1;
+  }
+  .trading-room-panel--rail {
+    order: 3;
+  }
+  .trading-room-mobile-side-pane-body {
+    max-height: min(55dvh, 420px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .trading-room-feed-chips {
+    scrollbar-width: none;
+  }
+  .trading-room-feed-chips::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) {
+  .session-header-actions {
+    flex: 0 1 auto !important;
+    width: auto !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .session-header-search {
+    width: 100%;
+    max-width: 100%;
+    flex: 1 1 100%;
+  }
+  .session-header-actions {
+    width: 100%;
+    flex: 1 1 100%;
+    gap: 0.75rem;
+  }
+  .app-session-header {
+    row-gap: 0.625rem;
+  }
+  .compact-nav-only {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Deep-dive tabs: horizontal scroll on narrow screens instead of cramped 4-up grid. */
+@media (max-width: 639px) {
+  .deep-dive-seg-tabs {
+    display: flex !important;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    grid-template-columns: unset !important;
+  }
+  .deep-dive-seg-tabs > button {
+    flex: 0 0 auto;
+    min-width: 5.5rem;
+    scroll-snap-align: start;
+  }
+  .scenario-what-if-levels {
+    grid-template-columns: 1fr !important;
+  }
+  .setup-outcomes-event-link {
+    width: 100%;
+    margin-left: 0 !important;
+    margin-top: 0.25rem;
+    text-align: left;
+  }
+}
+
+/* Prevent horizontal page bleed from wide inline grids. */
+[data-testid="app-shell-right-column"] {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
 }

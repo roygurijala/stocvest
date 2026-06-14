@@ -217,7 +217,10 @@ export function ScenarioWhatIf({
       </div>
 
       {/* Editable entry / stop / target */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: spacing[3], marginTop: spacing[3] }}>
+      <div
+        className="scenario-what-if-levels"
+        style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: spacing[3], marginTop: spacing[3] }}
+      >
         <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
           <span style={labelStyle}>Entry</span>
           <input

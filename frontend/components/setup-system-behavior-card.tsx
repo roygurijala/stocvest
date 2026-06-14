@@ -61,15 +61,7 @@ export function SetupSystemBehaviorCard({ data }: Props) {
       </div>
       <p className="m-0 mt-3 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
         Per-symbol timelines live on{" "}
-        <Link href="/dashboard/signals" className="font-semibold hover:underline" style={{ color: colors.accent }}>
-          Signals
-        </Link>{" "}
-        (Past states) and{" "}
-        <Link
-          href="/dashboard/setup-evolution"
-          className="font-semibold hover:underline"
-          style={{ color: colors.accent }}
-        >
+        <Link href="/dashboard/setup-evolution" className="font-semibold hover:underline" style={{ color: colors.accent }}>
           Setup evolution
         </Link>
         .

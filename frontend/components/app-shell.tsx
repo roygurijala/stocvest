@@ -80,7 +80,7 @@ export function AppShell({
             />
           ) : null}
           <main
-            className="min-w-0 px-4 pb-6 min-[900px]:px-6"
+            className="min-w-0 max-w-full overflow-x-clip px-4 pb-6 min-[900px]:px-6"
             data-main-top-layout={mainTopLayout}
             data-compact-nav={compactNav ? "true" : undefined}
             data-session-chrome={sessionChrome ? "true" : undefined}

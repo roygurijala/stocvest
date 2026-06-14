@@ -77,8 +77,8 @@ describe("SettingsPageClient — recent alert history", () => {
 
     await waitFor(() => expect(screen.getByTestId("settings-recent-alerts-list")).toBeInTheDocument());
     const list = screen.getByTestId("settings-recent-alerts-list");
-    const symLink = within(list).getByRole("link", { name: /Open AAPL on Signals/i });
-    expect(symLink.getAttribute("href")).toContain("/dashboard/signals");
+    const symLink = within(list).getByRole("link", { name: /Open AAPL in Trading Room/i });
+    expect(symLink.getAttribute("href")).toContain("/dashboard?");
     expect(symLink.getAttribute("href")).toContain("ref=watchlist");
     expect(symLink.getAttribute("href")).toContain("symbol=AAPL");
     expect(list.textContent).toContain("(Maturation)");

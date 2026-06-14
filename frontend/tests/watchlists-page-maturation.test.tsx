@@ -394,10 +394,10 @@ describe("WatchlistsPageClient maturation", () => {
     fireEvent.click(screen.getByText("Recent activity"));
     await waitFor(() => expect(screen.getByText(/STOCVEST · AAPL \(swing\) maturation: Actionable → Developing/)).toBeInTheDocument());
     const feed = screen.getByTestId("watchlist-activity");
-    const symLink = within(feed).getByRole("link", { name: /Open AAPL on Signals/i });
-    expect(symLink.getAttribute("href")).toContain("/dashboard/signals");
+    const symLink = within(feed).getByRole("link", { name: /Open AAPL in Trading Room/i });
+    expect(symLink.getAttribute("href")).toContain("/dashboard?");
     expect(symLink.getAttribute("href")).toContain("ref=watchlist");
-    expect(symLink.getAttribute("href")).toContain("trading_mode=swing");
+    expect(symLink.getAttribute("href")).toContain("lane=swing");
   });
 
   it("shows Swing and Day tabs with Compare desks link when dualDeskMaturation", async () => {

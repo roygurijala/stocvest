@@ -409,7 +409,7 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                                 href={
                                   entry.signal_id
                                     ? `/dashboard/signals?${new URLSearchParams({ signal_id: entry.signal_id, ref: "journal" }).toString()}`
-                                    : "/dashboard/signals?ref=journal"
+                                    : "/dashboard?ref=journal"
                                 }
                                 className="inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold no-underline"
                                 style={{
@@ -426,7 +426,7 @@ export function JournalPageClient({ initialEntries, initialAnalytics, connectedB
                                 href={
                                   entry.signal_id
                                     ? `/dashboard/signals?${new URLSearchParams({ signal_id: entry.signal_id, ref: "journal" }).toString()}`
-                                    : "/dashboard/signals?ref=journal"
+                                    : "/dashboard?ref=journal"
                                 }
                                 className="text-[11px] no-underline"
                                 style={{ color: colors.accent }}

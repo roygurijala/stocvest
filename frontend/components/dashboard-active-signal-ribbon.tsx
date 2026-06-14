@@ -39,6 +39,7 @@ import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
+import { dashboardTradingRoomHref, tradingRoomLaneFromMode } from "@/lib/nav/dashboard-trading-room-deeplink";
 import { useTheme } from "@/lib/theme-provider";
 
 export interface DashboardActiveSignalRibbonProps {
@@ -115,7 +116,9 @@ function RibbonChip({
   colors: ReturnType<typeof useTheme>["colors"];
 }) {
   const symbol = chip.symbol.trim().toUpperCase();
-  const href = `/dashboard/signals?symbol=${encodeURIComponent(symbol)}&ref=dashboard-ribbon&trading_mode=${chip.mode}`;
+  const href = dashboardTradingRoomHref(symbol, tradingRoomLaneFromMode(chip.mode), {
+    ref: "dashboard-ribbon"
+  });
   const hoverHandlers = useHoverPrefetch(href);
   const dirColor =
     chip.direction === "bullish"
