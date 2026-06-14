@@ -2,13 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { clearSignupPhonePrefillCookie } from "@/lib/auth/signup-profile-actions";
 
 type Step = "phone" | "code";
 
-export function PhoneVerifyForm() {
+export function PhoneVerifyForm({ initialPhone }: { initialPhone?: string }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("phone");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(initialPhone ?? "");
   const [smsOptIn, setSmsOptIn] = useState(false);
   const [code, setCode] = useState("");
   const [phoneLast4, setPhoneLast4] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export function PhoneVerifyForm() {
         setError(data.message ?? "Verification failed.");
         return;
       }
+      await clearSignupPhonePrefillCookie();
       router.push("/dashboard");
       router.refresh();
     } catch {

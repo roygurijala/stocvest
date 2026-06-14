@@ -20,7 +20,7 @@ export default function SignupPage() {
     <AuthShell
       signupStep="account"
       title="Create your account."
-      subtitle="Choose a strong password. You already agreed to the current legal bundle in step 1."
+      subtitle="Tell us a bit about you so we can personalize your experience. First name is used in your Market Brief and across the app."
     >
       <SignupForm />
       <p className="mt-4 text-sm text-slate-400">

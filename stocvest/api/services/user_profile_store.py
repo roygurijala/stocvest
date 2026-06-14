@@ -37,6 +37,7 @@ def _item_to_profile(user_id: str, item: dict[str, Any]) -> UserProfile:
         user_id=user_id,
         email=email,
         first_name=_s(item.get("firstName")),
+        last_name=_s(item.get("lastName")),
         trading_mode=mode,
         onboarding_completed=bool(item.get("onboardingCompleted")),
         onboarding_completed_at=_s(item.get("onboardingCompletedAt")),
@@ -87,6 +88,8 @@ def _profile_to_item(profile: UserProfile) -> dict[str, Any]:
         item["email"] = profile.email
     if profile.first_name:
         item["firstName"] = profile.first_name
+    if profile.last_name:
+        item["lastName"] = profile.last_name
     if profile.onboarding_completed_at:
         item["onboardingCompletedAt"] = profile.onboarding_completed_at
     if profile.legal_acknowledged_at:
@@ -178,6 +181,8 @@ class DynamoDBUserProfileStore:
             merged.pop("lastActiveAt", None)
         if not (profile.first_name or "").strip():
             merged.pop("firstName", None)
+        if not (profile.last_name or "").strip():
+            merged.pop("lastName", None)
         self.table.put_item(Item=merged)
 
 

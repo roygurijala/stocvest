@@ -24,6 +24,7 @@ export interface UserMePayload {
   user_id: string;
   /** User-set display name for greetings (PATCH /v1/users/me). */
   first_name?: string | null;
+  last_name?: string | null;
   trading_mode: "paper" | "live";
   onboarding_completed: boolean;
   onboarding_completed_at?: string | null;

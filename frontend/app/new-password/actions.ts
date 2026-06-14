@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cognitoErrorMessage, respondToNewPasswordChallenge } from "@/lib/auth/cognito";
 import { persistSignupLegalAckOnLogin } from "@/lib/auth/persist-signup-legal";
+import { persistSignupProfileOnLogin } from "@/lib/auth/persist-signup-profile";
 import { setSessionTokenCookiesFromIdToken } from "@/lib/auth/session-cookies";
 
 const NEW_PASSWORD_SESSION_COOKIE = "stocvest_new_password_session";
@@ -39,6 +40,7 @@ export async function setNewPasswordAction(
     }
     setSessionTokenCookiesFromIdToken(result.idToken, result.refreshToken);
     await persistSignupLegalAckOnLogin(result.idToken);
+    await persistSignupProfileOnLogin(result.idToken);
     cookies().delete(NEW_PASSWORD_SESSION_COOKIE);
     cookies().delete(NEW_PASSWORD_EMAIL_COOKIE);
     redirect("/dashboard");

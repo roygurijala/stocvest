@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { PhoneVerifyForm } from "@/components/trial/phone-verify-form";
+import { readSignupPhonePrefillFromCookies } from "@/lib/auth/persist-signup-profile";
 import { getServerSession } from "@/lib/auth/session";
 
 export default function OnboardingPhonePage() {
@@ -7,6 +8,8 @@ export default function OnboardingPhonePage() {
   if (!session) {
     redirect("/login");
   }
+
+  const initialPhone = readSignupPhonePrefillFromCookies();
 
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-[#050810] px-4 py-10 sm:py-14">
@@ -25,7 +28,7 @@ export default function OnboardingPhonePage() {
             Start your 14-day full-access trial after confirming your mobile number. One trial per phone number — this
             helps keep the platform fair.
           </p>
-          <PhoneVerifyForm />
+          <PhoneVerifyForm initialPhone={initialPhone ?? undefined} />
         </section>
       </div>
     </main>

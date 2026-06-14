@@ -59,6 +59,53 @@ export function SignupForm() {
 
   return (
     <form action={action} className="grid gap-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-1.5">
+          <label htmlFor="first_name" className="text-sm text-slate-300">
+            First name <span className="text-rose-300">*</span>
+          </label>
+          <input
+            id="first_name"
+            name="first_name"
+            type="text"
+            required
+            autoComplete="given-name"
+            maxLength={60}
+            placeholder="Alex"
+            className="rounded-md border border-white/15 bg-[#111827] px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-[#3b82f6] focus:outline-none"
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <label htmlFor="last_name" className="text-sm text-slate-300">
+            Last name
+          </label>
+          <input
+            id="last_name"
+            name="last_name"
+            type="text"
+            autoComplete="family-name"
+            maxLength={60}
+            placeholder="Rivera"
+            className="rounded-md border border-white/15 bg-[#111827] px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-[#3b82f6] focus:outline-none"
+          />
+        </div>
+      </div>
+      <div className="grid gap-1.5">
+        <label htmlFor="phone" className="text-sm text-slate-300">
+          Mobile number <span className="text-slate-500">(optional)</span>
+        </label>
+        <input
+          id="phone"
+          name="phone"
+          type="tel"
+          autoComplete="tel"
+          placeholder="+1 555 123 4567"
+          className="rounded-md border border-white/15 bg-[#111827] px-3 py-2.5 text-slate-100 placeholder:text-slate-500 focus:border-[#3b82f6] focus:outline-none"
+        />
+        <p className="m-0 text-xs text-slate-500">
+          Used for trial verification and reminders. You can add or verify your number later in onboarding.
+        </p>
+      </div>
       <div className="grid gap-1.5">
         <label htmlFor="email" className="text-sm text-slate-300">
           Email
