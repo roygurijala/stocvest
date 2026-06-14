@@ -39,6 +39,7 @@ describe("<ScannerMoverLanes />", () => {
     fireEvent.click(btn);
     expect(onExplain).toHaveBeenCalledWith("NVDA");
     const link = screen.getByRole("link", { name: "NVDA" });
-    expect(link.getAttribute("href")).toContain("/dashboard/signals?symbol=NVDA&ref=scanner");
+    expect(link.getAttribute("href")).toContain("/dashboard?symbol=NVDA");
+    expect(link.getAttribute("href")).toContain("ref=scanner");
   });
 });

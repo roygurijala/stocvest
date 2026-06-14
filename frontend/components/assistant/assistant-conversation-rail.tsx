@@ -17,6 +17,7 @@ import type {
   AssistantDiscovery,
   AssistantMessage
 } from "@/lib/assistant/types";
+import { dashboardTradingRoomHref } from "@/lib/nav/dashboard-trading-room-deeplink";
 
 // Lazy-loaded so TradingView's lightweight-charts (~35 KB) only ships when a
 // user actually expands a full chart — the chat stays featherweight.
@@ -314,7 +315,7 @@ function DiscoveryCard({ discovery, colors }: { discovery: AssistantDiscovery; c
               {i + 1}
             </span>
             <Link
-              href={`/dashboard/signals?symbol=${encodeURIComponent(row.symbol)}&ref=assistant`}
+              href={dashboardTradingRoomHref(row.symbol, "swing", { ref: "assistant" })}
               style={{
                 fontWeight: 800,
                 fontSize: typography.scale.sm,

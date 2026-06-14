@@ -9,6 +9,7 @@ import {
   watchlistAttentionSectionMeta,
   type WatchlistAttentionTier
 } from "@/lib/watchlist-decision-card-present";
+import { dashboardTradingRoomHref, tradingRoomLaneFromMode } from "@/lib/nav/dashboard-trading-room-deeplink";
 
 export const WATCHLIST_RADAR_TITLE = "Your watchlist";
 
@@ -115,7 +116,7 @@ export function buildWatchlistRadarCardModel(
 }
 
 export function watchlistRadarSignalsHref(symbol: string, mode: DashboardDeskMode): string {
-  return `/dashboard/signals?symbol=${encodeURIComponent(symbol)}&trading_mode=${mode}&ref=dashboard`;
+  return dashboardTradingRoomHref(symbol, tradingRoomLaneFromMode(mode), { ref: "dashboard" });
 }
 
 export function watchlistRadarSectionMeta(tier: WatchlistAttentionTier) {

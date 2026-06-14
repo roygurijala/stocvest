@@ -14,6 +14,7 @@ import type { DashboardDeskMode } from "@/lib/dashboard/live-status-copy";
 import { formatDeskGapLine } from "@/lib/dashboard/desk-today-present";
 import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
+import { dashboardTradingRoomHref, tradingRoomLaneFromMode } from "@/lib/nav/dashboard-trading-room-deeplink";
 
 export function parseRiskRewardFromHint(hint: string | null | undefined): number | null {
   const t = hint?.trim();
@@ -443,5 +444,5 @@ export function buildHotInMarketCardModel(
 }
 
 export function hotInMarketSignalsHref(symbol: string, mode: DashboardDeskMode): string {
-  return `/dashboard/signals?symbol=${encodeURIComponent(symbol)}&trading_mode=${mode}&ref=dashboard`;
+  return dashboardTradingRoomHref(symbol, tradingRoomLaneFromMode(mode), { ref: "dashboard" });
 }

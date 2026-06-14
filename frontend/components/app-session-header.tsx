@@ -5,6 +5,8 @@ import { Menu } from "lucide-react";
 import { SymbolSearch } from "@/components/dashboard/trading-room/symbol-search";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAppChrome } from "@/lib/app-chrome-context";
+import { useStackedLayout } from "@/lib/hooks/use-stacked-layout";
+import { NAV_COMPACT_MAX_PX } from "@/lib/layout-breakpoints";
 import { borderRadius, spacing, typography, type ThemeColors } from "@/lib/design-system";
 import type { FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import {
@@ -51,6 +53,7 @@ export function AppSessionHeader({
   badge,
   searchPlaceholder = "Jump to a symbol or company…"
 }: AppSessionHeaderProps) {
+  const compactNav = useStackedLayout(NAV_COMPACT_MAX_PX);
   const orbTone =
     marketOpen === true ? colors.bullish : /extended/i.test(marketStatusLabel) ? colors.caution : colors.textMuted;
   const breadth = breadthWord(spyPct, qqqPct, iwmPct);
@@ -130,11 +133,11 @@ export function AppSessionHeader({
         aria-label="Open navigation menu"
         onClick={openNavDrawer}
         style={{
-          display: "none",
+          display: compactNav ? "inline-flex" : "none",
           alignItems: "center",
           justifyContent: "center",
-          width: 36,
-          height: 36,
+          width: 44,
+          height: 44,
           flex: "none",
           border: `1px solid ${colors.border}`,
           borderRadius: borderRadius.md,
@@ -165,14 +168,17 @@ export function AppSessionHeader({
 
       {badge ? <div style={{ flex: "none" }}>{badge}</div> : null}
 
-      <div className="compact-nav-only" style={{ marginLeft: badge ? 0 : "auto", flex: "none", display: "none" }}>
+      <div
+        className="compact-nav-only"
+        style={{ marginLeft: badge ? 0 : "auto", flex: "none", display: compactNav ? "flex" : "none" }}
+      >
         <ThemeToggle />
       </div>
 
       <div
         className="session-header-market-compact"
         style={{
-          display: "none",
+          display: compactNav ? "flex" : "none",
           alignItems: "center",
           gap: spacing[3],
           color: colors.textMuted,
@@ -198,7 +204,7 @@ export function AppSessionHeader({
       <div
         className="session-header-market-full"
         style={{
-          display: "flex",
+          display: compactNav ? "none" : "flex",
           alignItems: "center",
           gap: spacing[3],
           color: colors.textMuted,
@@ -274,7 +280,7 @@ export function AppSessionHeader({
           Market data as of <b style={{ color: colors.text, fontWeight: 600 }}>{asOf ?? "—"}</b>
         </span>
 
-        <div className="desktop-nav-only" style={{ display: "none" }}>
+        <div className="desktop-nav-only" style={{ display: compactNav ? "none" : "flex" }}>
           <ThemeToggle />
         </div>
       </div>

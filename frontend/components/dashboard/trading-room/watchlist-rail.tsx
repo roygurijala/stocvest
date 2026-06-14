@@ -517,7 +517,9 @@ export function WatchlistRail({
         type="button"
         onClick={onToggleOpen}
         aria-label="Open watchlist"
+        aria-expanded={false}
         title="Your monitored universe"
+        data-testid="trading-room-watchlist-toggle"
         style={{
           alignSelf: "stretch",
           width: isMobile ? "100%" : undefined,
@@ -548,6 +550,8 @@ export function WatchlistRail({
 
   return (
     <aside
+      data-testid="trading-room-watchlist-rail"
+      className="trading-room-mobile-side-pane"
       style={{
         background: colors.surface,
         border: `1px solid ${colors.border}`,
@@ -562,7 +566,7 @@ export function WatchlistRail({
         alignSelf: isMobile ? undefined : "start"
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2], flexWrap: isMobile ? "wrap" : "nowrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
             Your watch · {symbols.length}
@@ -598,6 +602,7 @@ export function WatchlistRail({
       </div>
 
       <div
+        className="trading-room-mobile-side-pane-body"
         style={{
           display: "flex",
           flexDirection: "column",

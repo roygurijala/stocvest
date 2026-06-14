@@ -1660,7 +1660,7 @@ export function WatchlistsPageClient(props: WatchlistsPageClientProps = {}) {
               Use Refresh for the
               active desk
               {dualDeskMaturation ? "; Compare desks opens swing vs day for that symbol" : ""}.
-              <Link href="/dashboard/signals" prefetch={false} className="ml-1 font-semibold" style={{ color: colors.accent }}>
+              <Link href="/dashboard" prefetch={false} className="ml-1 font-semibold" style={{ color: colors.accent }}>
                 Open Signals
               </Link>
             </p>

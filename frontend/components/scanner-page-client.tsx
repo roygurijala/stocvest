@@ -61,6 +61,7 @@ import type { ThemeColors } from "@/lib/design-system";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { GAP_INTEL_ACTIVE_GUIDANCE, GAP_INTEL_EMPTY_CONTEXT } from "@/lib/scanner-quiet-copy";
 import { brokersEnabled } from "@/lib/nav-features";
+import { scannerToSignalsHref } from "@/lib/nav/watchlist-signals-deeplink";
 import {
   TAB_LABEL_BOTH,
   TAB_LABEL_DAY,
@@ -1243,7 +1244,7 @@ export function ScannerPageClient({
                         </div>
                         <div>
                           <Link
-                            href={`/dashboard/signals?symbol=${encodeURIComponent(row.symbol)}&ref=scanner&trading_mode=${row.desk}`}
+                            href={scannerToSignalsHref(row.symbol, row.desk === "day" ? "day" : "swing")}
                             style={{
                               color: colors.accent,
                               fontSize: typography.scale.xs,
@@ -2073,7 +2074,10 @@ export function ScannerPageClient({
                        default.
                       */}
                       <ScannerOpenSignalsLink
-                        href={`/dashboard/signals?symbol=${encodeURIComponent(setup.symbol.trim().toUpperCase())}&ref=scanner&trading_mode=${setup.scanner_mode === "swing_daily" ? "swing" : "day"}`}
+                        href={scannerToSignalsHref(
+                          setup.symbol.trim().toUpperCase(),
+                          setup.scanner_mode === "swing_daily" ? "swing" : "day"
+                        )}
                         borderColor={colors.border}
                         accentColor={colors.accent}
                       />

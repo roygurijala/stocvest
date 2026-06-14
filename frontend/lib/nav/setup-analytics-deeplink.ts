@@ -1,5 +1,7 @@
 /** Deep links for B46 setup analytics surfaces (mode-isolated). */
 
+import { dashboardTradingRoomHref, tradingRoomLaneFromMode } from "@/lib/nav/dashboard-trading-room-deeplink";
+
 export function setupEvolutionHubHref(symbol: string, mode: "swing" | "day"): string {
   const sym = symbol.trim().toUpperCase();
   const qs = new URLSearchParams({ symbol: sym, trading_mode: mode });
@@ -17,22 +19,19 @@ export function signalsWithSymbolHref(
   ref: "setup-evolution" | "setup-outcomes" = "setup-evolution"
 ): string {
   const sym = symbol.trim().toUpperCase();
-  const qs = new URLSearchParams({ symbol: sym, trading_mode: mode, ref });
-  return `/dashboard/signals?${qs.toString()}`;
+  return dashboardTradingRoomHref(sym, tradingRoomLaneFromMode(mode), { ref });
 }
 
-/** Opens Signals and auto-opens the evidence modal (client strips query after load). */
+/** Opens Trading Room deep-dive (replaces Signals + evidence modal). */
 export function signalsOpenEvidenceHref(
   symbol: string,
   mode: "swing" | "day",
   ref: "setup-evolution" | "setup-outcomes" = "setup-evolution"
 ): string {
-  const sym = symbol.trim().toUpperCase();
-  const qs = new URLSearchParams({ symbol: sym, trading_mode: mode, ref, open_evidence: "1" });
-  return `/dashboard/signals?${qs.toString()}`;
+  return signalsWithSymbolHref(symbol, mode, ref);
 }
 
-/** In-page anchor on Signals for the six-layer breakdown block. */
+/** In-page anchor replaced by deep-dive — link opens trading room for symbol. */
 export function signalsLayersSectionHref(symbol: string, mode: "swing" | "day"): string {
-  return `${signalsWithSymbolHref(symbol, mode)}#signals-layers`;
+  return signalsWithSymbolHref(symbol, mode);
 }

@@ -74,6 +74,7 @@ function minutesAgoLabel(timestampIso: string | null | undefined): string | null
 }
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useHoverPrefetch } from "@/lib/hooks/use-hover-prefetch";
+import { dashboardTradingRoomHref } from "@/lib/nav/dashboard-trading-room-deeplink";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { useTheme } from "@/lib/theme-provider";
 import {
@@ -130,7 +131,9 @@ function DayTopSignalRow({
   const pct = typeof signal.score === "number" && Number.isFinite(signal.score)
     ? Math.round(signal.score * 100)
     : null;
-  const rowHref = `/dashboard/signals?symbol=${encodeURIComponent(signal.symbol.trim().toUpperCase())}&ref=dashboard-day-desk&trading_mode=day`;
+  const rowHref = dashboardTradingRoomHref(signal.symbol.trim().toUpperCase(), "day", {
+    ref: "dashboard-day-desk"
+  });
   const rowHoverPrefetch = useHoverPrefetch(rowHref);
   return (
     <motion.article

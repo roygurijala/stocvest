@@ -17,6 +17,7 @@ import { AppSessionHeader } from "@/components/app-session-header";
 import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
 import { useSessionHeaderMarket } from "@/lib/hooks/use-session-header-market";
 import { useStackedLayout } from "@/lib/hooks/use-stacked-layout";
+import { PAGE_STACK_MAX_PX } from "@/lib/layout-breakpoints";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { ScannerEvaluationTraceRow } from "@/lib/scanner-setups-response";
@@ -546,7 +547,7 @@ export function ScannerTerminal({
 }: Props) {
   const { colors } = useTheme();
   const environment = useMarketEnvironment("swing");
-  const isMobile = useStackedLayout(899);
+  const isMobile = useStackedLayout(PAGE_STACK_MAX_PX);
   const sessionMarket = useSessionHeaderMarket({
     scannerSpyPct: overview.spyPct,
     scannerQqqPct: overview.qqqPct,

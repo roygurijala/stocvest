@@ -464,6 +464,7 @@ function SegTabs({
   return (
     <div
       role="tablist"
+      className="deep-dive-seg-tabs"
       style={{
         display: "grid",
         gridTemplateColumns: "repeat(4, 1fr)",

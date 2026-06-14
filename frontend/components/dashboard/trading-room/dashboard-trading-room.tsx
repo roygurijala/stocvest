@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { PanelLeftClose } from "lucide-react";
 import { mutate as mutateSwr } from "swr";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AppSessionHeader } from "@/components/app-session-header";
@@ -25,6 +26,7 @@ import { useMacroContext } from "@/lib/hooks/use-macro-context";
 import { useMarketNews } from "@/lib/hooks/use-market-news";
 import { useMarketBriefNarrative } from "@/lib/hooks/use-market-brief-narrative";
 import { useStackedLayout } from "@/lib/hooks/use-stacked-layout";
+import { PAGE_STACK_MAX_PX } from "@/lib/layout-breakpoints";
 import { marketStatusLabelFor, resolveSessionRegimeLabel, snapPct } from "@/lib/session-header-market";
 import { isRegularSessionOpen } from "@/lib/market/regular-session";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
@@ -265,7 +267,7 @@ function TradingRoomBody({
 }: DashboardTradingRoomProps) {
   const { colors } = useTheme();
   const pathname = usePathname();
-  const isMobile = useStackedLayout(899);
+  const isMobile = useStackedLayout(PAGE_STACK_MAX_PX);
   const scannerOverview = useScannerOverview();
   const earnings = useDashboardEarnings();
   const { data: macro } = useMacroContext();
@@ -401,6 +403,7 @@ function TradingRoomBody({
 
   const [selectedId, setSelectedId] = useState<string | null>(() => openIntent?.key ?? null);
   const selectionBootstrappedRef = useRef(false);
+  const prevSelectedIdRef = useRef<string | null>(selectedId);
   // Holds a synthetic card for symbols that live only on the watchlist (not in
   // the desk/scanner feed), so the deep dive can open for any monitored symbol.
   const [overrideCard, setOverrideCard] = useState<FeedCard | null>(() =>
@@ -409,6 +412,24 @@ function TradingRoomBody({
   // Collapsed by default on every breakpoint — the watchlist is a peek-on-demand
   // rail, not a persistent third column. The user opens it from the collapsed tab.
   const [watchlistOpen, setWatchlistOpen] = useState(false);
+  /** Mobile: desk feed collapses while deep-dive is open; expands on session brief. */
+  const [feedOpen, setFeedOpen] = useState(true);
+
+  const toggleFeedOpen = useCallback(() => {
+    setFeedOpen((open) => {
+      const next = !open;
+      if (isMobile && next) setWatchlistOpen(false);
+      return next;
+    });
+  }, [isMobile]);
+
+  const toggleWatchlistOpen = useCallback(() => {
+    setWatchlistOpen((open) => {
+      const next = !open;
+      if (isMobile && next) setFeedOpen(false);
+      return next;
+    });
+  }, [isMobile]);
 
   const searchParams = useSearchParams();
 
@@ -485,6 +506,14 @@ function TradingRoomBody({
     if (overrideCard && overrideCard.id === selectedId) return overrideCard;
     return null;
   }, [allCards, selectedId, overrideCard]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const had = prevSelectedIdRef.current;
+    prevSelectedIdRef.current = selectedId;
+    if (!had && selectedId) setFeedOpen(false);
+    if (had && !selectedId) setFeedOpen(true);
+  }, [isMobile, selectedId]);
 
   useEffect(() => {
     if (!selected) return;
@@ -859,7 +888,41 @@ function TradingRoomBody({
 
   const dayDeskStale = isDeskCacheStale(dayDesk);
 
-  const feedPanel = (
+  const feedPanel = isMobile ? (
+    <MobileFeedPanel
+      open={feedOpen}
+      onToggleOpen={toggleFeedOpen}
+      feedCount={allCards.length}
+      quickSwitchCards={selected ? allCards : []}
+      selectedId={selected?.id ?? null}
+      onSelectCard={selectCard}
+      colors={colors}
+    >
+      <SignalFeed
+        day={day}
+        swing={swing}
+        showDay={dayTradingSurfaces}
+        selectedId={selected?.id ?? null}
+        deskEmpty={deskEmpty}
+        swingDeskData={swingDesk?.data}
+        dayDeskData={dayDesk?.data}
+        dayDeskStale={dayDeskStale}
+        deskWarmupLoading={deskWarmupLoading}
+        snapshotsBySymbol={snapshotsBySymbol}
+        companyBySymbol={companyBySymbol}
+        onSelectCard={selectCard}
+        isMobile={isMobile}
+        colors={colors}
+        staleDateLabel={staleDateLabel}
+        isWeekend={isWeekendSession}
+        feedEnvironment={feedEnvironment}
+        swingEnvironment={swingEnvironment}
+        dayEnvironment={dayEnvironment}
+        onRefreshFeedCard={handleRefreshFeedCard}
+        refreshingCardIds={refreshingCardIds}
+      />
+    </MobileFeedPanel>
+  ) : (
     <SignalFeed
       day={day}
       swing={swing}
@@ -915,7 +978,7 @@ function TradingRoomBody({
       onSelectCard={selectCard}
       companyBySymbol={companyBySymbol}
       open={watchlistOpen}
-      onToggleOpen={() => setWatchlistOpen((o) => !o)}
+      onToggleOpen={toggleWatchlistOpen}
       isMobile={isMobile}
       colors={colors}
       liveBiasBySymbol={liveBiasBySymbol}
@@ -930,22 +993,19 @@ function TradingRoomBody({
   // 900px breakpoint the dashboard uses.
   const bleed = isMobile ? spacing[4] : spacing[6];
 
-  const wrapColumn = (node: ReactNode, lane: "feed" | "center" | "rail") =>
-    isMobile ? (
-      node
-    ) : (
-      <div
-        className={`trading-room-column trading-room-column--${lane}`}
-        data-testid={`trading-room-column-${lane}`}
-        style={
-          lane === "feed"
-            ? { paddingRight: spacing[3], borderRight: `1px solid ${colors.border}` }
-            : undefined
-        }
-      >
-        {node}
-      </div>
-    );
+  const wrapPanel = (node: ReactNode, lane: "feed" | "center" | "rail") => (
+    <div
+      className={`trading-room-panel trading-room-panel--${lane}${isMobile ? "" : " trading-room-column"}`}
+      data-testid={`trading-room-panel-${lane}`}
+      style={
+        !isMobile && lane === "feed"
+          ? { paddingRight: spacing[3], borderRight: `1px solid ${colors.border}` }
+          : undefined
+      }
+    >
+      {node}
+    </div>
+  );
 
   return (
     <section
@@ -1003,7 +1063,7 @@ function TradingRoomBody({
       ) : null}
 
       <div
-        className={isMobile ? undefined : "trading-room-columns"}
+        className="trading-room-layout"
         style={{
           display: "grid",
           gridTemplateColumns: isMobile ? "minmax(0, 1fr)" : gridTemplate,
@@ -1016,21 +1076,9 @@ function TradingRoomBody({
           overflow: isMobile ? undefined : "hidden"
         }}
       >
-        {isMobile ? (
-          // Mobile: brief/deep-dive leads. Hide the desk feed while a setup is
-          // open so scrolling the deep dive does not land on a second full feed.
-          <>
-            {centerPanel}
-            {selected ? null : feedPanel}
-            {railPanel}
-          </>
-        ) : (
-          <>
-            {wrapColumn(feedPanel, "feed")}
-            {wrapColumn(centerPanel, "center")}
-            {wrapColumn(railPanel, "rail")}
-          </>
-        )}
+        {wrapPanel(feedPanel, "feed")}
+        {wrapPanel(centerPanel, "center")}
+        {wrapPanel(railPanel, "rail")}
       </div>
     </section>
   );
@@ -1174,6 +1222,192 @@ function SegGroup<T extends string>({
         );
       })}
     </div>
+  );
+}
+
+/* ── Mobile desk feed shell (left pane) ───────────────────────────────────── */
+
+function MobileFeedChipStrip({
+  cards,
+  selectedId,
+  onSelectCard,
+  colors
+}: {
+  cards: FeedCard[];
+  selectedId: string | null;
+  onSelectCard: (card: FeedCard) => void;
+  colors: ReturnType<typeof useTheme>["colors"];
+}) {
+  if (cards.length === 0) return null;
+  return (
+    <div
+      className="trading-room-feed-chips"
+      data-testid="trading-room-feed-chips"
+      style={{
+        display: "flex",
+        gap: spacing[2],
+        overflowX: "auto",
+        WebkitOverflowScrolling: "touch",
+        paddingBottom: spacing[1],
+        marginBottom: spacing[2]
+      }}
+    >
+      {cards.map((card) => {
+        const active = card.id === selectedId;
+        const tone = stateTone(card.state, colors);
+        return (
+          <button
+            key={card.id}
+            type="button"
+            onClick={() => onSelectCard(card)}
+            data-testid={`feed-chip-${card.symbol}`}
+            style={{
+              flex: "0 0 auto",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              border: `1px solid ${active ? colors.accent : colors.border}`,
+              background: active ? "rgba(59,130,246,0.14)" : colors.surface,
+              color: active ? colors.accent : colors.text,
+              borderRadius: borderRadius.full,
+              padding: "6px 12px",
+              fontSize: typography.scale.xs,
+              fontWeight: 700,
+              cursor: "pointer",
+              whiteSpace: "nowrap"
+            }}
+          >
+            <span
+              aria-hidden
+              style={{ width: 6, height: 6, borderRadius: "50%", background: tone, flex: "none" }}
+            />
+            {card.symbol}
+            <span style={{ color: colors.textMuted, fontWeight: 600 }}>{STATE_LABEL[card.state]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MobileFeedPanel({
+  open,
+  onToggleOpen,
+  feedCount,
+  quickSwitchCards,
+  selectedId,
+  onSelectCard,
+  colors,
+  children
+}: {
+  open: boolean;
+  onToggleOpen: () => void;
+  feedCount: number;
+  quickSwitchCards: FeedCard[];
+  selectedId: string | null;
+  onSelectCard: (card: FeedCard) => void;
+  colors: ReturnType<typeof useTheme>["colors"];
+  children: ReactNode;
+}) {
+  if (!open) {
+    return (
+      <div data-testid="trading-room-mobile-feed">
+        {quickSwitchCards.length > 0 ? (
+          <MobileFeedChipStrip
+            cards={quickSwitchCards}
+            selectedId={selectedId}
+            onSelectCard={onSelectCard}
+            colors={colors}
+          />
+        ) : null}
+        <button
+          type="button"
+          onClick={onToggleOpen}
+          aria-label="Open desk feed"
+          aria-expanded={false}
+          data-testid="trading-room-feed-toggle"
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: spacing[2],
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: borderRadius.md,
+            color: colors.textMuted,
+            fontSize: typography.scale.xs,
+            fontWeight: 600,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            cursor: "pointer",
+            padding: `${spacing[3]} ${spacing[4]}`
+          }}
+        >
+          <span>
+            Desk feed{feedCount ? ` · ${feedCount}` : ""}
+          </span>
+          <span aria-hidden>▾</span>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <aside
+      data-testid="trading-room-mobile-feed"
+      className="trading-room-mobile-side-pane"
+      style={{
+        background: colors.surface,
+        border: `1px solid ${colors.border}`,
+        borderRadius: borderRadius.lg,
+        padding: spacing[3],
+        display: "flex",
+        flexDirection: "column",
+        gap: spacing[3]
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2] }}>
+        <span
+          style={{
+            fontSize: typography.scale.xs,
+            color: colors.textMuted,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase"
+          }}
+        >
+          Desk feed{feedCount ? ` · ${feedCount}` : ""}
+        </span>
+        <button
+          type="button"
+          onClick={onToggleOpen}
+          aria-label="Close desk feed"
+          aria-expanded
+          data-testid="trading-room-feed-close"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            background: "transparent",
+            border: `1px solid ${colors.border}`,
+            borderRadius: borderRadius.md,
+            color: colors.textMuted,
+            cursor: "pointer",
+            fontSize: typography.scale.xs,
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+            padding: "4px 8px"
+          }}
+        >
+          <PanelLeftClose size={14} aria-hidden />
+          Close
+        </button>
+      </div>
+      <div className="trading-room-mobile-side-pane-body" style={{ display: "flex", flexDirection: "column", gap: spacing[4] }}>
+        {children}
+      </div>
+    </aside>
   );
 }
 

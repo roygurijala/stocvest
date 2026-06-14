@@ -1,11 +1,10 @@
 import { normalizeAppPathname } from "@/lib/app-pathname";
 
 export const APP_PAGE_TITLE_BY_PATH: Record<string, string> = {
-  "/dashboard": "Dashboard",
+  "/dashboard": "Trading Room",
   "/dashboard/scanner": "Scanner",
   "/dashboard/scanner/classic": "Scanner",
   "/dashboard/earnings": "Earnings",
-  "/dashboard/signals": "Signals",
   "/dashboard/watchlists": "Watchlist",
   "/dashboard/setup-evolution": "Setup evolution",
   "/dashboard/setup-outcomes": "Setup outcomes",

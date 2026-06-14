@@ -26,8 +26,7 @@ import {
   ShieldCheck,
   Timer,
   TrendingUp,
-  Users,
-  Zap
+  Users
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import { clearAssistantSession } from "@/lib/assistant/session-reset";
@@ -64,7 +63,7 @@ interface NavItem {
  * System). Feature-gated items (`feature`) are filtered by
  * `isDashboardNavItemEnabled` so plan/flag-gated surfaces stay hidden.
  */
-const NAV_SECTIONS: ReadonlyArray<{ id: string; label: string; items: ReadonlyArray<NavItem> }> = [
+export const NAV_SECTIONS: ReadonlyArray<{ id: string; label: string; items: ReadonlyArray<NavItem> }> = [
   {
     id: "trading",
     label: "Trading",
@@ -78,7 +77,6 @@ const NAV_SECTIONS: ReadonlyArray<{ id: string; label: string; items: ReadonlyAr
     id: "analysis",
     label: "Analysis",
     items: [
-      { href: "/dashboard/signals", label: "Signals", icon: Zap },
       { href: "/dashboard/setup-evolution", label: "Setup evolution", icon: History },
       { href: "/dashboard/setup-outcomes", label: "Setup outcomes", icon: ClipboardList },
       { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },

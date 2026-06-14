@@ -10,7 +10,7 @@ import { clearTradingRoomClientSession } from "@/lib/dashboard/trading-room/sess
 import { openCrispChat } from "@/components/crisp-chat";
 import { borderRadius, spacing, surfaceGlowClassName, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
-import { DASHBOARD_NAV_ITEMS, DASHBOARD_ADMIN_NAV_ITEMS } from "@/components/sidebar";
+import { DASHBOARD_ADMIN_NAV_ITEMS, NAV_SECTIONS } from "@/components/sidebar";
 import { isDashboardNavItemActive } from "@/lib/dashboard-nav-active";
 import { isDashboardNavItemEnabled } from "@/lib/nav-features";
 import { usePathname } from "next/navigation";
@@ -68,15 +68,30 @@ export function MobileNavDrawer({
             className="fixed left-0 top-0 z-[10001] flex h-full w-[min(100vw-3rem,288px)] max-w-[100vw] flex-col shadow-xl min-[900px]:hidden"
             style={{
               paddingTop: "env(safe-area-inset-top, 0px)",
+              paddingBottom: "env(safe-area-inset-bottom, 0px)",
               background: colors.surface,
               borderRight: `1px solid ${colors.border}`
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div
-              className="flex shrink-0 items-center justify-end"
+              className="flex shrink-0 items-center justify-between gap-3"
               style={{ padding: spacing[4], borderBottom: `1px solid ${colors.border}` }}
             >
+              <span
+                style={{
+                  fontWeight: 700,
+                  letterSpacing: "0.14em",
+                  fontSize: 13,
+                  backgroundImage: `linear-gradient(95deg, ${colors.text} 35%, ${colors.accent})`,
+                  WebkitBackgroundClip: "text",
+                  backgroundClip: "text",
+                  color: "transparent",
+                  WebkitTextFillColor: "transparent"
+                }}
+              >
+                STOCVEST<span style={{ color: colors.accent, WebkitTextFillColor: colors.accent }}>.</span>
+              </span>
               <button
                 type="button"
                 onClick={onClose}
@@ -95,33 +110,54 @@ export function MobileNavDrawer({
 
             <nav
               className="min-h-0 flex-1 overflow-y-auto"
-              style={{ padding: spacing[4], display: "grid", gap: spacing[2], alignContent: "start" }}
+              style={{ padding: spacing[4], display: "grid", gap: spacing[3], alignContent: "start" }}
             >
-              {DASHBOARD_NAV_ITEMS.filter(isDashboardNavItemEnabled).map((item) => {
-                const Icon = item.icon;
-                const isActive = isDashboardNavItemActive(pathname, item.href);
+              {NAV_SECTIONS.map((section) => {
+                const items = section.items.filter(isDashboardNavItemEnabled);
+                if (items.length === 0) return null;
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={onClose}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: spacing[3],
-                      borderRadius: borderRadius.md,
-                      padding: `${spacing[3]} ${spacing[3]}`,
-                      borderLeft: `3px solid ${isActive ? colors.accent : "transparent"}`,
-                      background: isActive ? "rgba(59,130,246,0.12)" : "transparent",
-                      color: isActive ? colors.accent : colors.text,
-                      fontSize: typography.scale.sm,
-                      fontWeight: isActive ? 600 : 500,
-                      minHeight: 44
-                    }}
-                  >
-                    <Icon size={18} />
-                    <span>{item.label}</span>
-                  </Link>
+                  <div key={section.id} style={{ display: "grid", gap: spacing[1] }}>
+                    <p
+                      style={{
+                        margin: 0,
+                        padding: `0 ${spacing[3]}`,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        color: colors.textMuted
+                      }}
+                    >
+                      {section.label}
+                    </p>
+                    {items.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = isDashboardNavItemActive(pathname, item.href);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={onClose}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: spacing[3],
+                            borderRadius: borderRadius.md,
+                            padding: `${spacing[3]} ${spacing[3]}`,
+                            borderLeft: `3px solid ${isActive ? colors.accent : "transparent"}`,
+                            background: isActive ? "rgba(59,130,246,0.12)" : "transparent",
+                            color: isActive ? colors.accent : colors.text,
+                            fontSize: typography.scale.sm,
+                            fontWeight: isActive ? 600 : 500,
+                            minHeight: 44
+                          }}
+                        >
+                          <Icon size={18} />
+                          <span>{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 );
               })}
               {adminItems.length > 0 ? (

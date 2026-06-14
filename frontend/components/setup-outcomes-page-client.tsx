@@ -1,27 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signalsWithSymbolHref } from "@/lib/nav/setup-analytics-deeplink";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { fetchSetupOutcomes, type SetupOutcomesResponse } from "@/lib/api/setup-outcomes";
-import { SetupSystemBehaviorCard } from "@/components/setup-system-behavior-card";
+import { SetupOutcomesDashboard } from "@/components/setup-outcomes/setup-outcomes-dashboard";
 import { EMPTY_VALIDATION } from "@/lib/product-empty-states";
 import { DeskModeTabNav } from "@/components/desk-mode-tab-nav";
-import { borderRadius, roleAccents, spacing, surfaceGlowClassName } from "@/lib/design-system";
+import { borderRadius, spacing, surfaceGlowClassName } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 
 type Mode = "swing" | "day";
-
-const OUTCOME_LABEL: Record<string, string> = {
-  alignment_held: "Alignment held next session",
-  alignment_weakened: "Alignment weakened",
-  state_improved: "State improved",
-  state_worsened: "State weakened",
-  setup_continuation: "Alignment held + price moved with bias",
-  insufficient_data: "Insufficient follow-up"
-};
 
 function parseMode(raw: string | null): Mode {
   return raw === "day" ? "day" : "swing";
@@ -50,7 +40,6 @@ export function SetupOutcomesPageClient({ isAdmin = false }: { isAdmin?: boolean
 
   usePublishAssistantContext({ page: "dashboard/setup-outcomes", trading_mode: mode });
 
-  const accent = roleAccents[theme][mode];
   const building = data?.stats.building_dataset ?? true;
 
   return (
@@ -61,36 +50,24 @@ export function SetupOutcomesPageClient({ isAdmin = false }: { isAdmin?: boolean
         </h1>
         <p className="m-0 mt-2 max-w-2xl text-sm leading-relaxed" style={{ color: colors.textMuted }}>
           How setups on your watchlist behaved across sessions — observational only, not trade performance or win
-          rate. This is separate from{" "}
-          <Link href="/performance" className="font-medium hover:underline" style={{ color: colors.accent }}>
-            Product signal accuracy
+          rate. Open any symbol in{" "}
+          <Link href="/dashboard" className="font-medium hover:underline" style={{ color: colors.accent }}>
+            Trading Room
           </Link>{" "}
-          on the public performance page (qualified actionable signals vs later prices).
+          for the live deep-dive.
         </p>
       </header>
 
-      <article
-        className={surfaceGlowClassName}
-        data-testid="setup-outcomes-product-kpi-callout"
-        style={{
-          background: colors.surface,
-          border: `1px solid ${colors.border}`,
-          borderRadius: borderRadius.xl,
-          padding: spacing[3]
-        }}
-      >
-        <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-          <span className="font-semibold" style={{ color: colors.text }}>
-            Not Product KPI.
-          </span>{" "}
-          Session-to-session alignment on your watchlist is not the same as platform directional accuracy. For
-          qualified + actionable signal outcomes (Swing / Day, 90-day window), see{" "}
-          <Link href="/performance" className="font-medium hover:underline" style={{ color: colors.accent }}>
-            Signal tracking → Product signal accuracy
-          </Link>
-          .
-        </p>
-      </article>
+      <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }} data-testid="setup-outcomes-product-kpi-callout">
+        <span className="font-semibold" style={{ color: colors.text }}>
+          Not Product KPI.
+        </span>{" "}
+        For qualified actionable signal accuracy, see{" "}
+        <Link href="/performance" className="font-medium hover:underline" style={{ color: colors.accent }}>
+          Signal tracking → Product signal accuracy
+        </Link>
+        .
+      </p>
 
       <DeskModeTabNav
         value={mode}
@@ -108,145 +85,50 @@ export function SetupOutcomesPageClient({ isAdmin = false }: { isAdmin?: boolean
         <p className="text-sm" style={{ color: colors.textMuted }}>
           Sign in to view setup outcomes for your watchlist.
         </p>
-      ) : (
-        <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard
-              label="Session pairs"
-              value={String(data.stats.total_events)}
-              hint="Consecutive evaluations on your default watchlist"
-              colors={colors}
-            />
-            <StatCard
-              label="Alignment held"
-              value={data.stats.alignment_held_rate != null ? `${data.stats.alignment_held_rate}%` : "—"}
-              hint="Next session kept or improved layer count"
-              colors={colors}
-            />
-            <StatCard
-              label="Symbols"
-              value={String(data.stats.symbols_with_events)}
-              hint={`${data.watchlist_symbol_count} on watchlist`}
-              colors={colors}
-            />
-          </div>
-
-          {building ? (
-            <article
-              className={surfaceGlowClassName}
-              data-testid="setup-outcomes-building"
-              style={{
-                background: colors.surface,
-                border: `1px solid ${colors.border}`,
-                borderRadius: borderRadius.xl,
-                padding: spacing[4]
-              }}
-            >
-              <p className="m-0 font-semibold" style={{ color: colors.text }}>
-                {EMPTY_VALIDATION.title}
-              </p>
-              <p className="m-0 mt-2 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
-                {EMPTY_VALIDATION.body}
-              </p>
-              <p className="m-0 mt-2 text-xs" style={{ color: colors.textMuted }}>
-                {EMPTY_VALIDATION.hint}
-              </p>
-            </article>
-          ) : (
-            <SetupSystemBehaviorCard data={data} />
-          )}
-
-          {data.events.length > 0 ? (
-            <article
-              className={surfaceGlowClassName}
-              style={{
-                background: colors.surface,
-                border: `1px solid ${colors.border}`,
-                borderRadius: borderRadius.xl,
-                padding: spacing[4]
-              }}
-            >
-              <h2 className="m-0 text-lg font-semibold" style={{ color: colors.text }}>
-                Recent session pairs
-              </h2>
-              <ul className="mt-3 list-none space-y-2 p-0">
-                {data.events.slice(0, 25).map((e) => (
-                  <li
-                    key={`${e.symbol}-${e.session_date}-${e.outcome_kind}`}
-                    className="flex flex-wrap gap-2 text-sm"
-                    style={{ color: colors.text }}
-                  >
-                    <Link
-                      href={signalsWithSymbolHref(e.symbol, mode, "setup-outcomes")}
-                      className="font-medium no-underline hover:underline"
-                      style={{ color: colors.accent }}
-                    >
-                      {e.symbol}
-                    </Link>
-                    <span style={{ color: colors.textMuted }}>{e.session_date}</span>
-                    <span>·</span>
-                    <span>{OUTCOME_LABEL[e.outcome_kind] ?? e.outcome_kind}</span>
-                    <span style={{ color: colors.textMuted }}>
-                      ({e.layers_aligned}/{e.layers_total} →{" "}
-                      {e.next_layers_aligned != null ? `${e.next_layers_aligned}/${e.layers_total}` : "—"})
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ) : null}
-
-          <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
-            {data.disclaimer}
+      ) : building ? (
+        <article
+          className={surfaceGlowClassName}
+          data-testid="setup-outcomes-building"
+          style={{
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: borderRadius.xl,
+            padding: spacing[4]
+          }}
+        >
+          <p className="m-0 font-semibold" style={{ color: colors.text }}>
+            {EMPTY_VALIDATION.title}
           </p>
-          {isAdmin ? (
-            <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
-              Operators:{" "}
-              <Link
-                href="/dashboard/admin/historical-validation"
-                className="font-medium hover:underline"
-                style={{ color: colors.accent }}
-                data-testid="setup-outcomes-admin-d2-link"
-              >
-                D2 stratified validation (SignalHistory)
-              </Link>
-            </p>
-          ) : null}
-        </>
+          <p className="m-0 mt-2 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
+            {EMPTY_VALIDATION.body}
+          </p>
+          <p className="m-0 mt-2 text-xs" style={{ color: colors.textMuted }}>
+            {EMPTY_VALIDATION.hint} ({data.stats.total_events}/5 session pairs collected)
+          </p>
+        </article>
+      ) : (
+        <SetupOutcomesDashboard data={data} mode={mode} />
       )}
-    </section>
-  );
-}
 
-function StatCard({
-  label,
-  value,
-  hint,
-  colors
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  colors: { surface: string; border: string; text: string; textMuted: string };
-}) {
-  return (
-    <div
-      style={{
-        background: colors.surface,
-        border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.lg,
-        padding: spacing[3]
-      }}
-    >
-      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide" style={{ color: colors.textMuted }}>
-        {label}
-      </p>
-      <p className="m-0 mt-1 text-xl font-semibold tabular-nums" style={{ color: colors.text }}>
-        {value}
-      </p>
-      <p className="m-0 mt-1 text-xs" style={{ color: colors.textMuted }}>
-        {hint}
-      </p>
-    </div>
+      {data && !building ? (
+        <p className="m-0 text-xs leading-relaxed" style={{ color: colors.textMuted }}>
+          {data.disclaimer}
+        </p>
+      ) : null}
+
+      {isAdmin ? (
+        <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
+          Operators:{" "}
+          <Link
+            href="/dashboard/admin/historical-validation"
+            className="font-medium hover:underline"
+            style={{ color: colors.accent }}
+            data-testid="setup-outcomes-admin-d2-link"
+          >
+            D2 stratified validation (SignalHistory)
+          </Link>
+        </p>
+      ) : null}
+    </section>
   );
 }

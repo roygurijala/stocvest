@@ -19,18 +19,18 @@ describe("setup-analytics-deeplink", () => {
     expect(setupOutcomesHref("swing")).toContain("trading_mode=swing");
   });
 
-  test("signalsWithSymbolHref", () => {
+  test("signalsWithSymbolHref opens trading room deep-dive", () => {
     expect(signalsWithSymbolHref("aapl", "swing")).toBe(
-      "/dashboard/signals?symbol=AAPL&trading_mode=swing&ref=setup-evolution"
+      "/dashboard?symbol=AAPL&lane=swing&ref=setup-evolution"
     );
     expect(signalsWithSymbolHref("aapl", "swing", "setup-outcomes")).toContain("ref=setup-outcomes");
   });
 
-  test("signalsOpenEvidenceHref and layers anchor", () => {
-    expect(signalsOpenEvidenceHref("tsla", "day")).toContain("open_evidence=1");
-    expect(signalsOpenEvidenceHref("tsla", "day")).toContain("ref=setup-evolution");
+  test("signalsOpenEvidenceHref and layers anchor use trading room", () => {
+    expect(signalsOpenEvidenceHref("tsla", "day")).toContain("symbol=TSLA");
+    expect(signalsOpenEvidenceHref("tsla", "day")).toContain("lane=day");
     expect(signalsLayersSectionHref("tsla", "day")).toBe(
-      "/dashboard/signals?symbol=TSLA&trading_mode=day&ref=setup-evolution#signals-layers"
+      "/dashboard?symbol=TSLA&lane=day&ref=setup-evolution"
     );
   });
 });

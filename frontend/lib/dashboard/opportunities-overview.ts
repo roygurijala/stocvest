@@ -84,7 +84,7 @@ export function buildOpportunityCards(opts: {
       title: "Signals (execution)",
       lines: signalsLines,
       ctaLabel: "Review Signals →",
-      ctaHref: "/dashboard/signals"
+      ctaHref: "/dashboard"
     }
   ];
 }
