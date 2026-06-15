@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from stocvest.api.services.composite_layer_detail_wire import quality_article_wire, recent_ratings_wire
 from stocvest.api.services.news_quality_filter import is_quality_article
+from stocvest.api.services.polygon_insight_sentiment import article_sentiment_score_for_symbol
 from stocvest.config.signal_parameters import NewsParameters
 from stocvest.data.benzinga_client import BenzingaMultiResult
 from stocvest.signals.analyst_rating_score import (
@@ -57,17 +58,8 @@ _CATALYST_PATTERNS: dict[str, tuple[str, ...]] = {
 }
 
 
-def _article_sentiment(article: dict[str, Any]) -> float:
-    insights = article.get("insights")
-    if isinstance(insights, list) and insights:
-        first = insights[0]
-        if isinstance(first, dict):
-            s = str(first.get("sentiment") or "").lower()
-            if s in ("positive", "bullish"):
-                return 1.0
-            if s in ("negative", "bearish"):
-                return -1.0
-    return 0.0
+def _article_sentiment(article: dict[str, Any], symbol: str) -> float:
+    return article_sentiment_score_for_symbol(article, symbol)
 
 
 def _article_benzinga_weight(article: dict[str, Any]) -> float:
@@ -268,7 +260,7 @@ class NewsAnalyzer:
                 catalyst_type = ct
                 catalyst_headline = ch_head
 
-            sent = _article_sentiment(art)
+            sent = _article_sentiment(art, sym)
             wire = quality_article_wire(art, sent)
             if wire:
                 quality_article_rows.append(wire)

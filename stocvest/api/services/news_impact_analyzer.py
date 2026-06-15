@@ -29,18 +29,11 @@ KNOWN_LIQUID_SYMBOLS = {
 }
 
 
-def _sentiment_from_article(article: dict[str, Any]) -> str:
-    insights = article.get("insights")
-    if isinstance(insights, list) and insights:
-        first = insights[0]
-        if isinstance(first, dict):
-            sent = str(first.get("sentiment") or "").strip().lower()
-            if sent in {"positive", "negative", "neutral"}:
-                return sent
-    sent2 = str(article.get("sentiment") or "").strip().lower()
-    if sent2 in {"positive", "negative", "neutral"}:
-        return sent2
-    return "neutral"
+from stocvest.api.services.polygon_insight_sentiment import article_sentiment_label_for_symbol
+
+
+def _sentiment_from_article(article: dict[str, Any], symbol: str | None = None) -> str:
+    return article_sentiment_label_for_symbol(article, symbol)
 
 
 def _title_override_impact(title: str, default: str) -> str:
@@ -86,20 +79,22 @@ def analyze_news_impact(
         tickers.append(canonical)
     title = str(article.get("title") or "").lower()
 
-    sentiment = _sentiment_from_article(article)
-    base_impact = "neutral"
-    if sentiment == "positive":
-        base_impact = "bullish"
-    elif sentiment == "negative":
-        base_impact = "bearish"
-
     def _eligible(symbol: str) -> bool:
         return symbol in eligible_liquid or symbol in watchlist_set
+
+    def _impact_for_ticker(ticker: str) -> str:
+        sentiment = _sentiment_from_article(article, ticker)
+        base_impact = "neutral"
+        if sentiment == "positive":
+            base_impact = "bullish"
+        elif sentiment == "negative":
+            base_impact = "bearish"
+        return _title_override_impact(title, base_impact)
 
     for i, ticker in enumerate(tickers):
         if not _eligible(ticker):
             continue
-        impact = _title_override_impact(title, base_impact)
+        impact = _impact_for_ticker(ticker)
         watch = ticker in watchlist_set
         affected.append(
             {
@@ -146,7 +141,9 @@ def analyze_news_impact(
             if not _eligible(canonical):
                 continue
             if canonical in tickers and canonical not in existing:
-                fallback_impact = affected[0]["impact"] if affected else "neutral"
+                fallback_impact = _impact_for_ticker(canonical) if canonical in tickers else (
+                    affected[0]["impact"] if affected else "neutral"
+                )
                 affected.append(
                     {
                         "symbol": canonical,
@@ -171,7 +168,7 @@ def generate_impact_summary(
     if not direct:
         return None
 
-    sentiment = _sentiment_from_article(article)
+    sentiment = _sentiment_from_article(article, direct[0])
     is_positive = sentiment == "positive"
     is_negative = sentiment == "negative"
     has_earnings = any(k in title for k in ["beat", "miss", "eps", "revenue"])

@@ -6,6 +6,11 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
+from stocvest.api.services.polygon_insight_sentiment import (
+    article_sentiment_label_for_symbol,
+    article_sentiment_score_for_symbol,
+)
+
 _NY = ZoneInfo("America/New_York")
 
 NewsPanelSource = Literal["benzinga", "sec_edgar", "polygon"]
@@ -74,34 +79,17 @@ def classify_news_source(article: dict[str, Any]) -> tuple[NewsPanelSource, str]
     return "polygon", "Polygon"
 
 
-def sentiment_score_and_label(article: dict[str, Any]) -> tuple[float, NewsSentimentLabel]:
-    score: float | None = None
-    insights = article.get("insights")
-    if isinstance(insights, list) and insights:
-        first = insights[0]
-        if isinstance(first, dict):
-            raw_sent = str(first.get("sentiment") or "").strip().lower()
-            if raw_sent == "positive":
-                score = 0.55
-            elif raw_sent == "negative":
-                score = -0.55
-            elif raw_sent == "neutral":
-                score = 0.0
-    raw_sent2 = str(article.get("sentiment") or "").strip().lower()
-    if score is None:
-        if raw_sent2 == "positive":
-            score = 0.55
-        elif raw_sent2 == "negative":
-            score = -0.55
-        elif raw_sent2 == "neutral":
-            score = 0.0
-    if score is None:
-        score = 0.0
-    # Clamp
-    score = max(-1.0, min(1.0, float(score)))
-    if score > 0.2:
+def sentiment_score_and_label(
+    article: dict[str, Any],
+    *,
+    symbol: str | None = None,
+) -> tuple[float, NewsSentimentLabel]:
+    raw = article_sentiment_score_for_symbol(article, symbol)
+    score = max(-1.0, min(1.0, float(raw * 0.55)))
+    label_raw = article_sentiment_label_for_symbol(article, symbol)
+    if label_raw == "positive":
         label: NewsSentimentLabel = "bullish"
-    elif score < -0.2:
+    elif label_raw == "negative":
         label = "bearish"
     else:
         label = "neutral"

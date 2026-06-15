@@ -3,7 +3,8 @@ import { describe, expect, test } from "vitest";
 import {
   buildLayerAlignmentLine,
   filterDisplayChips,
-  indicatorHighlights
+  indicatorHighlights,
+  layerDataConfidenceTier
 } from "@/lib/signals/layer-drawer-present";
 import type { SignalsLayerRowInput } from "@/lib/signals-page-present";
 
@@ -50,5 +51,24 @@ describe("layer-drawer-present", () => {
     );
     expect(line).toBe("Supporting your bullish setup.");
     expect(line).not.toMatch(/100\/100/);
+  });
+
+  test("layerDataConfidenceTier uses article coverage for news", () => {
+    expect(layerDataConfidenceTier({ key: "news", name: "News", status: "Bearish", explanation: "", score: 0, articleCount: 1 })).toBe(
+      "Medium"
+    );
+    expect(layerDataConfidenceTier({ key: "news", name: "News", status: "Bearish", explanation: "", score: 0, articleCount: 0 })).toBe(
+      "Low"
+    );
+  });
+
+  test("single headline at score floor softens supportive alignment copy", () => {
+    const line = buildLayerAlignmentLine(
+      { key: "news", name: "News", status: "Bearish", explanation: "", score: 0, articleCount: 1 },
+      "Bearish",
+      "supportive",
+      "0"
+    );
+    expect(line).toMatch(/low-conviction/i);
   });
 });
