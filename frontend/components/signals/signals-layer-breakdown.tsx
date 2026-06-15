@@ -50,6 +50,8 @@ import {
   buildLayerAlignmentLine,
   filterDisplayChips,
   indicatorHighlights,
+  layerAlignmentTextColor,
+  layerDataConfidenceTier,
   ratingsForDrawer,
   shouldShowAnalystTimeline,
   shouldShowGeoEventList,
@@ -541,7 +543,7 @@ function LayerDetailDrawer({
   const levelPct = layer.score != null ? Math.max(0, Math.min(100, Number(levelLabel))) : 0;
 
   // Use actual layer data for specific justifications
-  const confidence = levelPct >= 70 ? "High" : levelPct >= 50 ? "Medium" : "Low";
+  const confidence = layerDataConfidenceTier(layer);
   
   const displayChips = filterDisplayChips(layer);
   const alignmentLine = buildLayerAlignmentLine(layer, bias, polarity, levelLabel);
@@ -694,12 +696,7 @@ function LayerDetailDrawer({
               <p
                 className="m-0 text-sm leading-snug"
                 style={{
-                  color:
-                    polarity === "supportive"
-                      ? colors.bullish
-                      : polarity === "blocking"
-                        ? colors.bearish
-                        : colors.textMuted
+                  color: layerAlignmentTextColor(polarity, bias, colors)
                 }}
               >
                 {alignmentLine}

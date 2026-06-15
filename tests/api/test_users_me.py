@@ -264,3 +264,22 @@ def test_users_me_patch_onboarding(fresh_profile_store: InMemoryUserProfileStore
     r2 = lambda_handler(_event("PATCH", body={"onboarding_completed": True}), {})
     assert r2["statusCode"] == 200
     assert _body(r2)["onboarding_completed"] is True
+
+
+def test_users_me_patch_display_names(fresh_profile_store: InMemoryUserProfileStore, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "brokers")
+    resp = lambda_handler(
+        _event("PATCH", body={"first_name": "Alex", "last_name": "Rivera"}),
+        {},
+    )
+    assert resp["statusCode"] == 200
+    b = _body(resp)
+    assert b["first_name"] == "Alex"
+    assert b["last_name"] == "Rivera"
+    p = fresh_profile_store.get_profile("user-me-test")
+    assert p.first_name == "Alex"
+    assert p.last_name == "Rivera"
+
+    clear = lambda_handler(_event("PATCH", body={"last_name": ""}), {})
+    assert clear["statusCode"] == 200
+    assert _body(clear)["last_name"] is None

@@ -114,15 +114,54 @@ export function buildLayerAlignmentLine(
   scoreLabel: string
 ): string {
   const statusLower = String(layer.status ?? "").toLowerCase();
+  const scoreNum = layer.score;
+  const singleArticle =
+    layer.articleCount === 1 || (layer.catalystArticles?.length === 1 && layer.articleCount == null);
+  const weakRead = scoreNum != null && singleArticle && (scoreNum <= 8 || scoreNum >= 92);
+
   if (bias === "Neutral") {
     if (statusLower === "bullish") return `Bullish read (${scoreLabel}) inside a neutral setup.`;
     if (statusLower === "bearish") return `Bearish read (${scoreLabel}) inside a neutral setup.`;
     return `Neutral read (${scoreLabel}) — no directional edge from this layer.`;
   }
+  if (weakRead && polarity === "supportive") {
+    return `Directionally aligned, but only one thin headline — treat as low-conviction context.`;
+  }
   if (polarity === "supportive") return `Supporting your ${bias.toLowerCase()} setup.`;
   if (polarity === "blocking") return `Working against your ${bias.toLowerCase()} setup.`;
   if (polarity === "mixed") return `Mixed signals relative to your ${bias.toLowerCase()} setup.`;
   return `Neutral to your ${bias.toLowerCase()} setup.`;
+}
+
+/** Data coverage confidence — not the same as directional layer score. */
+export function layerDataConfidenceTier(layer: SignalsLayerRowInput): "High" | "Medium" | "Low" {
+  if (layer.status === "Unavailable") return "Low";
+  if (layer.key === "news") {
+    const count = layer.articleCount ?? layer.catalystArticles?.length ?? 0;
+    if (count >= 3) return "High";
+    if (count >= 1) return "Medium";
+    return "Low";
+  }
+  const s = layer.score;
+  if (s == null) return "Low";
+  const dist = Math.abs(s - 50);
+  if (dist >= 25) return "High";
+  if (dist >= 12) return "Medium";
+  return "Low";
+}
+
+export function layerAlignmentTextColor(
+  polarity: "supportive" | "blocking" | "mixed" | "neutral",
+  bias: SignalsSetupBias,
+  colors: { bullish: string; bearish: string; textMuted: string }
+): string {
+  if (polarity === "supportive") {
+    return bias === "Bearish" ? colors.bearish : colors.bullish;
+  }
+  if (polarity === "blocking") {
+    return bias === "Bearish" ? colors.bullish : colors.bearish;
+  }
+  return colors.textMuted;
 }
 
 /** Analyst timeline only when it adds more than a single latest-rating summary. */

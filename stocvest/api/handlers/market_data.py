@@ -634,7 +634,7 @@ def news_handler(
                 if pub and (oldest_dt is None or pub < oldest_dt):
                     oldest_dt = pub
                 src, src_label = classify_news_source(article)
-                score, sent_label = sentiment_score_and_label(article)
+                score, sent_label = sentiment_score_and_label(article, symbol=symbol)
                 cat = catalyst_type_for_article(article)
                 pub_iso = str(article.get("published_utc") or "")
                 is_recent = bool(pub and pub > recent_cutoff)

@@ -668,7 +668,7 @@ async def build_swing_composite_response(
         "regime": regime,
         "sector_signal": sector.sector_signal,
         "news_catalyst": nc,
-        "catalyst_headlines": _build_catalyst_headlines(news_rows),
+        "catalyst_headlines": _build_catalyst_headlines(news_rows, symbol=sym),
         "news_verdict": news.verdict,
         "news_sentiment_score": float(news.weighted_sentiment or 0.0),
         "geopolitical_verdict": geo.verdict,

@@ -224,7 +224,14 @@ def _market_open_now() -> bool:
     return 930 <= hhmm <= 1600
 
 
-def _build_catalyst_headlines(news_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _build_catalyst_headlines(
+    news_rows: list[dict[str, Any]],
+    *,
+    symbol: str | None = None,
+) -> list[dict[str, Any]]:
+    from stocvest.api.services.polygon_insight_sentiment import article_sentiment_score_for_symbol
+
+    sym = (symbol or "").strip().upper()
     out: list[dict[str, Any]] = []
     for row in news_rows:
         if not isinstance(row, dict):
@@ -232,23 +239,14 @@ def _build_catalyst_headlines(news_rows: list[dict[str, Any]]) -> list[dict[str,
         title = str(row.get("title") or "").strip()
         if not title:
             continue
-        sent = 0.0
-        insights = row.get("insights")
-        if isinstance(insights, list) and insights:
-            first = insights[0]
-            if isinstance(first, dict):
-                s = str(first.get("sentiment") or "").strip().lower()
-                if s in {"positive", "bullish"}:
-                    sent = 1.0
-                elif s in {"negative", "bearish"}:
-                    sent = -1.0
+        sent = article_sentiment_score_for_symbol(row, sym or None)
         out.append(
             {
                 "text": title[:80],
                 "source": str(row.get("source") or "polygon").strip().lower() or "polygon",
                 "published_at": str(row.get("published_utc") or ""),
                 "sentiment_score": sent,
-                "sentiment": "positive" if sent > 0 else "negative",
+                "sentiment": "positive" if sent > 0 else "negative" if sent < 0 else "neutral",
                 "catalyst_type": "macro" if "fed" in title.lower() else "news",
                 "url": row.get("article_url"),
             }
@@ -817,7 +815,7 @@ async def build_real_composite_response(
         "regime": regime,
         "sector_signal": sector.sector_signal,
         "news_catalyst": nc,
-        "catalyst_headlines": _build_catalyst_headlines(news_rows),
+        "catalyst_headlines": _build_catalyst_headlines(news_rows, symbol=sym),
         "news_verdict": news.verdict,
         "news_sentiment_score": float(news.weighted_sentiment or 0.0),
         "geopolitical_verdict": geo.verdict,

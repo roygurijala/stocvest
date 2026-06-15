@@ -303,6 +303,7 @@ def _serialize_user_profile(
     return {
         "user_id": profile.user_id,
         "first_name": profile.first_name,
+        "last_name": profile.last_name,
         "trading_mode": profile.trading_mode.value,
         "onboarding_completed": profile.onboarding_completed,
         "onboarding_completed_at": profile.onboarding_completed_at,
@@ -417,6 +418,14 @@ def users_me_patch_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         else:
             cleaned = sanitize_free_text(raw_name, max_len=60)
             updates["first_name"] = cleaned or None
+
+    if "last_name" in body:
+        raw_last = body.get("last_name")
+        if raw_last is None or str(raw_last).strip() == "":
+            updates["last_name"] = None
+        else:
+            cleaned = sanitize_free_text(raw_last, max_len=60)
+            updates["last_name"] = cleaned or None
 
     if "trading_mode" in body:
         try:

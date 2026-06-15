@@ -6,6 +6,7 @@ import { buildDevMockIdToken } from "@/lib/auth/dev-mock-token";
 import { cognitoErrorMessage, signIn } from "@/lib/auth/cognito";
 import { sanitizeNextPath } from "@/lib/auth/login-redirect";
 import { persistSignupLegalAckOnLogin } from "@/lib/auth/persist-signup-legal";
+import { persistSignupProfileOnLogin } from "@/lib/auth/persist-signup-profile";
 import { clearSessionTokenCookies, setSessionTokenCookiesFromIdToken } from "@/lib/auth/session-cookies";
 import { isStocvestDevelopment } from "@/lib/auth/stocvest-env";
 
@@ -48,6 +49,7 @@ export async function loginWithPassword(
     if (result.idToken) {
       setAuthCookieFromIdToken(result.idToken, result.refreshToken);
       await persistSignupLegalAckOnLogin(result.idToken);
+      await persistSignupProfileOnLogin(result.idToken);
       redirect(destination);
     }
 

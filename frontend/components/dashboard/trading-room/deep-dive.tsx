@@ -44,6 +44,7 @@ import {
   scenarioTrackBounds
 } from "@/lib/dashboard/trading-room/deep-dive-present";
 import { isNonRenderableCompositeResponse } from "@/lib/api/swing-composite";
+import type { SnapshotPayload } from "@/lib/api/market";
 import { resolveDeepDiveUnavailableMessage } from "@/lib/dashboard/trading-room/composite-unavailable-present";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import { resolveTimeframeContext, isTimeframeCounterTrend } from "@/lib/signal-evidence/timeframe-context";
@@ -89,6 +90,10 @@ const STATE_LABEL: Record<FeedState, string> = {
 function fmtPrice(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return `$${n.toFixed(2)}`;
+}
+
+function positivePrice(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
 }
 
 function fmtPct(n: number | null | undefined): string {
@@ -667,6 +672,7 @@ export function DeepDive({
   card,
   allCards = [],
   companyBySymbol,
+  snapshot,
   onBackToBrief,
   isMobile = false,
   colors,
@@ -677,6 +683,8 @@ export function DeepDive({
   allCards?: FeedCard[];
   /** Fallback map for company names not yet set on the card. */
   companyBySymbol?: Map<string, string>;
+  /** Live quote from dashboard tape when the feed card has no price yet. */
+  snapshot?: SnapshotPayload | null;
   onBackToBrief: () => void;
   isMobile?: boolean;
   colors: Colors;
@@ -724,6 +732,34 @@ export function DeepDive({
     };
   }, [card.symbol, card.company, companyBySymbol]);
 
+  const [quoteSnapshot, setQuoteSnapshot] = useState<SnapshotPayload | null>(snapshot ?? null);
+  useEffect(() => {
+    setQuoteSnapshot(snapshot ?? null);
+  }, [snapshot, card.symbol]);
+
+  useEffect(() => {
+    if (positivePrice(card.price) != null) return;
+    if (positivePrice(snapshot?.last_trade_price) != null || positivePrice(snapshot?.day_close) != null) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/stocvest/market/snapshots?symbols=${encodeURIComponent(card.symbol)}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok || cancelled) return;
+        const json = (await res.json().catch(() => ({}))) as { snapshots?: SnapshotPayload[] };
+        const row = Array.isArray(json.snapshots) ? json.snapshots[0] : null;
+        if (!cancelled && row) setQuoteSnapshot(row);
+      } catch {
+        /* quote is best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [card.symbol, card.price, snapshot]);
+
   // Derive per-lane state for the toggle — null means no card in the feed.
   const dayLaneCard = allCards.find((c) => c.symbol === card.symbol && c.lane === "day") ?? null;
   const swingLaneCard = allCards.find((c) => c.symbol === card.symbol && c.lane === "swing") ?? null;
@@ -733,6 +769,24 @@ export function DeepDive({
   const swingState: FeedState | null = swingLaneCard?.state ?? (card.lane === "swing" ? card.state : null);
   const { composite, isInitialLoading, isRevalidating, transportError, fetchErrorMessage } =
     useSignalComposite(card.symbol, activeLane);
+
+  const displayPrice = useMemo(() => {
+    return (
+      positivePrice(card.price) ??
+      positivePrice(quoteSnapshot?.last_trade_price) ??
+      positivePrice(quoteSnapshot?.day_close) ??
+      positivePrice(snapshot?.last_trade_price) ??
+      positivePrice(snapshot?.day_close) ??
+      positivePrice((composite as Record<string, unknown> | null)?.last_trade_price) ??
+      null
+    );
+  }, [card.price, quoteSnapshot, snapshot, composite]);
+
+  const displayChangePct = useMemo(() => {
+    if (card.changePct != null && Number.isFinite(card.changePct)) return card.changePct;
+    const fromSnap = quoteSnapshot?.change_percent ?? snapshot?.change_percent;
+    return typeof fromSnap === "number" && Number.isFinite(fromSnap) ? fromSnap : null;
+  }, [card.changePct, quoteSnapshot, snapshot]);
 
   useEffect(() => {
     if (dataRefreshNonce <= 0) return;
@@ -1086,7 +1140,7 @@ export function DeepDive({
           : verdictTone === "muted"
             ? colors.textMuted
             : stateTone(card.state, colors);
-  const pct = card.changePct;
+  const pct = displayChangePct;
   const pctTone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
   const laneAccent = activeLane === "day" ? roleAccents.dark.day.borderAccent : roleAccents.dark.swing.borderAccent;
   const directionColor =
@@ -1233,23 +1287,33 @@ export function DeepDive({
 
         {/* Row 2: Company · Price ±%  |  Evaluated timestamp */}
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2], flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: spacing[2] }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: spacing[2], flexWrap: "wrap" }}>
             {resolvedCompany ? (
-              <>
-                <span style={{ fontSize: typography.scale.sm, color: colors.textMuted, fontWeight: 500 }}>
-                  {resolvedCompany}
-                </span>
-                <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>·</span>
-              </>
-            ) : null}
-            <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: colors.text, fontVariantNumeric: "tabular-nums" }}>
-              {fmtPrice(card.price)}
-            </span>
-            {pct != null ? (
-              <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: pctTone }}>
-                {fmtPct(pct)}
+              <span style={{ fontSize: typography.scale.sm, color: colors.textMuted, fontWeight: 500 }}>
+                {resolvedCompany}
               </span>
             ) : null}
+            {displayPrice != null ? (
+              <>
+                {resolvedCompany ? (
+                  <span style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>·</span>
+                ) : null}
+                <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: colors.text, fontVariantNumeric: "tabular-nums" }}>
+                  {fmtPrice(displayPrice)}
+                </span>
+                {pct != null ? (
+                  <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: pctTone }}>
+                    {fmtPct(pct)}
+                  </span>
+                ) : null}
+              </>
+            ) : resolvedCompany ? (
+              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Quote loading…</span>
+            ) : (
+              <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: colors.textMuted, fontVariantNumeric: "tabular-nums" }}>
+                Quote unavailable
+              </span>
+            )}
           </div>
           {evalTime ? (
             <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, whiteSpace: "nowrap" }}>
