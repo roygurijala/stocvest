@@ -39,6 +39,6 @@ describe("resolveDeepDiveUnavailableMessage", () => {
       transportError: null,
       fetchErrorMessage: null
     });
-    expect(msg).toBe("Session mover — desk cache warming.");
+    expect(msg).toBe("Session mover · not an entry");
   });
 });
