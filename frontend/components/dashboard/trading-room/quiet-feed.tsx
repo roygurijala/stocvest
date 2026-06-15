@@ -285,13 +285,14 @@ export function QuietFeed({
           lane: r.lane,
           state: "potential",
           bias: biasFromDirection(r.direction),
-          verdict: "Session mover — open for the full read.",
+          verdict: "Session mover · not an entry",
           phase: "session activity",
           price: priceFor(r.symbol),
           changePct: r.gap,
           alignment: null,
           rankScore: r.rank,
           source: "desk",
+          setupTier: "mover",
           lastEvaluatedAt:
             (r.lane === "day" ? dayDesk?.generated_at : swingDesk?.generated_at)?.trim() || null
         } satisfies FeedCard,
@@ -333,6 +334,7 @@ export function QuietFeed({
           alignment: aligned != null ? { aligned, total: LAYER_TOTAL } : null,
           rankScore: leader?.rank_score ?? mover?.rank_score ?? 0,
           source: "desk",
+          setupTier: "setup",
           lastEvaluatedAt: swingDesk?.generated_at?.trim() || null
         } satisfies FeedCard,
         note

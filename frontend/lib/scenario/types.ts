@@ -83,6 +83,8 @@ export interface ReferenceLevels {
   stop_provenance?: string | null;
   /** How the API derived reference target (display only). */
   target_provenance?: string | null;
+  /** Machine-readable T2 provenance for gate checks (`2r_extension`, `t1_bump`, `resistance`). */
+  target_2_provenance?: string | null;
 }
 
 /**

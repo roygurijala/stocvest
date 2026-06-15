@@ -26,6 +26,7 @@ describe("buildFeedCards", () => {
     expect(dayCards.length).toBeGreaterThan(0);
     expect(dayCards.some((c) => c.symbol === "ASTN")).toBe(true);
     expect(dayCards.every((c) => c.state === "potential")).toBe(true);
+    expect(dayCards.every((c) => c.setupTier === "mover")).toBe(true);
   });
 
   test("prefers day desk discovery over swing movers fallback", () => {
@@ -53,6 +54,7 @@ describe("buildFeedCards", () => {
     });
     const nvda = cards.find((c) => c.lane === "day" && c.symbol === "NVDA");
     expect(nvda?.state).toBe("actionable");
+    expect(nvda?.setupTier).toBe("setup");
     expect(cards.filter((c) => c.lane === "day" && c.symbol === "ASTN")).toHaveLength(0);
   });
 
@@ -121,5 +123,31 @@ describe("buildFeedCards", () => {
     });
     const astn = cards.find((c) => c.symbol === "ASTN");
     expect(astn?.state).toBe("cooling");
+    expect(astn?.setupTier).toBe("setup");
+  });
+
+  test("scanner setup promotes mover to setup tier on same symbol", () => {
+    const cards = buildFeedCards({
+      mode: "swing",
+      swingDesk: {
+        movers_radar: [{ symbol: "ASTN", gap_percent: 27.7, direction: "up", rank_score: 88 }]
+      },
+      dayDesk: null,
+      swingSetups: [
+        {
+          symbol: "ASTN",
+          direction: "up",
+          score: 72,
+          qualification_tier: "qualifying",
+          alignment: { aligned: 5, total: 6, label: "5/6 aligned" }
+        }
+      ],
+      daySetups: [],
+      snapshotsBySymbol: new Map(),
+      dayTradingSurfaces: true
+    });
+    const astn = cards.find((c) => c.symbol === "ASTN" && c.lane === "swing");
+    expect(astn?.setupTier).toBe("setup");
+    expect(astn?.source).toBe("scanner");
   });
 });

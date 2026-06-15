@@ -16,6 +16,7 @@ from stocvest.data.models import Snapshot
 from stocvest.data.ticker_reference import TickerReference
 
 MIN_MARKET_CAP_USD = 500_000_000.0
+MIN_MARKET_CAP_HARD_FLOOR = 100_000_000.0
 MIN_AVG_VOLUME_OR_USD = 500_000.0
 MIN_STRICT_ADV_USD = 1_000_000.0
 MIN_TRADE_PRICE_SWING = 5.0
@@ -102,6 +103,11 @@ def _passes_market_cap_or_volume(
     cap = reference.market_cap if reference else None
     if cap is not None and cap >= MIN_MARKET_CAP_USD:
         return None
+    if cap is not None and cap < MIN_MARKET_CAP_HARD_FLOOR:
+        return (
+            f"market cap below ${int(MIN_MARKET_CAP_HARD_FLOOR / 1_000_000)}M hard minimum "
+            "(micro-cap names are excluded regardless of volume)"
+        )
     if prev_volume is not None and prev_volume >= MIN_AVG_VOLUME_OR_USD:
         return None
     if reference is None and strict_without_reference:
@@ -195,6 +201,7 @@ def universe_exclusion_reason(
         )
 
     min_price = MIN_TRADE_PRICE_SWING if mode == "swing" else MIN_TRADE_PRICE_SESSION
+    strict_adv = mode == "day"
 
     if snap is not None:
         snap_reason = snapshot_universe_exclusion_reason(
@@ -203,7 +210,7 @@ def universe_exclusion_reason(
             min_trade_price=min_price,
             recent_split_symbols=ctx.recent_split_symbols,
             frequent_reverse_split_symbols=ctx.frequent_reverse_split_symbols,
-            strict_adv=False,
+            strict_adv=strict_adv,
         )
         if snap_reason:
             return snap_reason
@@ -226,7 +233,7 @@ def universe_exclusion_reason(
     cap_or_vol = _passes_market_cap_or_volume(
         ref,
         prev_vol,
-        strict_without_reference=(mode == "swing"),
+        strict_without_reference=True,
     )
     if cap_or_vol:
         return cap_or_vol

@@ -237,9 +237,12 @@ export function ScenarioBuilderModal({
         entry,
         stop,
         target,
-        executionTiming: timingFlags
+        executionTiming: timingFlags,
+        target1: input.reference.target_1 ?? null,
+        target2: input.reference.target_2 ?? null,
+        target2Provenance: input.reference.target_2_provenance ?? null
       }),
-    [systemDecision, input.mode, direction, entry, stop, target, timingFlags]
+    [systemDecision, input.mode, direction, entry, stop, target, timingFlags, input.reference]
   );
 
   const applyPreset = (preset: ScenarioPresetId) => {

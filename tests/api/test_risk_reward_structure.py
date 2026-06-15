@@ -15,12 +15,12 @@ def test_round_risk_reward_display_does_not_floor_to_half() -> None:
 
 
 def test_structure_risk_reward_uses_t2_when_t1_tight() -> None:
-    # entry 100, stop ~97.8, t1=102 (tight), t2=2R extension ~104.4
+    # entry 100, stop ~97.8, t1=102 (tight), t2=2R extension ~104.4 — only when resistance-anchored
     stop = round(min(98, 99.5) * 0.998, 4)
     entry = 100.0
     t1 = 102.0
     t2 = entry + 2.0 * (entry - stop)
-    rr = structure_risk_reward_long(entry, t1, stop, t2)
+    rr = structure_risk_reward_long(entry, t1, stop, t2, "resistance")
     assert rr is not None
     assert rr > 1.0
     assert round_risk_reward_display(rr) != 0.5

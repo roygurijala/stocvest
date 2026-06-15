@@ -34,6 +34,7 @@ export function syntheticFeedCardForDeepLink(intent: DashboardTradingRoomDeepLin
     alignment: null,
     rankScore: 0,
     source: "desk",
+    setupTier: "setup",
     lastEvaluatedAt: null
   };
 }

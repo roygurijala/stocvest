@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from stocvest.api.services.analyst_target_levels import (
+    analyst_targets_from_ratings,
+    parse_perplexity_analyst_targets,
+)
 from stocvest.api.services.benzinga_feed_health import (
     benzinga_news_feed_degraded,
     qualifies_for_supplementary_news_context,
@@ -38,6 +42,14 @@ class PerplexityMacroEnrichment:
     macro_headlines: list[str] = field(default_factory=list)
     risk_factors: list[str] = field(default_factory=list)
     upcoming_events: list[str] = field(default_factory=list)
+    source: str = "perplexity_sonar"
+
+
+@dataclass(frozen=True)
+class PerplexityAnalystTargetEnrichment:
+    symbol: str
+    price_targets: list[float]
+    summary: str = ""
     source: str = "perplexity_sonar"
 
 
@@ -202,6 +214,79 @@ Max 4 items per list. Use empty arrays when none apply."""
         risk_factors=_normalize_str_list(data.get("risk_factors")),
         upcoming_events=_normalize_str_list(data.get("upcoming_events")),
     )
+
+
+async def fetch_analyst_target_enrichment(
+    symbol: str,
+    ticker_ref: TickerReference | None = None,
+    *,
+    current_price: float | None = None,
+) -> PerplexityAnalystTargetEnrichment | None:
+    """Supplementary analyst price targets when Benzinga standing ratings are empty."""
+    sym = symbol.strip().upper()
+    label = _company_label(sym, ticker_ref)
+    price_hint = ""
+    if current_price is not None and current_price > 0:
+        price_hint = f" Last trade near ${current_price:.2f}."
+    prompt = f"""You are a US equity research assistant.
+For {label},{price_hint} return recent sell-side analyst PRICE TARGETS (USD per share).
+
+Rules:
+- Only published analyst / bank price targets from the last 90 days.
+- Do not invent targets. If coverage is unknown or only qualitative, return empty arrays.
+- Include multiple firms when available.
+
+Return ONLY valid JSON:
+{{
+  "price_targets": [12.5, 15.0],
+  "price_target_avg": 13.75,
+  "price_target_high": 15.0,
+  "price_target_low": 12.5,
+  "summary": "one sentence on coverage recency"
+}}
+
+Use empty price_targets [] when none found."""
+    data = await perplexity_sonar_json(
+        prompt=prompt,
+        search_recency_filter="month",
+        cache_key=perplexity_cache_key("analyst_targets", sym),
+    )
+    if not data:
+        return None
+    targets = parse_perplexity_analyst_targets(data)
+    if not targets:
+        return None
+    summary = str(data.get("summary") or "").strip()
+    return PerplexityAnalystTargetEnrichment(
+        symbol=sym,
+        price_targets=targets,
+        summary=summary[:300],
+    )
+
+
+async def resolve_analyst_target_levels(
+    *,
+    symbol: str,
+    ticker_ref: TickerReference | None,
+    ratings: list,
+    current_price: float | None = None,
+) -> tuple[list[float], str]:
+    """
+    Benzinga standing ratings first; Perplexity Sonar when Benzinga has no numeric targets.
+    Returns (levels, source).
+    """
+    levels = analyst_targets_from_ratings(ratings)
+    if levels:
+        return levels, "benzinga"
+    enrich = await fetch_analyst_target_enrichment(symbol, ticker_ref, current_price=current_price)
+    if enrich and enrich.price_targets:
+        _LOG.info(
+            "perplexity_analyst_targets symbol=%s count=%s",
+            symbol,
+            len(enrich.price_targets),
+        )
+        return list(enrich.price_targets), "perplexity"
+    return [], "none"
 
 
 def apply_perplexity_news_enrichment(

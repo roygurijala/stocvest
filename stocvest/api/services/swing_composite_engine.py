@@ -49,6 +49,7 @@ from stocvest.api.services.swing_composite_evidence import (
     build_swing_composite_evidence_fields,
     serialize_daily_bars_for_range,
 )
+from stocvest.signals.structure_resistance_scanner import RESISTANCE_SCAN_LOOKBACK
 from stocvest.api.services.benzinga_feed_health import (
     apply_news_degraded_if_feed_failed,
     composite_layers_meta,
@@ -57,6 +58,7 @@ from stocvest.api.services.benzinga_feed_health import (
 from stocvest.api.services.symbol_perplexity_enrichment import (
     maybe_apply_perplexity_layers,
     perplexity_risk_factor_lines,
+    resolve_analyst_target_levels,
 )
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
@@ -661,6 +663,12 @@ async def build_swing_composite_response(
     _sw_et = datetime.now(ZoneInfo("America/New_York"))
     _sw_ipm, _sw_mob = vwap_session_flags_et(_sw_et)
     _market_env = build_market_environment_from_macro(mode="swing", macro=macro, vix_snap=vix_snap)
+    _analyst_levels, _analyst_source = await resolve_analyst_target_levels(
+        symbol=sym,
+        ticker_ref=ticker_ref,
+        ratings=list(getattr(bz_data, "ratings", None) or []),
+        current_price=last_px if last_px > 0 else None,
+    )
     payload_stub: dict[str, Any] = {
         "symbol": sym,
         "mode": "swing",
@@ -677,7 +685,9 @@ async def build_swing_composite_response(
         "vwap_session_is_pre_market": _sw_ipm,
         "vwap_session_market_open": _sw_mob,
         "intraday_bar_count": 0,
-        "daily_bars_range": serialize_daily_bars_for_range(daily_bars, limit=10),
+        "daily_bars_range": serialize_daily_bars_for_range(daily_bars, limit=RESISTANCE_SCAN_LOOKBACK),
+        "analyst_target_levels": _analyst_levels or None,
+        "analyst_target_source": _analyst_source,
     }
     if perplexity_headwinds:
         payload_stub["perplexity_headwinds"] = perplexity_headwinds

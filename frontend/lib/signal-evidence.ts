@@ -44,6 +44,12 @@ import {
   resolveStructuralStopAnchor
 } from "@/lib/scenario/reference-stop-resolve";
 import type { ScenarioDirection } from "@/lib/scenario/types";
+import {
+  dailyBarsFromComposite,
+  scanNearestResistanceAbove,
+  scanNearestSupportBelow,
+  type OhlcBar
+} from "@/lib/structure-resistance-scanner";
 
 // Wire-type contracts live in ./signal-evidence/wire-types and are re-exported
 // here so existing `@/lib/signal-evidence` type imports keep working.
@@ -1346,8 +1352,15 @@ function longSideGeometry(opts: {
   vwap: number | null;
   prevClose: number | null;
   last: number | null;
-}): { stop: number | null; target1: number | null; target2: number | null } {
-  const { dayLo, dayHi, vwap, prevClose, last } = opts;
+  dailyBars?: OhlcBar[];
+  analystTargetLevels?: number[];
+}): {
+  stop: number | null;
+  target1: number | null;
+  target2: number | null;
+  target2Provenance: "2r_extension" | "t1_bump" | "resistance" | null;
+} {
+  const { dayLo, dayHi, vwap, prevClose, last, dailyBars = [], analystTargetLevels = [] } = opts;
   let reference_stop: number | null = null;
   if (dayLo != null && dayLo > 0 && vwap != null && vwap > 0) {
     reference_stop = roundPrice4(Math.min(dayLo, vwap) * 0.998);
@@ -1369,17 +1382,37 @@ function longSideGeometry(opts: {
   }
 
   let reference_target_2: number | null = null;
+  let target2Provenance: "2r_extension" | "t1_bump" | "resistance" | null = null;
   const entryGuess = last != null && last > 0 ? last : null;
-  if (reference_target_1 != null && reference_stop != null && entryGuess != null && entryGuess > reference_stop) {
+  if (dailyBars.length && entryGuess != null && reference_target_1 != null) {
+    const structuralT2 = scanNearestResistanceAbove(dailyBars, {
+      last: entryGuess,
+      floorAbove: reference_target_1,
+      extraLevels: analystTargetLevels
+    });
+    if (structuralT2 != null) {
+      reference_target_2 = structuralT2;
+      target2Provenance = "resistance";
+    }
+  }
+  if (
+    reference_target_2 == null &&
+    reference_target_1 != null &&
+    reference_stop != null &&
+    entryGuess != null &&
+    entryGuess > reference_stop
+  ) {
     const t2R = entryGuess + 2.0 * (entryGuess - reference_stop);
     if (t2R > reference_target_1 + 1e-6) {
       reference_target_2 = roundPrice4(t2R);
+      target2Provenance = "2r_extension";
     }
   }
   if (reference_target_2 == null && reference_target_1 != null && last != null && last > 0) {
     reference_target_2 = roundPrice4(reference_target_1 * 1.004);
+    target2Provenance = "t1_bump";
   }
-  return { stop: reference_stop, target1: reference_target_1, target2: reference_target_2 };
+  return { stop: reference_stop, target1: reference_target_1, target2: reference_target_2, target2Provenance };
 }
 
 function shortSideGeometry(opts: {
@@ -1388,8 +1421,14 @@ function shortSideGeometry(opts: {
   vwap: number | null;
   prevClose: number | null;
   last: number | null;
-}): { stop: number | null; target1: number | null; target2: number | null } {
-  const { dayLo, dayHi, vwap, prevClose, last } = opts;
+  dailyBars?: OhlcBar[];
+}): {
+  stop: number | null;
+  target1: number | null;
+  target2: number | null;
+  target2Provenance: "2r_extension" | "t1_bump" | "resistance" | null;
+} {
+  const { dayLo, dayHi, vwap, prevClose, last, dailyBars = [] } = opts;
   let reference_stop: number | null = null;
   if (dayHi != null && dayHi > 0 && vwap != null && vwap > 0) {
     reference_stop = roundPrice4(Math.max(dayHi, vwap) * 1.002);
@@ -1411,17 +1450,36 @@ function shortSideGeometry(opts: {
   }
 
   let reference_target_2: number | null = null;
+  let target2Provenance: "2r_extension" | "t1_bump" | "resistance" | null = null;
   const entryGuess = last != null && last > 0 ? last : null;
-  if (reference_target_1 != null && reference_stop != null && entryGuess != null && reference_stop > entryGuess) {
+  if (dailyBars.length && entryGuess != null && reference_target_1 != null) {
+    const structuralT2 = scanNearestSupportBelow(dailyBars, {
+      last: entryGuess,
+      ceilingBelow: reference_target_1
+    });
+    if (structuralT2 != null) {
+      reference_target_2 = structuralT2;
+      target2Provenance = "resistance";
+    }
+  }
+  if (
+    reference_target_2 == null &&
+    reference_target_1 != null &&
+    reference_stop != null &&
+    entryGuess != null &&
+    reference_stop > entryGuess
+  ) {
     const t2R = entryGuess - 2.0 * (reference_stop - entryGuess);
     if (t2R < reference_target_1 - 1e-6) {
       reference_target_2 = roundPrice4(t2R);
+      target2Provenance = "2r_extension";
     }
   }
   if (reference_target_2 == null && reference_target_1 != null && last != null && last > 0) {
     reference_target_2 = roundPrice4(reference_target_1 * 0.996);
+    target2Provenance = "t1_bump";
   }
-  return { stop: reference_stop, target1: reference_target_1, target2: reference_target_2 };
+  return { stop: reference_stop, target1: reference_target_1, target2: reference_target_2, target2Provenance };
 }
 
 function useLongRrStructure(
@@ -1468,6 +1526,8 @@ export interface SessionReferenceLevelsInput {
   tradingMode?: "day" | "swing" | null;
   swingLow?: number | null;
   swingHigh?: number | null;
+  dailyBars?: OhlcBar[];
+  analystTargetLevels?: number[];
 }
 
 /**
@@ -1498,8 +1558,16 @@ export function referenceLevelsFromSessionStructure(
   const useLong = useLongRrStructure(input.direction, dayLo, dayHi, last);
   const scenarioDir: ScenarioDirection = useLong ? "bullish" : "bearish";
   const g = useLong
-    ? longSideGeometry({ dayLo, dayHi, vwap, prevClose, last })
-    : shortSideGeometry({ dayLo, dayHi, vwap, prevClose, last });
+    ? longSideGeometry({
+        dayLo,
+        dayHi,
+        vwap,
+        prevClose,
+        last,
+        dailyBars: input.dailyBars,
+        analystTargetLevels: input.analystTargetLevels
+      })
+    : shortSideGeometry({ dayLo, dayHi, vwap, prevClose, last, dailyBars: input.dailyBars });
 
   const structural = resolveStructuralStopAnchor({
     direction: scenarioDir,
@@ -1558,6 +1626,18 @@ export function referenceLevelsFromSessionStructure(
   };
 }
 
+export function analystLevelsFromComposite(comp: Record<string, unknown> | null | undefined): number[] | undefined {
+  if (!comp) return undefined;
+  const raw = comp.analyst_target_levels;
+  if (!Array.isArray(raw)) return undefined;
+  const out: number[] = [];
+  for (const row of raw) {
+    const pt = numOrNull(row);
+    if (pt != null && pt > 0) out.push(pt);
+  }
+  return out.length ? out : undefined;
+}
+
 export function parseSwingCompositeInsight(body: Record<string, unknown>): SignalEvidenceInsight | null {
   const signal_score = compositeSignalScoreFromBody(body);
   if (signal_score == null) return null;
@@ -1610,10 +1690,29 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     typeof body.reference_target_provenance === "string" && body.reference_target_provenance.trim()
       ? body.reference_target_provenance.trim()
       : null;
+  const reference_target_2_provenance =
+    typeof body.reference_target_2_provenance === "string" && body.reference_target_2_provenance.trim()
+      ? body.reference_target_2_provenance.trim()
+      : null;
   const vwapRaw = numOrNull(body.vwap ?? body.day_vwap);
   const vwap_state_parsed = String(body.vwap_state ?? "").trim() || undefined;
   const vwap_display_parsed = String(body.vwap_display ?? "").trim() || undefined;
   const vwap_tooltip_parsed = String(body.vwap_tooltip ?? "").trim() || undefined;
+  const analystTargetLevelsRaw = body.analyst_target_levels;
+  const analyst_target_levels: number[] = [];
+  if (Array.isArray(analystTargetLevelsRaw)) {
+    for (const row of analystTargetLevelsRaw) {
+      const pt = numOrNull(row);
+      if (pt != null && pt > 0) analyst_target_levels.push(pt);
+    }
+  }
+  const analystSourceRaw = String(body.analyst_target_source ?? "").trim().toLowerCase();
+  const analyst_target_source =
+    analystSourceRaw === "benzinga" || analystSourceRaw === "perplexity" || analystSourceRaw === "none"
+      ? analystSourceRaw
+      : analyst_target_levels.length
+        ? "benzinga"
+        : "none";
   return {
     signal_score,
     trend_strength,
@@ -1633,6 +1732,7 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     swing_range_zone,
     reference_target_1: numOrNull(body.reference_target_1),
     reference_target_2: numOrNull(body.reference_target_2),
+    reference_target_2_provenance,
     reference_stop_level: numOrNull(body.reference_stop_level),
     reference_stop_provenance,
     reference_target_provenance,
@@ -1644,7 +1744,9 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     is_complete: body.is_complete === false ? false : true,
     missing_fields: Array.isArray(body.missing_fields) ? body.missing_fields.map((x) => String(x)) : [],
     alignment_ratio: numOrNull(body.alignment_ratio) ?? undefined,
-    conflicted_layers: Array.isArray(body.conflicted_layers) ? body.conflicted_layers.map((x) => String(x)) : []
+    conflicted_layers: Array.isArray(body.conflicted_layers) ? body.conflicted_layers.map((x) => String(x)) : [],
+    analyst_target_levels: analyst_target_levels.length ? analyst_target_levels : undefined,
+    analyst_target_source
   };
 }
 

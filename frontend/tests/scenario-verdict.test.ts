@@ -73,6 +73,22 @@ describe("resolveScenarioVerdict — strict gates", () => {
     });
     expect(v.tone).toBe("red");
     expect(v.clearsDeskRr).toBe(false);
-    expect(v.blockers.some((b) => /risk\/reward/i.test(b))).toBe(false);
+  });
+
+  test("red when actionable but scenario uses unanchored T2 to fake desk R/R", () => {
+    const v = resolveScenarioVerdict({
+      systemDecision: decision({ state: "actionable", reinforcements: [] }),
+      mode: "swing",
+      direction: "bullish",
+      entry: 9.44,
+      stop: 2.86,
+      target: 22.7,
+      target1: 11.4,
+      target2: 22.7,
+      target2Provenance: "2r_extension"
+    });
+    expect(v.tone).not.toBe("green");
+    expect(v.clearsDeskRr).toBe(false);
+    expect(v.detail).toMatch(/unanchored/i);
   });
 });

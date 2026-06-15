@@ -108,6 +108,7 @@ function cardFromWatchlist(
     alignment: aligned != null ? { aligned, total } : null,
     rankScore: aligned ?? 0,
     source: "desk",
+    setupTier: "setup",
     lastEvaluatedAt: r.last_evaluated_at?.trim() || null
   };
 }

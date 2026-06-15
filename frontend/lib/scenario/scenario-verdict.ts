@@ -10,6 +10,11 @@ import type { ScenarioMode } from "@/lib/scenario/types";
 import { scenarioGeometryError } from "@/lib/scenario/scenario-geometry";
 import { remainingBlockersAfterScenarioRr } from "@/lib/scenario/scenario-variants";
 import {
+  evaluateScenarioDeskGate,
+  parseTarget2Provenance,
+  type Target2Provenance
+} from "@/lib/target-provenance";
+import {
   hasWeakExecutionTiming,
   weakExecutionTimingDetail,
   type ScenarioExecutionTiming
@@ -59,6 +64,9 @@ export function resolveScenarioVerdict(args: {
   stop: number;
   target: number;
   executionTiming?: ScenarioExecutionTiming;
+  target1?: number | null;
+  target2?: number | null;
+  target2Provenance?: Target2Provenance | string | null;
 }): ScenarioVerdict {
   const deskMinRr = minRiskRewardForVerdict(args.mode);
   const geometryError = scenarioGeometryError(
@@ -80,8 +88,23 @@ export function resolveScenarioVerdict(args: {
   }
 
   const scenarioRr = rrFromLevels(args.entry, args.stop, args.target, args.direction);
+  const gateEval =
+    args.target1 != null || args.target2 != null
+      ? evaluateScenarioDeskGate({
+          direction: args.direction,
+          entry: args.entry,
+          stop: args.stop,
+          target: args.target,
+          target1: args.target1 ?? null,
+          target2: args.target2 ?? null,
+          target2Provenance: parseTarget2Provenance(args.target2Provenance),
+          deskMinRr: deskMinRr
+        })
+      : null;
   const clearsDeskRr =
-    scenarioRr != null && scenarioClearsDeskRrGate(scenarioRr, args.mode);
+    gateEval != null
+      ? gateEval.clearsDeskRr
+      : scenarioRr != null && scenarioClearsDeskRrGate(scenarioRr, args.mode);
   const blockers = remainingBlockersAfterScenarioRr(args.systemDecision, clearsDeskRr);
   const weakTiming = hasWeakExecutionTiming(args.executionTiming, args.systemDecision);
   const timingDetail = weakExecutionTimingDetail(args.executionTiming, args.systemDecision);
@@ -125,7 +148,9 @@ export function resolveScenarioVerdict(args: {
     scenarioRr != null
       ? clearsDeskRr
         ? `Scenario R/R is ${scenarioRr.toFixed(1)} : 1 (meets ${deskMinRr.toFixed(1)} : 1 desk minimum).`
-        : `Scenario R/R is ${scenarioRr.toFixed(1)} : 1 — below ${deskMinRr.toFixed(1)} : 1 desk minimum.`
+        : gateEval?.gateBlockReason
+          ? gateEval.gateBlockReason
+          : `Scenario R/R is ${scenarioRr.toFixed(1)} : 1 — below ${deskMinRr.toFixed(1)} : 1 desk minimum.`
       : "Enter valid entry, stop, and target to compute scenario R/R.";
 
   const nonRrBlockers = mergedBlockers.filter((line) => !/risk\s*\/?\s*reward|r\/r/i.test(line));

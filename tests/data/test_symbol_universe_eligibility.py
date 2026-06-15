@@ -127,6 +127,93 @@ def test_known_ipo_ticker_blocked_without_reference() -> None:
     assert "unverified" in reason.lower() or "90 days" in reason
 
 
+def test_ubxg_like_micro_cap_blocked_despite_high_volume() -> None:
+    """$28M cap + 2M ADV must fail — volume cannot substitute below $100M hard floor."""
+    ref = TickerReference(
+        symbol="UBXG",
+        active=True,
+        market_cap=28_900_000.0,
+        security_type="CS",
+        locale="us",
+        country_code="US",
+        primary_exchange="XNAS",
+        list_date=date.today() - timedelta(days=400),
+        name="U-BX Technology",
+    )
+    snap = _snap("UBXG", last=9.44, prev_vol=2_000_000.0)
+    reason = universe_exclusion_reason(
+        "UBXG",
+        UniverseEligibilityContext(snapshot=snap, reference=ref),
+        mode="day",
+    )
+    assert reason is not None
+    assert "100M" in reason or "hard minimum" in reason
+
+
+def test_mid_cap_volume_substitute_still_passes_between_hard_and_desk_floor() -> None:
+    ref = TickerReference(
+        symbol="MID",
+        active=True,
+        market_cap=250_000_000.0,
+        security_type="CS",
+        locale="us",
+        country_code="US",
+        primary_exchange="XNAS",
+        list_date=date.today() - timedelta(days=400),
+        name="Mid Cap Co",
+    )
+    snap = _snap("MID", prev_vol=1_500_000.0)
+    reason = universe_exclusion_reason(
+        "MID",
+        UniverseEligibilityContext(snapshot=snap, reference=ref),
+        mode="day",
+    )
+    assert reason is None
+
+
+def test_day_composite_strict_adv_blocks_sub_1m_prev_volume() -> None:
+    ref = TickerReference(
+        symbol="THIN",
+        active=True,
+        market_cap=2_000_000_000.0,
+        security_type="CS",
+        locale="us",
+        country_code="US",
+        primary_exchange="XNAS",
+        list_date=date.today() - timedelta(days=400),
+        name="Thin Liquidity Co",
+    )
+    snap = _snap("THIN", prev_vol=600_000.0)
+    reason = universe_exclusion_reason(
+        "THIN",
+        UniverseEligibilityContext(snapshot=snap, reference=ref),
+        mode="day",
+    )
+    assert reason is not None
+    assert "1M" in reason
+
+
+def test_swing_mid_cap_volume_substitute_with_500k_adv() -> None:
+    ref = TickerReference(
+        symbol="MID",
+        active=True,
+        market_cap=250_000_000.0,
+        security_type="CS",
+        locale="us",
+        country_code="US",
+        primary_exchange="XNAS",
+        list_date=date.today() - timedelta(days=400),
+        name="Mid Cap Co",
+    )
+    snap = _snap("MID", prev_vol=800_000.0)
+    reason = universe_exclusion_reason(
+        "MID",
+        UniverseEligibilityContext(snapshot=snap, reference=ref),
+        mode="swing",
+    )
+    assert reason is None
+
+
 def test_micro_cap_chinese_adr_blocked_by_reference() -> None:
     ref = TickerReference(
         symbol="ADR1",
@@ -147,3 +234,24 @@ def test_micro_cap_chinese_adr_blocked_by_reference() -> None:
     )
     assert reason is not None
     assert "ADR" in reason or "market cap" in reason.lower()
+
+
+def test_day_mode_strict_without_reference_blocks_low_volume_without_ref() -> None:
+    snap = _snap("NOREF", prev_vol=600_000.0)
+    reason = universe_exclusion_reason(
+        "NOREF",
+        UniverseEligibilityContext(snapshot=snap, reference=None),
+        mode="day",
+    )
+    assert reason is not None
+    assert "1M" in reason
+
+
+def test_day_mode_strict_without_reference_passes_high_volume_without_ref() -> None:
+    snap = _snap("NOREF", prev_vol=1_500_000.0)
+    reason = universe_exclusion_reason(
+        "NOREF",
+        UniverseEligibilityContext(snapshot=snap, reference=None),
+        mode="day",
+    )
+    assert reason is None

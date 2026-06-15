@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from stocvest.api.services.analyst_target_levels import analyst_targets_from_payload
 from stocvest.api.services.risk_reward_structure import (
     round_risk_reward_display,
     structure_risk_reward_long,
@@ -28,6 +29,10 @@ from stocvest.api.services.reference_stop_policy import (
     resolve_structural_stop_anchor,
 )
 from stocvest.signals.vwap_state import VWAP_STATE_TOOLTIP, VWAPState, build_vwap_chip, resolve_vwap_state
+from stocvest.signals.structure_resistance_scanner import (
+    scan_nearest_resistance_above,
+    scan_nearest_support_below,
+)
 
 
 def _float_or_none(v: Any) -> float | None:
@@ -215,10 +220,13 @@ def _long_target_provenance_label(
     day_hi: float | None,
     last: float | None,
     reference_target_2: float | None,
+    target_2_provenance: str | None = None,
 ) -> str:
     if day_hi is not None and day_hi > 0:
         if reference_target_2 is not None:
-            return "Session high (T1) + 2R extension (T2)"
+            if target_2_provenance == "resistance":
+                return "Session high (T1) + structural resistance (T2)"
+            return "Session high (T1) + 2R projection (T2 — unanchored)"
         return "Session high — primary target"
     if last is not None and last > 0:
         return "Percent extension from last — fallback"
@@ -251,10 +259,13 @@ def _short_target_provenance_label(
     day_lo: float | None,
     last: float | None,
     reference_target_2: float | None,
+    target_2_provenance: str | None = None,
 ) -> str:
     if day_lo is not None and day_lo > 0:
         if reference_target_2 is not None:
-            return "Session low (T1) + 2R extension (T2)"
+            if target_2_provenance == "resistance":
+                return "Session low (T1) + structural support (T2)"
+            return "Session low (T1) + 2R projection (T2 — unanchored)"
         return "Session low — primary target"
     if last is not None and last > 0:
         return "Percent extension from last — fallback"
@@ -300,9 +311,12 @@ def _effective_rr_target(
     target_1: float,
     target_2: float | None,
     is_long: bool,
+    target_2_provenance: str | None = None,
 ) -> float:
     """The target the trade plans to — mirrors ``structure_risk_reward_*``: prefer
-    T1, but use T2 when T1's R/R is sub-1:1 and T2 improves it."""
+    T1; only plan to unanchored T2 when T1 R/R is already >= 1:1."""
+    from stocvest.api.services.target_provenance import target_2_eligible_for_gate
+
     def _rr(t: float) -> float | None:
         risk = (entry - stop) if is_long else (stop - entry)
         reward = (t - entry) if is_long else (entry - t)
@@ -311,6 +325,8 @@ def _effective_rr_target(
         return reward / risk
 
     if target_2 is None:
+        return target_1
+    if not target_2_eligible_for_gate(target_2_provenance):
         return target_1
     rr1 = _rr(target_1)
     rr2 = _rr(target_2)
@@ -321,6 +337,21 @@ def _effective_rr_target(
     if rr1 < 1.0 and rr2 > rr1:
         return target_2
     return target_1
+
+
+def _daily_bars_from_payload(payload: dict[str, Any]) -> list[dict[str, float]]:
+    raw = payload.get("daily_bars_range")
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, float]] = []
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        lo = _float_or_none(row.get("low"))
+        hi = _float_or_none(row.get("high"))
+        if lo is not None and hi is not None and hi >= lo:
+            out.append({"low": lo, "high": hi})
+    return out
 
 
 def _long_side_geometry(
@@ -337,7 +368,9 @@ def _long_side_geometry(
     swing_hi: float | None = None,
     zone_lo: float | None = None,
     zone_hi: float | None = None,
-) -> tuple[float | None, float | None, float | None, bool]:
+    daily_bars: list[dict[str, float]] | None = None,
+    analyst_target_levels: list[float] | None = None,
+) -> tuple[float | None, float | None, float | None, bool, str | None]:
     """
     Bullish reference levels anchored to session structure (not fixed % off day low).
 
@@ -376,16 +409,29 @@ def _long_side_geometry(
         reference_target_1 = round(float(last) * 1.012, 4)
 
     reference_target_2: float | None = None
-    if reference_target_1 is not None and reference_stop is not None:
-        entry_guess = last if (last is not None and last > 0) else None
+    target_2_provenance: str | None = None
+    entry_guess = last if (last is not None and last > 0) else None
+    if daily_bars and entry_guess is not None and reference_target_1 is not None:
+        structural_t2 = scan_nearest_resistance_above(
+            daily_bars,
+            last=entry_guess,
+            floor_above=reference_target_1,
+            extra_levels=analyst_target_levels,
+        )
+        if structural_t2 is not None:
+            reference_target_2 = structural_t2
+            target_2_provenance = "resistance"
+    if reference_target_2 is None and reference_target_1 is not None and reference_stop is not None:
         if entry_guess is not None and entry_guess > reference_stop:
             t2_r = entry_guess + 2.0 * (entry_guess - reference_stop)
             if t2_r > reference_target_1 + 1e-6:
                 reference_target_2 = round(t2_r, 4)
+                target_2_provenance = "2r_extension"
     if reference_target_2 is None and reference_target_1 is not None and last is not None and last > 0:
         reference_target_2 = round(float(reference_target_1) * 1.004, 4)
+        target_2_provenance = "t1_bump"
 
-    return reference_stop, reference_target_1, reference_target_2, used_atr_floor
+    return reference_stop, reference_target_1, reference_target_2, used_atr_floor, target_2_provenance
 
 
 def _short_side_geometry(
@@ -400,7 +446,8 @@ def _short_side_geometry(
     trading_mode: str = "swing",
     swing_lo: float | None = None,
     swing_hi: float | None = None,
-) -> tuple[float | None, float | None, float | None, bool]:
+    daily_bars: list[dict[str, float]] | None = None,
+) -> tuple[float | None, float | None, float | None, bool, str | None]:
     """Bearish reference levels: stop above session/VWAP ceiling; target at session low."""
     structural = resolve_structural_stop_anchor(
         direction="bearish",
@@ -432,16 +479,28 @@ def _short_side_geometry(
         reference_target_1 = round(float(last) * 0.988, 4)
 
     reference_target_2: float | None = None
-    if reference_target_1 is not None and reference_stop is not None:
-        entry_guess = last if (last is not None and last > 0) else None
+    target_2_provenance: str | None = None
+    entry_guess = last if (last is not None and last > 0) else None
+    if daily_bars and entry_guess is not None and reference_target_1 is not None:
+        structural_t2 = scan_nearest_support_below(
+            daily_bars,
+            last=entry_guess,
+            ceiling_below=reference_target_1,
+        )
+        if structural_t2 is not None:
+            reference_target_2 = structural_t2
+            target_2_provenance = "resistance"
+    if reference_target_2 is None and reference_target_1 is not None and reference_stop is not None:
         if entry_guess is not None and reference_stop > entry_guess:
             t2_r = entry_guess - 2.0 * (reference_stop - entry_guess)
             if t2_r < reference_target_1 - 1e-6:
                 reference_target_2 = round(t2_r, 4)
+                target_2_provenance = "2r_extension"
     if reference_target_2 is None and reference_target_1 is not None and last is not None and last > 0:
         reference_target_2 = round(float(reference_target_1) * 0.996, 4)
+        target_2_provenance = "t1_bump"
 
-    return reference_stop, reference_target_1, reference_target_2, used_atr_floor
+    return reference_stop, reference_target_1, reference_target_2, used_atr_floor, target_2_provenance
 
 
 def _use_long_rr_structure(verdict: CompositeVerdict, day_lo: float | None, day_hi: float | None, last: float | None) -> bool:
@@ -560,12 +619,14 @@ def build_swing_composite_evidence_fields(
     swing_range_zone = _swing_range_from_payload(payload)
     swing_lo = float(swing_range_zone["low"]) if swing_range_zone else None
     swing_hi = float(swing_range_zone["high"]) if swing_range_zone else None
+    daily_bars = _daily_bars_from_payload(payload)
     atr = _payload_atr(payload)
     trading_mode = _trading_mode_from_payload(payload)
+    analyst_target_levels = analyst_targets_from_payload(payload)
 
     use_long = _use_long_rr_structure(composite.verdict, day_lo, day_hi, last)
     if use_long:
-        reference_stop_level, reference_target_1, reference_target_2, used_atr_floor = _long_side_geometry(
+        reference_stop_level, reference_target_1, reference_target_2, used_atr_floor, target_2_provenance = _long_side_geometry(
             day_lo=day_lo,
             day_hi=day_hi,
             vwap=vwap,
@@ -578,6 +639,8 @@ def build_swing_composite_evidence_fields(
             swing_hi=swing_hi,
             zone_lo=zone_lo,
             zone_hi=zone_hi,
+            daily_bars=daily_bars,
+            analyst_target_levels=analyst_target_levels or None,
         )
         reference_stop_provenance = format_merged_stop_provenance(
             _long_stop_provenance_label(
@@ -594,9 +657,10 @@ def build_swing_composite_evidence_fields(
             day_hi=day_hi,
             last=last,
             reference_target_2=reference_target_2,
+            target_2_provenance=target_2_provenance,
         )
     else:
-        reference_stop_level, reference_target_1, reference_target_2, used_atr_floor = _short_side_geometry(
+        reference_stop_level, reference_target_1, reference_target_2, used_atr_floor, target_2_provenance = _short_side_geometry(
             day_lo=day_lo,
             day_hi=day_hi,
             vwap=vwap,
@@ -607,6 +671,7 @@ def build_swing_composite_evidence_fields(
             trading_mode=trading_mode,
             swing_lo=swing_lo,
             swing_hi=swing_hi,
+            daily_bars=daily_bars,
         )
         reference_stop_provenance = format_merged_stop_provenance(
             _short_stop_provenance_label(
@@ -623,6 +688,7 @@ def build_swing_composite_evidence_fields(
             day_lo=day_lo,
             last=last,
             reference_target_2=reference_target_2,
+            target_2_provenance=target_2_provenance,
         )
 
     env_raw = payload.get("market_environment")
@@ -631,6 +697,7 @@ def build_swing_composite_evidence_fields(
     reference_target_2_suppressed = False
     if suppress_reference_target_2(target_policy) and reference_target_2 is not None:
         reference_target_2 = None
+        target_2_provenance = None
         reference_target_2_suppressed = True
         suffix = " · T2 suppressed — elevated VIX environment (plan to T1)"
         reference_target_provenance = (
@@ -658,6 +725,7 @@ def build_swing_composite_evidence_fields(
                 reference_target_1,
                 reference_stop_level,
                 reference_target_2,
+                target_2_provenance,
             )
         else:
             rr_from_structure = structure_risk_reward_short(
@@ -665,6 +733,7 @@ def build_swing_composite_evidence_fields(
                 reference_target_1,
                 reference_stop_level,
                 reference_target_2,
+                target_2_provenance,
             )
 
     if rr_from_structure is not None:
@@ -714,6 +783,7 @@ def build_swing_composite_evidence_fields(
             target_1=reference_target_1,
             target_2=reference_target_2,
             is_long=use_long,
+            target_2_provenance=target_2_provenance,
         )
         ez = resolve_entry_zone(
             direction="long" if use_long else "short",
@@ -926,11 +996,14 @@ def build_swing_composite_evidence_fields(
         "swing_range_zone": swing_range_zone,
         "reference_target_1": reference_target_1,
         "reference_target_2": reference_target_2,
+        "reference_target_2_provenance": target_2_provenance,
         "reference_stop_level": reference_stop_level,
         "reference_stop_provenance": reference_stop_provenance,
         "reference_target_provenance": reference_target_provenance,
         "reference_target_2_suppressed": reference_target_2_suppressed,
         "min_rr_desk": min_rr,
+        "analyst_target_levels": analyst_target_levels or None,
+        "analyst_target_source": str(payload.get("analyst_target_source") or "none"),
         "alignment_ratio": round(float(composite.alignment_ratio), 4),
         "conflicted_layers": list(composite.conflicted_layers or []),
         "vwap_state": vs.value,

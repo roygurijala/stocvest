@@ -40,6 +40,7 @@ from stocvest.api.services.swing_composite_evidence import (
     build_swing_composite_evidence_fields,
     serialize_daily_bars_for_range,
 )
+from stocvest.signals.structure_resistance_scanner import RESISTANCE_SCAN_LOOKBACK
 from stocvest.api.services.benzinga_feed_health import (
     apply_news_degraded_if_feed_failed,
     composite_layers_meta,
@@ -48,6 +49,7 @@ from stocvest.api.services.benzinga_feed_health import (
 from stocvest.api.services.symbol_perplexity_enrichment import (
     maybe_apply_perplexity_layers,
     perplexity_risk_factor_lines,
+    resolve_analyst_target_levels,
 )
 from stocvest.api.services.symbol_news_fetch import (
     enrich_article_ticker_metadata,
@@ -281,6 +283,8 @@ class RealCompositeEnginePhase:
     market_context_dampening: dict[str, Any] | None = None
     perplexity_headwinds: tuple[str, ...] = ()
     benzinga_feed_health: dict[str, str] | None = None
+    analyst_target_levels: tuple[float, ...] = ()
+    analyst_target_source: str = "none"
 
 
 async def run_real_composite_engine_phase(
@@ -546,6 +550,13 @@ async def run_real_composite_engine_phase(
         bearish_threshold=float(day_composite.bearish_threshold),
     )
 
+    _analyst_levels, _analyst_source = await resolve_analyst_target_levels(
+        symbol=sym,
+        ticker_ref=ticker_ref,
+        ratings=list(getattr(bz_data, "ratings", None) or []),
+        current_price=_snapshot_mark_price(sym_snap),
+    )
+
     return RealCompositeEnginePhase(
         sym=sym,
         sym_snap=sym_snap,
@@ -569,6 +580,8 @@ async def run_real_composite_engine_phase(
         market_context_dampening=damp_meta,
         perplexity_headwinds=tuple(perplexity_headwinds),
         benzinga_feed_health=bz_data.feed_health.as_dict(),
+        analyst_target_levels=tuple(_analyst_levels),
+        analyst_target_source=_analyst_source,
     )
 
 
@@ -830,7 +843,9 @@ async def build_real_composite_response(
         "intraday_bars": [
             {"high": b.high, "low": b.low, "close": b.close, "volume": b.volume} for b in bars
         ],
-        "daily_bars_range": serialize_daily_bars_for_range(daily_bars, limit=10),
+        "daily_bars_range": serialize_daily_bars_for_range(daily_bars, limit=RESISTANCE_SCAN_LOOKBACK),
+        "analyst_target_levels": list(phase.analyst_target_levels) or None,
+        "analyst_target_source": phase.analyst_target_source,
     }
     if phase.perplexity_headwinds:
         payload_stub["perplexity_headwinds"] = list(phase.perplexity_headwinds)

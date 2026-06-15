@@ -69,12 +69,17 @@ import { isExecutionStageEligibleForScenarioAdjust } from "@/lib/scenario/scenar
 import type { FeedBias, FeedCard, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import { parseLedgerGateSummary } from "@/lib/signal-evidence/ledger-gate-present";
 import { minRrForDeskMode, parseMarketEnvironment } from "@/lib/signal-evidence/market-environment-present";
+import { structureRiskRewardLong, structureRiskRewardShort } from "@/lib/risk-reward-structure";
+import { parseTarget2Provenance, target2ProvenanceLabel } from "@/lib/target-provenance";
 import {
   parseMarketContextDampening,
   parseMarketContextFlags
 } from "@/lib/signal-evidence/market-context-present";
 import { parseApiDecisionState } from "@/lib/signal-evidence/risk-stack-present";
 import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
+import { feedCardAllowsScenarioGeometry } from "@/lib/dashboard/trading-room/feed-setup-tier";
+import { SessionMoverContext } from "@/components/dashboard/trading-room/session-mover-context";
+import { useSymbolName } from "@/lib/hooks/use-symbol-names";
 
 type Colors = ReturnType<typeof useTheme>["colors"];
 type DeepDiveTab = "setup" | "layers" | "evolution" | "charts";
@@ -700,37 +705,7 @@ export function DeepDive({
     setActiveLane(card.lane);
   }, [card.symbol, card.lane]);
 
-  // Company name: use card data first, then companyBySymbol map, then fetch
-  // from the tickers-search endpoint as a last resort (covers desk-only cards
-  // where neither the scanner overview nor the snapshot carry a name).
-  const [resolvedCompany, setResolvedCompany] = useState<string | null>(
-    card.company ?? companyBySymbol?.get(card.symbol) ?? null
-  );
-  useEffect(() => {
-    const known = card.company ?? companyBySymbol?.get(card.symbol) ?? null;
-    if (known) {
-      setResolvedCompany(known);
-      return;
-    }
-    setResolvedCompany(null);
-    let cancelled = false;
-    fetch(`/api/stocvest/market/tickers-search?q=${encodeURIComponent(card.symbol)}`)
-      .then((r) => r.json())
-      .then((data: unknown) => {
-        if (cancelled) return;
-        const items: { symbol: string; name: string }[] = Array.isArray(
-          (data as Record<string, unknown>)?.items
-        )
-          ? (data as { items: { symbol: string; name: string }[] }).items
-          : [];
-        const match = items.find((i) => i.symbol === card.symbol);
-        if (match?.name) setResolvedCompany(match.name);
-      })
-      .catch(() => null);
-    return () => {
-      cancelled = true;
-    };
-  }, [card.symbol, card.company, companyBySymbol]);
+  const symbolName = useSymbolName(card.symbol);
 
   const [quoteSnapshot, setQuoteSnapshot] = useState<SnapshotPayload | null>(snapshot ?? null);
   useEffect(() => {
@@ -738,8 +713,17 @@ export function DeepDive({
   }, [snapshot, card.symbol]);
 
   useEffect(() => {
-    if (positivePrice(card.price) != null) return;
-    if (positivePrice(snapshot?.last_trade_price) != null || positivePrice(snapshot?.day_close) != null) return;
+    const hasPrice =
+      positivePrice(card.price) != null ||
+      positivePrice(snapshot?.last_trade_price) != null ||
+      positivePrice(snapshot?.day_close) != null;
+    const hasCompany = Boolean(
+      card.company?.trim() ||
+        companyBySymbol?.get(card.symbol.trim().toUpperCase())?.trim() ||
+        symbolName?.trim() ||
+        quoteSnapshot?.company_name?.trim()
+    );
+    if (hasPrice && hasCompany) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -758,7 +742,32 @@ export function DeepDive({
     return () => {
       cancelled = true;
     };
-  }, [card.symbol, card.price, snapshot]);
+  }, [card.symbol, card.price, card.company, snapshot, companyBySymbol, symbolName, quoteSnapshot?.company_name]);
+
+  const resolvedCompany = useMemo(() => {
+    const sym = card.symbol.trim().toUpperCase();
+    const pick = (...candidates: (string | null | undefined)[]) => {
+      for (const c of candidates) {
+        const t = c?.trim();
+        if (t) return t;
+      }
+      return null;
+    };
+    return pick(
+      card.company,
+      companyBySymbol?.get(sym),
+      symbolName,
+      quoteSnapshot?.company_name,
+      snapshot?.company_name
+    );
+  }, [
+    card.company,
+    card.symbol,
+    companyBySymbol,
+    symbolName,
+    quoteSnapshot?.company_name,
+    snapshot?.company_name
+  ]);
 
   // Derive per-lane state for the toggle — null means no card in the feed.
   const dayLaneCard = allCards.find((c) => c.symbol === card.symbol && c.lane === "day") ?? null;
@@ -804,6 +813,7 @@ export function DeepDive({
   const hasRenderableComposite =
     composite != null && !isNonRenderableCompositeResponse(composite);
   const isInsufficient = !hasRenderableComposite;
+  const allowsScenarioGeometry = feedCardAllowsScenarioGeometry(card);
 
   const unavailableMessage = useMemo(
     () =>
@@ -995,6 +1005,9 @@ export function DeepDive({
       (referenceLevels.support != null ? referenceLevels.support * 0.997 : price * (isLong ? 0.97 : 1.03));
     const t1 = signalOverlay?.target1 ?? referenceLevels.resistance ?? price * (isLong ? 1.025 : 0.975);
     const t2 = signalOverlay?.target2 ?? null;
+    const target2Provenance = parseTarget2Provenance(
+      isInsufficient ? null : (composite as Record<string, unknown>).reference_target_2_provenance
+    );
     const entryLow = signalOverlay?.entryZone?.low ?? price * 0.997;
     const entryHigh = signalOverlay?.entryZone?.high ?? price * 1.003;
 
@@ -1006,18 +1019,34 @@ export function DeepDive({
     };
     const rrT1 = rrFor(t1);
     const rrT2 = t2 != null ? rrFor(t2) : null;
+    const structureRr = isLong
+      ? structureRiskRewardLong(price, t1, stopPrice, t2, target2Provenance)
+      : structureRiskRewardShort(price, t1, stopPrice, t2, target2Provenance);
+
     let chosen = rrT1;
     let chosenLabel: "T1" | "T2" = "T1";
-    if (rrT2) {
-      if (!chosen) {
-        chosen = rrT2;
-        chosenLabel = "T2";
-      } else if (chosen.ratio < 1 && rrT2.ratio > chosen.ratio) {
-        chosen = rrT2;
-        chosenLabel = "T2";
-      }
+    if (structureRr != null && rrT2 && rrT1 && rrT1.ratio < 1 && target2Provenance === "resistance") {
+      chosen = rrT2;
+      chosenLabel = "T2";
+    } else if (structureRr != null && rrT1) {
+      chosen = rrT1;
+      chosenLabel = "T1";
+    } else if (structureRr == null && rrT1) {
+      chosen = rrT1;
+      chosenLabel = "T1";
+    } else if (rrT2) {
+      chosen = rrT2;
+      chosenLabel = "T2";
     }
     const targetPrice = chosen?.target ?? t1;
+    const gateFails =
+      structureRr == null &&
+      rrT1 != null &&
+      rrT1.ratio < 1 &&
+      t2 != null &&
+      target2Provenance != null &&
+      target2Provenance !== "resistance";
+    const t1TooClose = rrT1 != null && rrT1.ratio < 1;
     const c = (isInsufficient ? {} : composite) as Record<string, unknown>;
     const ezQuality =
       typeof c.entry_zone_quality === "string" ? (c.entry_zone_quality as string) : null;
@@ -1047,7 +1076,15 @@ export function DeepDive({
       worstCaseRr,
       vwap,
       atr,
-      displayRr: chosen?.ratio ?? null
+      displayRr: structureRr,
+      target2Provenance,
+      gateFails,
+      t1TooClose,
+      gateFailReason: gateFails
+        ? t1TooClose
+          ? `T1 too close to entry (${rrT1?.ratio.toFixed(1)}:1) — ${target2ProvenanceLabel(target2Provenance) ?? "extended target unanchored"}`
+          : (target2ProvenanceLabel(target2Provenance) ?? "Extended target — unanchored")
+        : null
     };
   }, [card.price, setupBias, signalOverlay, referenceLevels, composite, isInsufficient]);
 
@@ -1088,9 +1125,14 @@ export function DeepDive({
     });
   }, [activeLane, composite, isInsufficient, layerRows, pageDecision?.state]);
 
-  const brief = useMemo(
-    () =>
-      buildRichBrief({
+  const brief = useMemo(() => {
+    if (!allowsScenarioGeometry) {
+      return (
+        card.verdict?.trim() ||
+        "Session activity — not a vetted setup. Momentum and context only; scenario geometry requires passing desk quality gates."
+      );
+    }
+    return buildRichBrief({
         symbol: card.symbol,
         direction: displayDirection.direction,
         insight,
@@ -1104,23 +1146,23 @@ export function DeepDive({
         activeLane,
         deskMinRr,
         verdictFallback: card.verdict
-      }),
-    [
-      card.symbol,
-      card.verdict,
-      displayDirection.direction,
-      insight,
-      layerRows,
-      setupBias,
-      pageDecision?.state,
-      causalNarrative?.summary,
-      causalNarrative?.chainLabel,
-      setupJudgment,
-      currentRr,
-      activeLane,
-      deskMinRr
-    ]
-  );
+      });
+  }, [
+    allowsScenarioGeometry,
+    card.symbol,
+    card.verdict,
+    displayDirection.direction,
+    insight,
+    layerRows,
+    setupBias,
+    pageDecision?.state,
+    causalNarrative?.summary,
+    causalNarrative?.chainLabel,
+    setupJudgment,
+    currentRr,
+    activeLane,
+    deskMinRr
+  ]);
 
   const hasComposite = !isInsufficient;
   const verdictLabel = resolveDeepDiveVerdictLabel(card.state, apiDecisionState, hasComposite);
@@ -1386,7 +1428,7 @@ export function DeepDive({
         ) : null}
       </div>
 
-      {marketEnvironment && apiDecisionState ? (
+      {marketEnvironment && apiDecisionState && allowsScenarioGeometry ? (
         <RiskStackPanel
           environment={marketEnvironment}
           signalState={apiDecisionState}
@@ -1463,7 +1505,16 @@ export function DeepDive({
         ) : null}
         {tab === "setup" && !loading ? (
           <div style={{ display: "flex", flexDirection: "column", gap: spacing[4] }}>
-            {!isInsufficient ? (
+            {!allowsScenarioGeometry ? (
+              <SessionMoverContext
+                card={card}
+                company={resolvedCompany}
+                price={displayPrice}
+                changePct={displayChangePct}
+                colors={colors}
+              />
+            ) : null}
+            {allowsScenarioGeometry && !isInsufficient ? (
               <>
                 {/* 1. Bias + layer force summary (prototype panel 1) */}
                 <SignalsBiasRationalePanel
@@ -1513,7 +1564,7 @@ export function DeepDive({
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: currentRr != null ? "1fr auto" : "1fr",
+                        gridTemplateColumns: scenario != null ? "1fr auto" : "1fr",
                         gap: spacing[4],
                         alignItems: "start"
                       }}
@@ -1544,6 +1595,26 @@ export function DeepDive({
                             isShort={setupBias === "Bearish"}
                             colors={colors}
                           />
+                        ) : null}
+                        {scenario?.t1TooClose ? (
+                          <p
+                            data-testid="t1-too-close-warning"
+                            style={{
+                              margin: "8px 0 0",
+                              fontSize: typography.scale.xs,
+                              lineHeight: 1.5,
+                              color: colors.caution,
+                              fontWeight: 600
+                            }}
+                          >
+                            T1 too close to entry
+                            {scenario.rrToT1 != null ? ` (${scenario.rrToT1.toFixed(1)}:1)` : ""} — extended target required for desk gate.
+                          </p>
+                        ) : null}
+                        {scenario?.target2Provenance && scenario.target2 != null ? (
+                          <p style={{ margin: "6px 0 0", fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
+                            T2: {target2ProvenanceLabel(scenario.target2Provenance) ?? scenario.target2Provenance}
+                          </p>
                         ) : null}
                         {scenario?.entryZoneQuality === "clamped" ? (
                           <p style={{ margin: "8px 0 0", fontSize: 10.5, lineHeight: 1.5, color: colors.textMuted }}>
@@ -1583,7 +1654,7 @@ export function DeepDive({
                         ) : null}
                       </div>
                       {/* Right: R/R gauge */}
-                      {currentRr != null ? (
+                      {scenario ? (
                         <div
                           style={{
                             borderLeft: `1px solid ${colors.border}`,
@@ -1600,15 +1671,35 @@ export function DeepDive({
                               color: colors.textMuted
                             }}
                           >
-                            Reward / Risk{scenario?.chosenLabel ? ` → ${scenario.chosenLabel}` : ""}
+                            Reward / Risk{scenario.chosenLabel ? ` → ${scenario.chosenLabel}` : ""}
                           </p>
-                          <RiskRewardGauge
-                            rr={currentRr}
-                            minRr={deskMinRr}
-                            riskAmount={scenario?.riskAmount ?? null}
-                            rewardAmount={scenario?.rewardAmount ?? null}
-                            colors={colors}
-                          />
+                          {currentRr != null ? (
+                            <RiskRewardGauge
+                              rr={currentRr}
+                              minRr={deskMinRr}
+                              riskAmount={scenario.riskAmount ?? null}
+                              rewardAmount={scenario.rewardAmount ?? null}
+                              colors={colors}
+                            />
+                          ) : (
+                            <p
+                              data-testid="rr-gate-failed"
+                              style={{
+                                margin: 0,
+                                fontSize: typography.scale.sm,
+                                fontWeight: 700,
+                                color: colors.caution,
+                                lineHeight: 1.45
+                              }}
+                            >
+                              Does not clear desk gate
+                            </p>
+                          )}
+                          {scenario.gateFailReason ? (
+                            <p style={{ margin: "6px 0 0", fontSize: typography.scale.xs, color: colors.caution, lineHeight: 1.5 }}>
+                              {scenario.gateFailReason}
+                            </p>
+                          ) : null}
                           {scenario ? (
                             <p style={{ margin: "6px 0 0", fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
                               From current ${scenario.currentPrice.toFixed(2)}:
@@ -1669,6 +1760,7 @@ export function DeepDive({
                         systemTarget={scenario.targetPrice}
                         target1={scenario.target1}
                         target2={scenario.target2}
+                        target2Provenance={scenario.target2Provenance}
                         entryZoneLow={scenario.entryLow}
                         entryZoneHigh={scenario.entryHigh}
                         vwap={scenario.vwap}
@@ -1722,7 +1814,7 @@ export function DeepDive({
                 ) : null}
               </>
             ) : null}
-            {isInsufficient ? (
+            {allowsScenarioGeometry && isInsufficient ? (
               <div
                 data-testid="deep-dive-insufficient"
                 style={{ display: "flex", flexDirection: "column", gap: spacing[3] }}
