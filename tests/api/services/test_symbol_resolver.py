@@ -10,14 +10,26 @@ from stocvest.api.services.symbol_resolver import (
     resolve_symbol,
 )
 from stocvest.data.polygon_client import PolygonError
+from stocvest.data.models import Snapshot
 
 
 class _FakeClient:
-    """Minimal stand-in exposing only ``get_ticker_details``."""
+    """Minimal stand-in exposing reference + snapshot lookups."""
 
-    def __init__(self, *, result: dict[str, Any] | None = None, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        result: dict[str, Any] | None = None,
+        error: Exception | None = None,
+        snapshot: Any | None = None,
+        snapshot_error: Exception | None = None,
+        search_rows: list[dict[str, str]] | None = None,
+    ) -> None:
         self._result = result
         self._error = error
+        self._snapshot = snapshot
+        self._snapshot_error = snapshot_error
+        self._search_rows = search_rows
         self.calls: list[str] = []
 
     async def get_ticker_details(self, symbol: str) -> dict[str, Any]:
@@ -25,6 +37,17 @@ class _FakeClient:
         if self._error is not None:
             raise self._error
         return self._result or {}
+
+    async def get_snapshot(self, symbol: str) -> Any:
+        if self._snapshot_error is not None:
+            raise self._snapshot_error
+        if self._snapshot is not None:
+            return self._snapshot
+        raise PolygonError(f"Polygon 404 on snapshot/{symbol}: NOT_FOUND")
+
+    async def search_reference_tickers(self, query: str, *, limit: int = 15) -> list[dict[str, str]]:
+        _ = limit
+        return list(self._search_rows or [])
 
 
 class _FakeSearchClient:
@@ -81,6 +104,34 @@ def test_404_means_not_found_and_blocks_add() -> None:
     assert res.found is False
     assert res.verified is True
     assert res.reason and "ZZZZ" in res.reason
+
+
+def test_reference_404_with_live_snapshot_allows_add() -> None:
+    client = _FakeClient(
+        error=PolygonError("Polygon 404 on /v3/reference/tickers/LOFF: NOT_FOUND"),
+        snapshot=Snapshot(
+            symbol="LOFF",
+            last_trade_price=33.07,
+            company_name="Direxion Daily SpaceX Bull 2X ETF",
+        ),
+    )
+    res = _run(resolve_symbol("LOFF", client=client))
+    assert res.valid is True
+    assert res.found is True
+    assert res.verified is True
+    assert res.symbol == "LOFF"
+    assert res.name == "Direxion Daily SpaceX Bull 2X ETF"
+
+
+def test_reference_search_fallback_when_details_empty() -> None:
+    client = _FakeClient(
+        result={},
+        search_rows=[{"ticker": "LOFF", "name": "Direxion Daily SpaceX Bull 2X ETF"}],
+    )
+    res = _run(resolve_symbol("LOFF", client=client))
+    assert res.valid is True
+    assert res.found is True
+    assert res.name == "Direxion Daily SpaceX Bull 2X ETF"
 
 
 def test_transient_error_fails_open() -> None:
