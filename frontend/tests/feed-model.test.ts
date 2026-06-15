@@ -69,6 +69,31 @@ describe("buildFeedCards", () => {
     expect(cards.every((c) => c.lane === "swing")).toBe(true);
   });
 
+  test("uses snapshot day_close when last trade is missing", () => {
+    const cards = buildFeedCards({
+      mode: "swing",
+      swingDesk: {
+        movers_radar: [{ symbol: "ASTX", gap_percent: 18.2, direction: "up", rank_score: 70 }]
+      },
+      dayDesk: null,
+      swingSetups: [],
+      daySetups: [],
+      snapshotsBySymbol: new Map([
+        [
+          "ASTX",
+          {
+            symbol: "ASTX",
+            last_trade_price: null,
+            day_close: 12.34
+          }
+        ]
+      ]),
+      dayTradingSurfaces: true
+    });
+    const astx = cards.find((c) => c.symbol === "ASTX");
+    expect(astx?.price).toBe(12.34);
+  });
+
   test("high alignment without execution flag is near not actionable", () => {
     const dayDesk: DeskTodayData = {
       discovery: [
