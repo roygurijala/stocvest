@@ -16,7 +16,6 @@ import {
   BarChart3,
   Cpu,
   FileText,
-  Building2,
 } from "lucide-react";
 import { CuteLoader } from "@/components/cute-loader";
 import { InfoTip } from "@/components/info-tip";
@@ -365,16 +364,6 @@ function LayerRow({
           
           {/* Content */}
           <div className="flex-1 min-w-0">
-            {/* Company name if available */}
-            {row.companyName && (
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <Building2 className="w-3 h-3" style={{ color: colors.textMuted }} />
-                <span className="text-xs font-medium" style={{ color: colors.textMuted }}>
-                  {row.companyName}
-                </span>
-              </div>
-            )}
-            
             <div className="flex items-center gap-2 flex-wrap">
               <span 
                 className="text-sm font-bold tracking-tight"
@@ -610,7 +599,7 @@ function LayerDetailDrawer({
                     {layer.name}
                   </h2>
                   <p className="m-0 text-xs" style={{ color: colors.textMuted }}>
-                    {layer.companyName || symbol.toUpperCase()} • {bias.toUpperCase()} Setup
+                    {symbol.toUpperCase()} • {bias.toUpperCase()} Setup
                   </p>
                 </div>
               </div>
