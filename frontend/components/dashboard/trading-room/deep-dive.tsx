@@ -796,12 +796,7 @@ export function DeepDive({
 
   // ── Full signals-page computation pipeline ─────────────────────────────────
   const insight = useMemo(() => (composite ? parseSwingCompositeInsight(composite) : null), [composite]);
-  const layerRows = useMemo(() => {
-    const rows = compositeToSignalsLayerRows(composite);
-    const company = resolvedCompany ?? card.company ?? companyBySymbol?.get(card.symbol) ?? null;
-    if (!company) return rows;
-    return rows.map((row) => ({ ...row, companyName: row.companyName ?? company }));
-  }, [composite, resolvedCompany, card.company, card.symbol, companyBySymbol]);
+  const layerRows = useMemo(() => compositeToSignalsLayerRows(composite), [composite]);
   const setupBias: SignalsSetupBias = useMemo(
     () => deriveSetupBiasFromComposite(composite, layerRows),
     [composite, layerRows]

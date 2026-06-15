@@ -27,6 +27,7 @@ import {
 import { parseMaturationSummaryEnvelope } from "@/lib/watchlist/maturation-summary-envelope";
 import { useWatchlistMaturationReloadNonce } from "@/lib/hooks/use-watchlist-maturation-reload";
 import { CardRefreshButton, FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
+import { DashboardLayerDotsFromCount } from "@/components/dashboard/dashboard-layer-dots";
 import { feedBiasColor } from "@/lib/signal-direction-colors";
 import { fetchBffWithRetry } from "@/lib/bff/client-fetch-retry";
 import { useSymbolNames } from "@/lib/hooks/use-symbol-names";
@@ -133,21 +134,26 @@ function biasPill(bias: FeedBias, colors: Colors) {
   );
 }
 
-function AlignmentDots({ aligned, total, tone, colors }: { aligned: number; total: number; tone: string; colors: Colors }) {
+function AlignmentDots({
+  aligned,
+  total,
+  tone,
+  colors
+}: {
+  aligned: number;
+  total: number;
+  tone: string;
+  colors: Colors;
+}) {
   return (
-    <span style={{ display: "inline-flex", gap: 2 }}>
-      {Array.from({ length: total }).map((_, i) => (
-        <span
-          key={i}
-          style={{
-            width: 5,
-            height: 5,
-            borderRadius: "50%",
-            background: i < aligned ? tone : colors.border
-          }}
-        />
-      ))}
-    </span>
+    <DashboardLayerDotsFromCount
+      aligned={aligned}
+      total={total}
+      accent={tone}
+      emptyColor={colors.border}
+      size="sm"
+      showCount={false}
+    />
   );
 }
 

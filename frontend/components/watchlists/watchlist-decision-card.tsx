@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { DashboardLayerDots } from "@/components/dashboard/dashboard-layer-dots";
 import { SignalsDeeplinkLink } from "@/components/nav/signals-deeplink-link";
 import { SymbolName } from "@/components/symbol-name";
 import {
@@ -26,25 +27,6 @@ type Props = {
   onRefresh?: () => void;
   onCompareDesks?: () => void;
 };
-
-function LayerDots({ filled, total, accent }: { filled: boolean[]; total: number; accent: string }) {
-  return (
-    <span className="inline-flex items-center gap-0.5 tabular-nums" aria-hidden>
-      {filled.map((on, i) => (
-        <span
-          key={i}
-          className="text-sm leading-none"
-          style={{ color: on ? accent : "color-mix(in srgb, currentColor 35%, transparent)" }}
-        >
-          {on ? "●" : "○"}
-        </span>
-      ))}
-      <span className="ml-1.5 text-xs font-medium opacity-80">
-        ({filled.filter(Boolean).length}/{total})
-      </span>
-    </span>
-  );
-}
 
 export function WatchlistDecisionCard({
   model,
@@ -157,7 +139,7 @@ export function WatchlistDecisionCard({
 
         {compact ? (
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <LayerDots filled={model.layerDots} total={model.total} accent={model.dotAccent} />
+            <DashboardLayerDots filled={model.layerDots} total={model.total} accent={model.dotAccent} />
             <span className="text-xs" style={{ color: colors.textMuted }}>
               {model.alignmentLine}
             </span>
@@ -171,7 +153,7 @@ export function WatchlistDecisionCard({
         />
 
         <div className="flex flex-wrap items-center gap-2">
-          <LayerDots filled={model.layerDots} total={model.total} accent={model.dotAccent} />
+          <DashboardLayerDots filled={model.layerDots} total={model.total} accent={model.dotAccent} />
           {model.progressionBadge === "improved" ? (
             <span
               className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
