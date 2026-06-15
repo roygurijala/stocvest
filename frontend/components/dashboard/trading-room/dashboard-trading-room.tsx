@@ -17,6 +17,7 @@ import {
 } from "@/components/dashboard/dashboard-earnings-context";
 import { useDeskToday } from "@/lib/hooks/use-desk-today";
 import { useTradingRoomDeskAutoLoad } from "@/lib/hooks/use-trading-room-desk-auto-load";
+import { useTradingRoomMaturation } from "@/lib/hooks/use-trading-room-maturation";
 import { isDeskCacheStale } from "@/lib/dashboard/desk-response";
 import { __internal_fetchSignalComposite } from "@/lib/hooks/use-signal-composite";
 import { signalCompositeCacheKey } from "@/lib/signal-composite-cache";
@@ -546,6 +547,7 @@ function TradingRoomBody({
       alignment: null,
       rankScore: 0,
       source: "desk",
+      setupTier: "setup",
       lastEvaluatedAt: null
     });
   };
@@ -1590,7 +1592,7 @@ function SignalFeed({
                 dayDesk={dayDeskData}
                 showDay={showDay}
                 snapshotsBySymbol={snapshotsBySymbol}
-                companyBySymbol={resolvedCompanyBySymbol}
+                companyBySymbol={companyBySymbol}
                 selectedId={selectedId}
                 onSelectCard={onSelectCard}
                 colors={colors}
