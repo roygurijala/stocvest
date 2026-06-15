@@ -232,7 +232,7 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
       ? { low: evidence.keyLevels.support, high: evidence.keyLevels.resistance }
       : null);
   const rt1 = insight.reference_target_1 ?? evidence.keyLevels.resistance ?? null;
-  const rt2 = insight.reference_target_2 ?? (typeof evidence.keyLevels.resistance === "number" ? evidence.keyLevels.resistance * 1.012 : null);
+  const rt2 = insight.reference_target_2;
   const stopLvl = insight.reference_stop_level ?? evidence.keyLevels.support ?? null;
   const vwap = insight.vwap ?? evidence.keyLevels.vwap ?? null;
   const lastPrice =

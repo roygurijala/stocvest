@@ -68,7 +68,7 @@ import {
 } from "@/lib/dashboard/trading-room/trading-room-card-refresh";
 import { feedBiasColor } from "@/lib/signal-direction-colors";
 import { overlayFeedCardTimestamps } from "@/lib/dashboard/trading-room/feed-card-timestamps";
-import { useTradingRoomMaturation } from "@/lib/hooks/use-trading-room-maturation";
+import { useSymbolNames } from "@/lib/hooks/use-symbol-names";
 import { WatchlistRail } from "@/components/dashboard/trading-room/watchlist-rail";
 import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
 import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
@@ -381,12 +381,29 @@ function TradingRoomBody({
 
   const [filters, setFilters] = useState<FeedFilters>(DEFAULT_FEED_FILTERS);
   const feedEnvironment = filters.lane === "day" ? dayEnvironment : swingEnvironment;
-  const ranked = useMemo(() => rankAndCapFeed(allCards, filters), [allCards, filters]);
-  const { day, swing } = useMemo(() => groupFeedByLane(ranked), [ranked]);
   const sidebarRefreshSymbols = useMemo(
     () => [...new Set(allCards.map((c) => c.symbol.trim().toUpperCase()).filter(Boolean))],
     [allCards]
   );
+  const feedSymbolNames = useSymbolNames(sidebarRefreshSymbols);
+  const resolvedCompanyBySymbol = useMemo(() => {
+    const map = new Map(companyBySymbol);
+    for (const sym of sidebarRefreshSymbols) {
+      const nm = feedSymbolNames[sym]?.trim();
+      if (nm && !map.has(sym)) map.set(sym, nm);
+    }
+    return map;
+  }, [companyBySymbol, feedSymbolNames, sidebarRefreshSymbols]);
+  const cardsWithNames = useMemo(
+    () =>
+      allCards.map((c) => ({
+        ...c,
+        company: c.company ?? resolvedCompanyBySymbol.get(c.symbol) ?? null
+      })),
+    [allCards, resolvedCompanyBySymbol]
+  );
+  const ranked = useMemo(() => rankAndCapFeed(cardsWithNames, filters), [cardsWithNames, filters]);
+  const { day, swing } = useMemo(() => groupFeedByLane(ranked), [ranked]);
 
   // Feed symbols (movers, setups) are not on the index tape — hydrate quotes in batch.
   const feedSymbolsKey = sidebarRefreshSymbols.join(",");
@@ -534,11 +551,11 @@ function TradingRoomBody({
   };
   const selected = useMemo(() => {
     if (!selectedId) return null;
-    const fromFeed = allCards.find((c) => c.id === selectedId);
+    const fromFeed = cardsWithNames.find((c) => c.id === selectedId);
     if (fromFeed) return fromFeed;
     if (overrideCard && overrideCard.id === selectedId) return overrideCard;
     return null;
-  }, [allCards, selectedId, overrideCard]);
+  }, [cardsWithNames, selectedId, overrideCard]);
 
   useEffect(() => {
     if (!isMobile) return;
@@ -942,7 +959,7 @@ function TradingRoomBody({
         dayDeskStale={dayDeskStale}
         deskWarmupLoading={deskWarmupLoading}
         snapshotsBySymbol={snapshotsBySymbol}
-        companyBySymbol={companyBySymbol}
+        companyBySymbol={resolvedCompanyBySymbol}
         onSelectCard={selectCard}
         isMobile={isMobile}
         colors={colors}
@@ -967,7 +984,7 @@ function TradingRoomBody({
       dayDeskStale={dayDeskStale}
       deskWarmupLoading={deskWarmupLoading}
       snapshotsBySymbol={snapshotsBySymbol}
-      companyBySymbol={companyBySymbol}
+      companyBySymbol={resolvedCompanyBySymbol}
       onSelectCard={selectCard}
       isMobile={isMobile}
       colors={colors}
@@ -983,8 +1000,8 @@ function TradingRoomBody({
   const centerPanel = selected ? (
     <DeepDive
       card={selected}
-      allCards={allCards}
-      companyBySymbol={companyBySymbol}
+      allCards={cardsWithNames}
+      companyBySymbol={resolvedCompanyBySymbol}
       snapshot={snapshotsBySymbol.get(selected.symbol) ?? null}
       onBackToBrief={() => select(null)}
       isMobile={isMobile}
@@ -1010,7 +1027,7 @@ function TradingRoomBody({
       mode="swing"
       selectedId={selected?.id ?? null}
       onSelectCard={selectCard}
-      companyBySymbol={companyBySymbol}
+      companyBySymbol={resolvedCompanyBySymbol}
       open={watchlistOpen}
       onToggleOpen={toggleWatchlistOpen}
       isMobile={isMobile}
@@ -1573,7 +1590,7 @@ function SignalFeed({
                 dayDesk={dayDeskData}
                 showDay={showDay}
                 snapshotsBySymbol={snapshotsBySymbol}
-                companyBySymbol={companyBySymbol}
+                companyBySymbol={resolvedCompanyBySymbol}
                 selectedId={selectedId}
                 onSelectCard={onSelectCard}
                 colors={colors}

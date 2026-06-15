@@ -34,7 +34,7 @@ describe("resolveDeepDiveUnavailableMessage", () => {
   test("falls back to card verdict when composite is thin", () => {
     const msg = resolveDeepDiveUnavailableMessage({
       symbol: "ASTN",
-      cardVerdict: "Session mover — desk cache warming.",
+      cardVerdict: "Session mover · not an entry",
       composite: null,
       transportError: null,
       fetchErrorMessage: null

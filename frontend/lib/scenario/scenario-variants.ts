@@ -15,6 +15,8 @@ import {
   resolveStructuralStopAnchor
 } from "@/lib/scenario/reference-stop-resolve";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
+import { parseTarget2Provenance, target2EligibleForGate } from "@/lib/target-provenance";
+import type { Target2Provenance } from "@/lib/target-provenance";
 
 /** Matches `buildSignalsPageDecision` R/R gate — keep in sync. */
 export const SCENARIO_RR_MIN = 2.0;
@@ -42,6 +44,7 @@ export type ScenarioGeometrySource = {
   swingLow?: number | null;
   swingHigh?: number | null;
   tradingMode?: "day" | "swing" | null;
+  target2Provenance?: Target2Provenance | string | null;
 };
 
 export type ScenarioGeometryPrecision = "validated" | "estimated";
@@ -305,11 +308,21 @@ export function describeInvalidScenarioSelection(
   return "This entry / stop / target combination leaves no room for reward — try Mid-zone entry, T2 target, or Structural stop.";
 }
 
+export function normalizeScenarioSelection(
+  source: ScenarioGeometrySource,
+  selection: ScenarioSelection
+): ScenarioSelection {
+  if (selection.preset !== "breakout" || selection.target !== "t2") return selection;
+  const provenance = parseTarget2Provenance(source.target2Provenance);
+  if (target2EligibleForGate(provenance)) return selection;
+  return { ...selection, target: "t1" };
+}
+
 export function resolveScenarioLevels(
   source: ScenarioGeometrySource,
   selection: ScenarioSelection
 ): ResolvedScenarioLevels | null {
-  return resolveScenarioLevelsOnce(source, selection);
+  return resolveScenarioLevelsOnce(source, normalizeScenarioSelection(source, selection));
 }
 
 export function setupBiasToScenarioDirection(
@@ -409,6 +422,7 @@ export type BuildScenarioGeometryBundleArgs = {
   resistance?: number | null;
   prevClose?: number | null;
   systemRiskReward?: number | null;
+  target2Provenance?: Target2Provenance | string | null;
   /** True when stop/target came from composite insight fields. */
   compositeStopProvided?: boolean;
   compositeTargetProvided?: boolean;
@@ -524,7 +538,8 @@ export function buildScenarioGeometryBundle(
     prevClose: positivePrice(args.prevClose),
     swingLow: positivePrice(args.swingRangeLow),
     swingHigh: positivePrice(args.swingRangeHigh),
-    tradingMode: args.tradingMode ?? null
+    tradingMode: args.tradingMode ?? null,
+    target2Provenance: args.target2Provenance ?? null
   };
 
   const catalog = buildScenarioVariantCatalog(source);

@@ -12,6 +12,7 @@ import {
   type ScenarioPresetId,
   type ScenarioSelection
 } from "@/lib/scenario/scenario-variants";
+import { evaluateScenarioDeskGate, parseTarget2Provenance, type Target2Provenance } from "@/lib/target-provenance";
 
 /**
  * Inline "what-if" planner for the Trading Room deep dive.
@@ -58,6 +59,7 @@ export function ScenarioWhatIf({
   atr,
   systemRiskReward,
   minRrGate,
+  target2Provenance = null,
   colors
 }: {
   direction: Direction;
@@ -74,6 +76,7 @@ export function ScenarioWhatIf({
   systemRiskReward: number | null;
   /** VIX-tier desk minimum when available; falls back to static desk baseline. */
   minRrGate?: number;
+  target2Provenance?: Target2Provenance | string | null;
   colors: ThemeColors;
 }) {
   const source = useMemo(
@@ -130,10 +133,29 @@ export function ScenarioWhatIf({
     typeof minRrGate === "number" && Number.isFinite(minRrGate) && minRrGate > 0
       ? minRrGate
       : minRiskRewardForVerdict(mode);
-  const clears = rr != null && rr >= gate;
+  const provenance = parseTarget2Provenance(target2Provenance);
+  const gateEval = evaluateScenarioDeskGate({
+    direction,
+    entry,
+    stop,
+    target,
+    target1,
+    target2,
+    target2Provenance: provenance,
+    deskMinRr: gate
+  });
+  const clears = gateEval.clearsDeskRr;
   const risk = direction === "bullish" ? entry - stop : stop - entry;
   const reward = direction === "bullish" ? target - entry : entry - target;
-  const tone = rr == null ? colors.textMuted : rr >= gate ? colors.bullish : rr >= 1 ? colors.caution : colors.bearish;
+  const tone = gateEval.gateBlockReason
+    ? colors.caution
+    : rr == null
+      ? colors.textMuted
+      : clears
+        ? colors.bullish
+        : rr >= 1
+          ? colors.caution
+          : colors.bearish;
   const fills = scenarioRrBarFills(rr ?? 0);
   const step = stepFor(current);
 
@@ -319,7 +341,13 @@ export function ScenarioWhatIf({
             <span style={{ color: colors.textMuted, fontWeight: 700 }}>:1</span>
           </p>
           <p style={{ margin: "3px 0 0", fontSize: typography.scale.xs, color: tone }}>
-            {rr == null ? "Invalid geometry" : clears ? `Clears ${gate.toFixed(1)}:1 gate` : `Below ${gate.toFixed(1)}:1 gate`}
+            {rr == null
+              ? "Invalid geometry"
+              : gateEval.gateBlockReason
+                ? gateEval.gateBlockReason
+                : clears
+                  ? `Clears ${gate.toFixed(1)}:1 gate`
+                  : `Below ${gate.toFixed(1)}:1 gate`}
           </p>
         </div>
         <div style={{ flex: 1 }}>

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from stocvest.api.services.target_provenance import target_2_eligible_for_gate
+
 
 def round_risk_reward_display(rr: float) -> float:
     """Cap display/API R/R; do not floor sub-0.5 values (that hid real geometry)."""
@@ -29,14 +31,20 @@ def structure_risk_reward_long(
     target_1: float,
     stop: float,
     target_2: float | None = None,
+    target_2_provenance: str | None = None,
 ) -> float | None:
     """
-    Prefer T1 when it yields a tradable R/R (>= 1:1); otherwise use T2 extension when set.
+    Prefer T1 when tradable. Promote to T2 only when T2 is structurally anchored
+    (resistance) and improves a sub-1:1 T1. Unanchored T2 never clears the gate.
     """
     rr_t1 = rr_from_levels_long(entry, target_1, stop)
     if target_2 is None:
         return rr_t1
     rr_t2 = rr_from_levels_long(entry, target_2, stop)
+    if not target_2_eligible_for_gate(target_2_provenance):
+        if rr_t1 is not None and rr_t1 < 1.0:
+            return None
+        return rr_t1
     if rr_t1 is None:
         return rr_t2
     if rr_t2 is None:
@@ -51,11 +59,16 @@ def structure_risk_reward_short(
     target_1: float,
     stop: float,
     target_2: float | None = None,
+    target_2_provenance: str | None = None,
 ) -> float | None:
     rr_t1 = rr_from_levels_short(entry, target_1, stop)
     if target_2 is None:
         return rr_t1
     rr_t2 = rr_from_levels_short(entry, target_2, stop)
+    if not target_2_eligible_for_gate(target_2_provenance):
+        if rr_t1 is not None and rr_t1 < 1.0:
+            return None
+        return rr_t1
     if rr_t1 is None:
         return rr_t2
     if rr_t2 is None:

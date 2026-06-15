@@ -35,6 +35,20 @@ describe("scenario-variants", () => {
     expect(dip.entry).toBeLessThanOrEqual(breakout.entry);
   });
 
+  test("breakout preset falls back to T1 when T2 is unanchored", () => {
+    const src = {
+      ...bullishSource,
+      target2Provenance: "2r_extension" as const
+    };
+    const levels = resolveScenarioLevels(src, {
+      preset: "breakout",
+      entry: "breakout",
+      stop: "structural",
+      target: "t2"
+    })!;
+    expect(levels.target).toBe(302.8);
+  });
+
   test("breakout entry above zone still resolves with T2 target", () => {
     const src = buildScenarioGeometrySource({
       bias: "Bullish",

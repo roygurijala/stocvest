@@ -209,6 +209,7 @@ export interface SignalEvidenceInsight {
   swing_range_zone?: { low: number; high: number; sessions?: number } | null;
   reference_target_1: number | null;
   reference_target_2: number | null;
+  reference_target_2_provenance?: string | null;
   reference_stop_level: number | null;
   reference_stop_provenance?: string | null;
   reference_target_provenance?: string | null;
@@ -223,4 +224,7 @@ export interface SignalEvidenceInsight {
   missing_fields?: string[];
   alignment_ratio?: number;
   conflicted_layers?: string[];
+  /** Standing analyst price targets used for structural T2 resistance (Benzinga or Perplexity). */
+  analyst_target_levels?: number[];
+  analyst_target_source?: "benzinga" | "perplexity" | "none";
 }

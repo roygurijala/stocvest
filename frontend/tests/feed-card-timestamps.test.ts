@@ -19,7 +19,8 @@ const baseCard: FeedCard = {
   changePct: null,
   alignment: null,
   rankScore: 0,
-  source: "desk"
+  source: "desk",
+  setupTier: "setup"
 };
 
 describe("resolveFeedCardLastEvaluatedAt", () => {

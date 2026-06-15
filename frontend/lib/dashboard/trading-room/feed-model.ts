@@ -20,6 +20,9 @@ export type FeedState = "actionable" | "near" | "potential" | "cooling";
 
 export type FeedBias = "bull" | "bear" | "neutral";
 
+/** Movers are context-only; setups carry full desk / scanner qualification. */
+export type FeedSetupTier = "mover" | "setup";
+
 export interface FeedCard {
   /** Stable key — `${lane}:${symbol}`. */
   id: string;
@@ -39,6 +42,7 @@ export interface FeedCard {
   /** Higher = ranked first within a state bucket. */
   rankScore: number;
   source: "desk" | "scanner" | "gap";
+  setupTier: FeedSetupTier;
   /** Per-symbol composite evaluation time when known; desk generated_at as fallback. */
   lastEvaluatedAt?: string | null;
 }
@@ -198,6 +202,7 @@ function cardFromLeader(
       ratio != null ? { aligned: Math.round(ratio * 6), total: 6 } : null,
     rankScore: cleanNum(leader.rank_score) ?? 0,
     source: "desk",
+    setupTier: "setup",
     lastEvaluatedAt: null
   };
 }
@@ -218,13 +223,14 @@ function cardFromMover(
     lane,
     state: "potential",
     bias: biasFromDirection(mover.direction),
-    verdict: "Session mover — desk cache warming.",
+    verdict: "Session mover · not an entry",
     phase: "session activity",
     price: priceFromSnapshot(snap),
     changePct: cleanNum(mover.gap_percent) ?? snapChangePct(snap),
     alignment: null,
     rankScore: cleanNum(mover.rank_score) ?? 0,
     source: "desk",
+    setupTier: "mover",
     lastEvaluatedAt: null
   };
 }
@@ -256,6 +262,7 @@ function cardFromSetup(
         : null,
     rankScore: cleanNum(setup.score) ?? 0,
     source: "scanner",
+    setupTier: "setup",
     lastEvaluatedAt: null
   };
 }
@@ -283,7 +290,9 @@ export function buildFeedCards(input: BuildFeedInput): FeedCard[] {
       state: hotter,
       company: base.company ?? existing.company ?? card.company,
       price: base.price ?? existing.price ?? card.price,
-      changePct: base.changePct ?? existing.changePct ?? card.changePct
+      changePct: base.changePct ?? existing.changePct ?? card.changePct,
+      setupTier:
+        existing.setupTier === "setup" || card.setupTier === "setup" ? "setup" : "mover"
     });
   };
 

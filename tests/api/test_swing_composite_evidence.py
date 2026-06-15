@@ -88,6 +88,31 @@ def test_swing_range_zone_from_daily_bars() -> None:
     ).lower()
 
 
+def test_resistance_scanner_anchors_t2_above_session_high() -> None:
+    comp = _composite(
+        [
+            LayerSignal(layer="technical", score=0.8, confidence=0.9),
+            LayerSignal(layer="news", score=0.6, confidence=0.85),
+            LayerSignal(layer="macro", score=0.5, confidence=0.8),
+        ],
+        "bull",
+    )
+    highs = [98.0, 99.0, 100.0, 101.0, 102.0, 103.0, 104.0, 105.0, 106.0, 107.0, 108.0, 109.0, 110.0, 111.0, 112.0, 111.0, 110.0, 109.0, 108.0]
+    fields = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="bull",
+        payload={
+            "symbol": "TEST",
+            "daily_bars_range": [{"low": h - 2.0, "high": h} for h in highs],
+        },
+        confluence={"confirming_signals": [], "conflicting_signals": [], "n_confirming": 2, "n_conflicting": 0},
+        snapshot={"last_trade_price": 100.0, "day_low": 98.0, "day_high": 105.0, "day_vwap": 101.0},
+    )
+    assert fields.get("reference_target_1") == 105.0
+    assert fields.get("reference_target_2") == 112.0
+    assert fields.get("reference_target_2_provenance") == "resistance"
+
+
 def test_catalyst_headlines_preserve_source_and_scores() -> None:
     comp = _composite(
         [

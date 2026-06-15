@@ -1,5 +1,11 @@
 /** Risk/reward from reference entry, stop, and targets — keep in sync with `risk_reward_structure.py`. */
 
+import {
+  parseTarget2Provenance,
+  target2EligibleForGate,
+  type Target2Provenance
+} from "@/lib/target-provenance";
+
 /** One decimal place — matches Python `round(min(10, max(0, rr)), 1)` (not `Math.round(x*10)/10`). */
 export function roundRiskRewardDisplay(rr: number): number {
   if (!Number.isFinite(rr)) return 0;
@@ -25,11 +31,17 @@ export function structureRiskRewardLong(
   entry: number,
   target1: number,
   stop: number,
-  target2?: number | null
+  target2?: number | null,
+  target2Provenance?: Target2Provenance | string | null
 ): number | null {
+  const provenance = parseTarget2Provenance(target2Provenance);
   const rrT1 = rrFromLevelsLong(entry, target1, stop);
   if (target2 == null || !Number.isFinite(target2)) return rrT1;
   const rrT2 = rrFromLevelsLong(entry, target2, stop);
+  if (!target2EligibleForGate(provenance)) {
+    if (rrT1 != null && rrT1 < 1.0) return null;
+    return rrT1;
+  }
   if (rrT1 == null) return rrT2;
   if (rrT2 == null) return rrT1;
   if (rrT1 < 1.0 && rrT2 > rrT1) return rrT2;
@@ -40,11 +52,17 @@ export function structureRiskRewardShort(
   entry: number,
   target1: number,
   stop: number,
-  target2?: number | null
+  target2?: number | null,
+  target2Provenance?: Target2Provenance | string | null
 ): number | null {
+  const provenance = parseTarget2Provenance(target2Provenance);
   const rrT1 = rrFromLevelsShort(entry, target1, stop);
   if (target2 == null || !Number.isFinite(target2)) return rrT1;
   const rrT2 = rrFromLevelsShort(entry, target2, stop);
+  if (!target2EligibleForGate(provenance)) {
+    if (rrT1 != null && rrT1 < 1.0) return null;
+    return rrT1;
+  }
   if (rrT1 == null) return rrT2;
   if (rrT2 == null) return rrT1;
   if (rrT1 < 1.0 && rrT2 > rrT1) return rrT2;
