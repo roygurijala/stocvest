@@ -193,7 +193,7 @@ describe("session reference levels and fallback R/R", () => {
     expect(lv.reference_stop_level).toBeCloseTo(97, 4);
   });
 
-  test("deriveEvidenceInsightFallback uses (target-entry)/(entry-stop) not mid-range ratio", () => {
+  test("deriveEvidenceInsightFallback does not inflate R/R with unanchored T2 when T1 is sub-1:1", () => {
     const ev = buildEvidenceFromSetup(
       baseSetup,
       {
@@ -208,14 +208,16 @@ describe("session reference levels and fallback R/R", () => {
     );
     const insight = deriveEvidenceInsightFallback(ev);
     expect(insight.reference_target_1).toBe(102);
-    const stop = 98 * 0.995;
-    const t2 = 100 + 2 * (100 - stop);
-    const rrT1 = (102 - 100) / (100 - stop);
-    const rrT2 = (t2 - 100) / (100 - stop);
-    const expected = rrT1 < 1.0 && rrT2 > rrT1 ? rrT2 : rrT1;
-    expect(insight.risk_reward).toBe(Math.round(Math.min(10, Math.max(0, expected)) * 10) / 10);
+    const stop = insight.reference_stop_level;
+    expect(stop).not.toBeNull();
+    const entry = 100;
+    const rrT1 = stop != null ? (102 - entry) / (entry - stop) : null;
+    expect(rrT1).not.toBeNull();
+    expect(rrT1!).toBeLessThan(1);
+    // Unanchored 2R T2 is gated out — headline R/R falls back to confidence-based synthetic, not inflated 2R math.
+    expect(insight.risk_reward).toBe(2.3);
     expect(insight.risk_reward).not.toBe(0.5);
-    expect(insight.rr_warning).toBe(insight.risk_reward < 2.0);
+    expect(insight.rr_warning).toBe(false);
   });
 });
 
