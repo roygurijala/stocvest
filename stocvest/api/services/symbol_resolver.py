@@ -25,6 +25,7 @@ import re
 from dataclasses import dataclass
 
 from stocvest.data.polygon_client import PolygonClient, PolygonError
+from stocvest.data.models import Snapshot
 from stocvest.data.ticker_reference import parse_polygon_ticker_details
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -207,6 +208,77 @@ async def resolve_company_to_symbol(
         return None
 
 
+def _snapshot_has_tradeable_quote(snap: Snapshot) -> bool:
+    for raw in (
+        snap.last_trade_price,
+        snap.day_close,
+        snap.day_open,
+        snap.pre_market_price,
+        snap.after_hours_price,
+    ):
+        try:
+            px = float(raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+        if px > 0:
+            return True
+    return False
+
+
+async def _resolve_via_snapshot(active_client: PolygonClient, sym: str) -> SymbolResolution | None:
+    """Confirm tradability from live quote when reference metadata lags (new listings)."""
+    try:
+        snap = await active_client.get_snapshot(sym)
+    except PolygonError as exc:
+        if not _is_definitive_miss(exc):
+            _LOG.warning("resolve_symbol snapshot fallback transient failure for %s: %s", sym, str(exc)[:160])
+        return None
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("resolve_symbol snapshot fallback error for %s: %s", sym, str(exc)[:160])
+        return None
+    if not _snapshot_has_tradeable_quote(snap):
+        return None
+    return SymbolResolution(
+        symbol=sym,
+        name=str(snap.company_name or "").strip() or None,
+        valid=True,
+        found=True,
+        active=True,
+        verified=True,
+        reason=None,
+    )
+
+
+async def _resolve_via_reference_search(active_client: PolygonClient, sym: str) -> SymbolResolution | None:
+    """Last resort when direct reference lookup 404s but search still indexes the ticker."""
+    try:
+        rows = await active_client.search_reference_tickers(sym, limit=5)
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("resolve_symbol reference search failed for %s: %s", sym, str(exc)[:160])
+        return None
+    for row in rows:
+        if str(row.get("ticker") or "").strip().upper() == sym:
+            name = str(row.get("name") or "").strip() or None
+            return SymbolResolution(
+                symbol=sym,
+                name=name,
+                valid=True,
+                found=True,
+                active=True,
+                verified=True,
+                reason=None,
+            )
+    return None
+
+
+def _reject_after_reference_miss(sym: str) -> SymbolResolution:
+    _write_negative_cache(sym)
+    return _not_found(
+        sym,
+        f'I couldn\'t find a tradable stock with the ticker "{sym}".',
+    )
+
+
 async def resolve_symbol(
     symbol: str,
     *,
@@ -227,6 +299,21 @@ async def resolve_symbol(
         )
 
     if _read_negative_cache(sym):
+        # Cached typos still get a snapshot retry — new listings can trade before reference catches up.
+        if client is not None:
+            snap_hit = await _resolve_via_snapshot(client, sym)
+            if snap_hit is not None:
+                return snap_hit
+        else:
+            api_key = get_settings().polygon_api_key
+            if api_key:
+                try:
+                    async with PolygonClient(api_key=api_key) as owned:
+                        snap_hit = await _resolve_via_snapshot(owned, sym)
+                        if snap_hit is not None:
+                            return snap_hit
+                except Exception as exc:  # noqa: BLE001
+                    _LOG.warning("resolve_symbol cached-miss snapshot client error for %s: %s", sym, str(exc)[:160])
         return _not_found(
             sym,
             f'I couldn\'t find a tradable stock with the ticker "{sym}".',
@@ -237,11 +324,13 @@ async def resolve_symbol(
             detail = await active_client.get_ticker_details(sym)
         except PolygonError as exc:
             if _is_definitive_miss(exc):
-                _write_negative_cache(sym)
-                return _not_found(
-                    sym,
-                    f'I couldn\'t find a tradable stock with the ticker "{sym}".',
-                )
+                snap_hit = await _resolve_via_snapshot(active_client, sym)
+                if snap_hit is not None:
+                    return snap_hit
+                search_hit = await _resolve_via_reference_search(active_client, sym)
+                if search_hit is not None:
+                    return search_hit
+                return _reject_after_reference_miss(sym)
             _LOG.warning("resolve_symbol transient failure for %s: %s", sym, str(exc)[:160])
             return _fail_open(sym)
         except Exception as exc:  # noqa: BLE001 — never block an add on an unexpected error
@@ -250,11 +339,13 @@ async def resolve_symbol(
 
         ref = parse_polygon_ticker_details(detail if isinstance(detail, dict) else None, symbol=sym)
         if ref is None:
-            _write_negative_cache(sym)
-            return _not_found(
-                sym,
-                f'I couldn\'t find a tradable stock with the ticker "{sym}".',
-            )
+            snap_hit = await _resolve_via_snapshot(active_client, sym)
+            if snap_hit is not None:
+                return snap_hit
+            search_hit = await _resolve_via_reference_search(active_client, sym)
+            if search_hit is not None:
+                return search_hit
+            return _reject_after_reference_miss(sym)
         if ref.active is False:
             return SymbolResolution(
                 symbol=sym,
