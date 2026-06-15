@@ -388,6 +388,39 @@ function TradingRoomBody({
     [allCards]
   );
 
+  // Feed symbols (movers, setups) are not on the index tape — hydrate quotes in batch.
+  const feedSymbolsKey = sidebarRefreshSymbols.join(",");
+  useEffect(() => {
+    if (sidebarRefreshSymbols.length === 0) return;
+    let cancelled = false;
+    const chunk = sidebarRefreshSymbols.slice(0, 40);
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/stocvest/market/snapshots?symbols=${encodeURIComponent(chunk.join(","))}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok || cancelled) return;
+        const json = (await res.json().catch(() => ({}))) as { snapshots?: SnapshotPayload[] };
+        const rows = Array.isArray(json.snapshots) ? json.snapshots : [];
+        if (cancelled) return;
+        setSnapshotOverrides((prev) => {
+          const next = new Map(prev);
+          for (const row of rows) {
+            const sym = (row.symbol || "").trim().toUpperCase();
+            if (sym) next.set(sym, row);
+          }
+          return next;
+        });
+      } catch {
+        /* quotes are best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [feedSymbolsKey, sidebarRefreshSymbols]);
+
   // Staleness detection: compare the swing desk envelope's market_date against today's ET
   // calendar date. When the app is running on a weekend, the swing desk may have data
   // from Friday (4-day TTL); we surface this transparently rather than hiding it.

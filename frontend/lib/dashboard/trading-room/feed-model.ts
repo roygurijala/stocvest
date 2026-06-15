@@ -62,6 +62,16 @@ function cleanNum(v: number | null | undefined): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
+function priceFromSnapshot(snap: SnapshotPayload | undefined): number | null {
+  if (!snap) return null;
+  return (
+    cleanNum(snap.last_trade_price) ??
+    cleanNum(snap.day_close) ??
+    cleanNum(snap.pre_market_price) ??
+    cleanNum(snap.after_hours_price)
+  );
+}
+
 /** Session change % aligned with the dashboard's snapshot precedence. */
 function snapChangePct(s: SnapshotPayload | undefined): number | null {
   if (!s) return null;
@@ -182,7 +192,7 @@ function cardFromLeader(
     bias: biasFromDirection(leader.direction),
     verdict: leaderVerdict(leader),
     phase: leader.composite_status?.trim() || null,
-    price: cleanNum(leader.session_price) ?? cleanNum(snap?.last_trade_price),
+    price: cleanNum(leader.session_price) ?? priceFromSnapshot(snap),
     changePct: cleanNum(leader.gap_percent) ?? snapChangePct(snap),
     alignment:
       ratio != null ? { aligned: Math.round(ratio * 6), total: 6 } : null,
@@ -210,7 +220,7 @@ function cardFromMover(
     bias: biasFromDirection(mover.direction),
     verdict: "Session mover — desk cache warming.",
     phase: "session activity",
-    price: cleanNum(snap?.last_trade_price),
+    price: priceFromSnapshot(snap),
     changePct: cleanNum(mover.gap_percent) ?? snapChangePct(snap),
     alignment: null,
     rankScore: cleanNum(mover.rank_score) ?? 0,
@@ -238,7 +248,7 @@ function cardFromSetup(
     bias: biasFromDirection(setup.direction),
     verdict: setupVerdict(setup),
     phase: setup.confluence_tier?.trim() || null,
-    price: cleanNum(setup.last_price) ?? cleanNum(snap?.last_trade_price),
+    price: cleanNum(setup.last_price) ?? priceFromSnapshot(snap),
     changePct: snapChangePct(snap),
     alignment:
       setup.alignment && typeof setup.alignment.total === "number" && setup.alignment.total > 0
