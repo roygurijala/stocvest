@@ -952,6 +952,7 @@ function TradingRoomBody({
       card={selected}
       allCards={allCards}
       companyBySymbol={companyBySymbol}
+      snapshot={snapshotsBySymbol.get(selected.symbol) ?? null}
       onBackToBrief={() => select(null)}
       isMobile={isMobile}
       colors={colors}
