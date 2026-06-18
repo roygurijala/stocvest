@@ -10,8 +10,9 @@ import {
   sectorAccentFromGroupId,
   selectionAccentColor,
   signalCardChrome,
-  STATE_LABEL,
-  stateTone
+  signalStateDisplayLabel,
+  signalStateDisplayTone,
+  signalVerdictSubline
 } from "@/lib/scanner/terminal/scanner-terminal-present";
 import { AppSessionHeader } from "@/components/app-session-header";
 import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
@@ -401,7 +402,9 @@ function SignalRow({
   sessionHint?: string | null;
   colors: ReturnType<typeof useTheme>["colors"];
 }) {
-  const sTone = stateTone(row.state, colors);
+  const sTone = signalStateDisplayTone(row.state, row.verdict, colors);
+  const stateLabel = signalStateDisplayLabel(row.state, row.verdict);
+  const verdictLine = signalVerdictSubline(row.state, row.verdict);
   const pctTone =
     row.changePct == null ? colors.textMuted : row.changePct >= 0 ? colors.bullish : colors.bearish;
   const blockerNote =
@@ -456,7 +459,7 @@ function SignalRow({
         <span style={biasPillStyle(row.bias, colors)}>
           {row.bias === "bull" ? "Bullish" : row.bias === "bear" ? "Bearish" : "Neutral"}
         </span>
-        <span style={{ fontSize: typography.scale.xs, fontWeight: 700, color: sTone }}>{STATE_LABEL[row.state]}</span>
+        <span style={{ fontSize: typography.scale.xs, fontWeight: 700, color: sTone }}>{stateLabel}</span>
         {row.alignment ? (
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
             {row.alignment.aligned}/{row.alignment.total} layers
@@ -466,8 +469,8 @@ function SignalRow({
           <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>R/R {row.riskReward.toFixed(1)}:1</span>
         ) : null}
       </div>
-      {row.verdict ? (
-        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>{row.verdict}</p>
+      {verdictLine ? (
+        <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>{verdictLine}</p>
       ) : null}
       {blockerNote && !highlight ? (
         <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted }}>{blockerNote}</p>

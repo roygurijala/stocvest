@@ -150,4 +150,31 @@ describe("buildFeedCards", () => {
     expect(astn?.setupTier).toBe("setup");
     expect(astn?.source).toBe("scanner");
   });
+
+  test("downgrades actionable when execution blocked by R/R hint", () => {
+    const cards = buildFeedCards({
+      mode: "swing",
+      swingDesk: {
+        discovery: [
+          {
+            symbol: "SNXX",
+            gap_percent: 21.5,
+            direction: "up",
+            rank_score: 90,
+            desk: "swing",
+            decision_state: "actionable",
+            execution_hint: "Strong setup quality — execution blocked by risk/reward (0.9:1)."
+          }
+        ],
+        movers_radar: []
+      },
+      dayDesk: null,
+      swingSetups: [],
+      daySetups: [],
+      snapshotsBySymbol: new Map(),
+      dayTradingSurfaces: true
+    });
+    const snxx = cards.find((c) => c.symbol === "SNXX");
+    expect(snxx?.state).toBe("near");
+  });
 });
