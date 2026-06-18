@@ -15,6 +15,44 @@ export const STATE_LABEL: Record<FeedState, string> = {
   cooling: "Cooling"
 };
 
+export type ExecutionHintKind = "none" | "weak" | "blocked";
+
+/** Parse desk execution_hint / verdict copy from composite-backed discovery rows. */
+export function executionHintKind(verdict?: string | null): ExecutionHintKind {
+  const v = (verdict ?? "").trim().toLowerCase();
+  if (v.includes("execution blocked")) return "blocked";
+  if (v.includes("execution quality weak")) return "weak";
+  return "none";
+}
+
+/** User-facing state label — separates setup gates from entry-timing caution. */
+export function signalStateDisplayLabel(state: FeedState, verdict?: string | null): string {
+  const kind = executionHintKind(verdict);
+  if (state === "actionable" && kind === "weak") return "Actionable · timing caution";
+  if (state === "actionable" && kind === "blocked") return "Monitor · R/R gate";
+  return STATE_LABEL[state];
+}
+
+export function signalStateDisplayTone(
+  state: FeedState,
+  verdict: string | null | undefined,
+  colors: ThemeColors
+): string {
+  const kind = executionHintKind(verdict);
+  if (state === "actionable" && (kind === "weak" || kind === "blocked")) return colors.caution;
+  return stateTone(state, colors);
+}
+
+/** Avoid repeating "Actionable" + "execution quality weak" as contradictory headlines. */
+export function signalVerdictSubline(state: FeedState, verdict?: string | null): string | null {
+  const raw = (verdict ?? "").trim();
+  if (!raw) return null;
+  if (state === "actionable" && executionHintKind(raw) === "weak") {
+    return "Layers and R/R passed — entry timing still weak. Review Signals for context.";
+  }
+  return raw;
+}
+
 /** Sector ETF accent rails for On radar theme cards. */
 export const SECTOR_ETF_ACCENT: Record<string, string> = {
   XLK: "#818cf8",
@@ -74,13 +112,16 @@ export function signalCardChrome(
   colors: ThemeColors
 ): CSSProperties {
   const lane = laneAccent(row.lane);
-  const state = stateTone(row.state, colors);
+  const state = signalStateDisplayTone(row.state, row.verdict, colors);
+  const hintKind = executionHintKind(row.verdict);
   const surface =
-    highlight || row.state === "actionable"
+    highlight || (row.state === "actionable" && hintKind === "none")
       ? "rgba(34,197,94,0.07)"
-      : row.state === "near"
+      : row.state === "actionable" && hintKind !== "none"
         ? "rgba(245,158,11,0.06)"
-        : colors.surface;
+        : row.state === "near"
+          ? "rgba(245,158,11,0.06)"
+          : colors.surface;
 
   return {
     borderLeft: `3px solid ${lane}`,

@@ -4,7 +4,11 @@ import {
   gapCardChrome,
   sectorAccentFromGroupId,
   selectionAccentColor,
-  signalCardChrome
+  signalCardChrome,
+  executionHintKind,
+  signalStateDisplayLabel,
+  signalStateDisplayTone,
+  signalVerdictSubline
 } from "@/lib/scanner/terminal/scanner-terminal-present";
 
 const colors = colorTokens.dark;
@@ -76,5 +80,25 @@ describe("scanner-terminal-present", () => {
     expect(selectionAccentColor({ kind: "gap", gapPct: -2 }, colors)).toBe(colors.bearish);
     expect(selectionAccentColor({ kind: "signal", state: "actionable" }, colors)).toBe(colors.bullish);
     expect(selectionAccentColor({ kind: "radar", groupId: "sector-xle" }, colors)).toBe("#34d399");
+  });
+
+  test("signalStateDisplayLabel separates actionable gates from weak entry timing", () => {
+    expect(
+      signalStateDisplayLabel(
+        "actionable",
+        "Execution quality weak — review Signals for full context."
+      )
+    ).toBe("Actionable · timing caution");
+    expect(signalStateDisplayTone("actionable", "Execution quality weak", colors)).toBe(colors.caution);
+    expect(
+      signalVerdictSubline("actionable", "Execution quality weak — review Signals for full context.")
+    ).toMatch(/entry timing still weak/i);
+    expect(executionHintKind("Strong setup quality — execution blocked by risk/reward (0.9:1).")).toBe("blocked");
+    expect(
+      signalStateDisplayLabel(
+        "actionable",
+        "Strong setup quality — execution blocked by risk/reward (0.9:1)."
+      )
+    ).toBe("Monitor · R/R gate");
   });
 });
