@@ -83,6 +83,9 @@ type Props = {
   executionTone?: "bullish" | "bearish" | "caution" | "muted";
   /** Desk lane — tunes the plain-English blocker phrasing. */
   mode?: "swing" | "day";
+  /** Eval-time or structure R/R — shown when entry timing and geometry diverge. */
+  riskReward?: number | null;
+  minRiskReward?: number | null;
 };
 
 /**
@@ -160,7 +163,14 @@ function bandColor(band: SetupJudgment["tradeability"]["band"], colors: ReturnTy
   return colors.caution;
 }
 
-export function SetupJudgmentSummary({ judgment, executionLabel, executionTone, mode = "swing" }: Props) {
+export function SetupJudgmentSummary({
+  judgment,
+  executionLabel,
+  executionTone,
+  mode = "swing",
+  riskReward = null,
+  minRiskReward = null
+}: Props) {
   const { colors } = useTheme();
   const { process, setupPhase, tradeability, primaryBlocker, watchFor } = judgment;
 
@@ -229,6 +239,17 @@ export function SetupJudgmentSummary({ judgment, executionLabel, executionTone, 
               data-testid="setup-judgment-execution"
             >
               Execution: {executionLabel}
+            </p>
+          ) : null}
+          {riskReward != null && tradeability.band !== "strong" ? (
+            <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted }} data-testid="setup-judgment-rr-context">
+              R/R {riskReward.toFixed(1)}:1 at reference levels
+              {minRiskReward != null
+                ? riskReward >= minRiskReward
+                  ? ` — clears ${minRiskReward.toFixed(1)}:1 desk gate, but entry timing is still ${tradeability.band}`
+                  : ` — below ${minRiskReward.toFixed(1)}:1 desk gate`
+                : ` — geometry can look fine while entry timing stays ${tradeability.band}`}
+              .
             </p>
           ) : null}
         </div>

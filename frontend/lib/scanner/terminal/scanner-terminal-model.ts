@@ -421,6 +421,32 @@ export function splitDevelopingRows(rows: ScannerTerminalSignalRow[]): {
   return { closest, also };
 }
 
+/** Lower rank = keep this row when the same symbol appears on multiple desks. */
+function developingRowRank(row: ScannerTerminalSignalRow): number {
+  const stateScore = row.state === "near" ? 0 : row.state === "potential" ? 1 : 2;
+  const alignScore = -(row.alignment?.aligned ?? 0);
+  const hasPrice = row.price != null ? 0 : 1;
+  const hasCompany = row.company?.trim() ? 0 : 1;
+  return stateScore * 1000 + alignScore * 10 + hasPrice * 5 + hasCompany;
+}
+
+export function preferDevelopingRow(
+  a: ScannerTerminalSignalRow,
+  b: ScannerTerminalSignalRow
+): ScannerTerminalSignalRow {
+  return developingRowRank(a) <= developingRowRank(b) ? a : b;
+}
+
+export function dedupeDevelopingRows(rows: ScannerTerminalSignalRow[]): ScannerTerminalSignalRow[] {
+  const bySymbol = new Map<string, ScannerTerminalSignalRow>();
+  for (const row of rows) {
+    const sym = row.symbol.trim().toUpperCase();
+    const existing = bySymbol.get(sym);
+    bySymbol.set(sym, existing ? preferDevelopingRow(existing, row) : row);
+  }
+  return [...bySymbol.values()];
+}
+
 export function buildScannerTerminalSections(input: BuildScannerTerminalInput): ScannerTerminalSections {
   const { filters, watchlistSymbols } = input;
   const cards = buildFeedCards({
@@ -459,7 +485,7 @@ export function buildScannerTerminalSections(input: BuildScannerTerminalInput): 
     const existing = developingById.get(row.id);
     if (!existing || row.state === "near") developingById.set(row.id, row);
   }
-  const developing = [...developingById.values()].slice(0, 16);
+  const developing = dedupeDevelopingRows([...developingById.values()]).slice(0, 16);
 
   const gaps = buildGapRows(input.gapIntelligence, filters).filter((g) => passesWatchlist(g.symbol));
   const ipoWatch = buildIpoWatchRows(input.gapIpoWatch ?? [], filters).filter((g) =>

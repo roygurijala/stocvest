@@ -64,6 +64,10 @@ class TradeabilityFlag:
 
 def _count_aligned(layers: list[dict[str, Any]], *, composite_bias: str) -> int:
     bias = composite_bias_from_summary(composite_bias)
+    if bias == "neutral":
+        from stocvest.signals.layer_directional_alignment import count_directional_layers
+
+        return int(count_directional_layers(layers)["directional_aligned"])
     n = 0
     for lid in MATURATION_LAYER_KEYS:
         row = next((r for r in layers if str(r.get("layer") or "").lower() == lid), None)

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildScannerTerminalSections,
+  dedupeDevelopingRows,
   gapFillWatchReason,
   isTickerSearchQuery,
   selectionTitle,
@@ -66,6 +67,33 @@ describe("scanner-terminal-model", () => {
     expect(sections.actionable.find((r) => r.symbol === "NVDA")?.triggers).toContain("EMA cross");
     expect(sections.developing.some((r) => r.symbol === "AMD")).toBe(true);
     expect(sections.actionableCount).toBeGreaterThanOrEqual(1);
+  });
+
+  test("developing dedupes same symbol across day and swing desks", () => {
+    const dayNear: IntradaySetupPayload = {
+      symbol: "BFLY",
+      direction: "bullish",
+      score: 58,
+      triggers: ["Timing"],
+      timestamp_iso: new Date().toISOString(),
+      qualification_tier: "near",
+      alignment: { aligned: 3, total: 6, label: "3/6 layers" }
+    };
+    const swingNear: IntradaySetupPayload = {
+      ...dayNear,
+      scanner_mode: "swing_daily"
+    };
+    const sections = buildScannerTerminalSections({
+      filters: { mode: "all", state: "all", watchlistOnly: false, query: "" },
+      gapIntelligence: [],
+      setups: [dayNear, swingNear],
+      swingDesk: null,
+      dayDesk: null,
+      nearQualification: [],
+      dayTradingSurfaces: true,
+      watchlistSymbols: new Set()
+    });
+    expect(sections.developing.filter((r) => r.symbol === "BFLY")).toHaveLength(1);
   });
 
   test("ipo watch rows are separate from ranked gaps", () => {
@@ -147,6 +175,44 @@ describe("scanner-terminal-model", () => {
 
     expect(sections.gaps).toHaveLength(1);
     expect(sections.gaps[0]?.symbol).toBe("ORCL");
+  });
+
+  test("dedupeDevelopingRows keeps one row per symbol across desks", () => {
+    const rows = dedupeDevelopingRows([
+      {
+        id: "day:BFLY",
+        symbol: "BFLY",
+        company: null,
+        lane: "day",
+        state: "near",
+        bias: "bull",
+        alignment: { aligned: 3, total: 6 },
+        riskReward: null,
+        verdict: "Near",
+        price: 6.61,
+        changePct: 15.7,
+        blockerNote: null,
+        triggers: []
+      },
+      {
+        id: "swing:BFLY",
+        symbol: "BFLY",
+        company: "Butterfly Network",
+        lane: "swing",
+        state: "near",
+        bias: "bull",
+        alignment: { aligned: 3, total: 6 },
+        riskReward: null,
+        verdict: "Near",
+        price: 6.61,
+        changePct: 15.7,
+        blockerNote: null,
+        triggers: []
+      }
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.symbol).toBe("BFLY");
+    expect(rows[0]?.company).toBe("Butterfly Network");
   });
 
   test("splitDevelopingRows separates near from potential", () => {

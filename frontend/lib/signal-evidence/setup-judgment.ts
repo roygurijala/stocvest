@@ -9,6 +9,7 @@ import {
 } from "@/lib/alignment-display-tier";
 import {
   layerRowEligibleForAlignmentCount,
+  parseCompositeDirectionFields,
   resolveSignalsLayerAlignment,
   type SignalsLayerRowInput,
   type SignalsSetupBias
@@ -51,6 +52,47 @@ const PROCESS_LABEL: Record<AlignmentDisplayTier, string> = {
   invalidated: "Invalidated",
   re_evaluating: "Re-evaluating"
 };
+
+function reconcileSetupJudgmentProcess(
+  judgment: SetupJudgment,
+  composite: Record<string, unknown> | null | undefined,
+  input: {
+    bias: SignalsSetupBias;
+    rows: SignalsLayerRowInput[];
+    alignmentRatio?: number | null;
+  }
+): SetupJudgment {
+  const dir = parseCompositeDirectionFields(composite ?? undefined);
+  const biasAlignment = resolveSignalsLayerAlignment({
+    rows: input.rows,
+    bias: input.bias,
+    alignmentRatio: input.alignmentRatio ?? null,
+    compositeDirection: dir
+  });
+  const layersAligned =
+    input.bias === "Neutral" && dir != null ? dir.directional : biasAlignment.aligned;
+  const layersTotal = biasAlignment.total;
+  const overstatedNeutral =
+    input.bias === "Neutral" && judgment.process.layersAligned > layersAligned + 1;
+  const drifted =
+    Math.abs(judgment.process.layersAligned - layersAligned) > 1 ||
+    judgment.process.layersTotal !== layersTotal;
+  if (!overstatedNeutral && !drifted) return judgment;
+
+  const tierMeta = resolveAlignmentDisplayTier({
+    layersAligned,
+    layersTotal
+  });
+  return {
+    ...judgment,
+    process: {
+      tier: tierMeta.tier,
+      label: tierMeta.label,
+      layersAligned,
+      layersTotal
+    }
+  };
+}
 
 const PHASE_LABEL: Record<SetupPhaseId, string> = {
   early: "Early",
@@ -293,7 +335,6 @@ export function resolveSetupJudgmentFromComposite(
   }
 ): SetupJudgment | null {
   const parsed = parseSetupJudgment(composite);
-  if (parsed) return parsed;
   const layers = Array.isArray(composite?.layers) ? (composite!.layers as Record<string, unknown>[]) : [];
   const tech = layers.find((r) => String(r.layer || "").toLowerCase() === "technical");
   const reasoning = tech ? String(tech.reasoning || "") : "";
@@ -306,14 +347,17 @@ export function resolveSetupJudgmentFromComposite(
         )?.trigger_condition || ""
       )
     : null;
-  return deriveSetupJudgment({
-    mode: input.mode,
-    rows: input.rows,
-    bias: input.bias,
-    alignmentRatio: input.alignmentRatio ?? null,
-    technicalReasoning: reasoning,
-    unlockWatchFor: unlock || null
-  });
+  const derived =
+    parsed ??
+    deriveSetupJudgment({
+      mode: input.mode,
+      rows: input.rows,
+      bias: input.bias,
+      alignmentRatio: input.alignmentRatio ?? null,
+      technicalReasoning: reasoning,
+      unlockWatchFor: unlock || null
+    });
+  return reconcileSetupJudgmentProcess(derived, composite ?? undefined, input);
 }
 
 /** Layer dots for list ranking (e.g. scanner). */

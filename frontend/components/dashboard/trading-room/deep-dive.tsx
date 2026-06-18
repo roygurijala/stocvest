@@ -28,7 +28,9 @@ import {
 } from "@/lib/signals/composite-layer-rows";
 import {
   buildSignalsPageDecision,
+  parseCompositeDirectionFields,
   pickPreviewLayers,
+  resolveCompositeLayerAlignment,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
@@ -833,6 +835,16 @@ export function DeepDive({
     return typeof ar === "number" && Number.isFinite(ar) ? ar : null;
   }, [composite, isInsufficient]);
 
+  const layerAlignmentLine = useMemo(() => {
+    if (isInsufficient) return null;
+    return resolveCompositeLayerAlignment({
+      rows: layerRows,
+      bias: setupBias,
+      alignmentRatio: compositeAlignmentRatio,
+      compositeDirection: parseCompositeDirectionFields(composite as Record<string, unknown>)
+    }).displayLine;
+  }, [isInsufficient, layerRows, setupBias, compositeAlignmentRatio, composite]);
+
   const layerSignalSummary = useMemo(() => {
     if (!isInsufficient && typeof (composite as Record<string, unknown>).signal_summary === "string") {
       const s = String((composite as Record<string, unknown>).signal_summary);
@@ -997,7 +1009,7 @@ export function DeepDive({
   );
 
   const scenario = useMemo(() => {
-    const price = card.price;
+    const price = displayPrice;
     if (price == null || !Number.isFinite(price)) return null;
     const isLong = setupBias !== "Bearish";
     const stopPrice =
@@ -1086,7 +1098,7 @@ export function DeepDive({
           : (target2ProvenanceLabel(target2Provenance) ?? "Extended target — unanchored")
         : null
     };
-  }, [card.price, setupBias, signalOverlay, referenceLevels, composite, isInsufficient]);
+  }, [displayPrice, setupBias, signalOverlay, referenceLevels, composite, isInsufficient]);
 
   const currentRr = scenario?.displayRr ?? null;
 
@@ -1521,6 +1533,7 @@ export function DeepDive({
                   bias={setupBias}
                   rows={layerRows}
                   signalSummary={layerSignalSummary}
+                  layerAlignmentLine={layerAlignmentLine}
                 />
                 {/* 3. Timeframe alignment (prototype panel 3) */}
                 {timeframeContext ? (
@@ -1548,10 +1561,12 @@ export function DeepDive({
                     layout="desk"
                     setupJudgment={setupJudgment}
                     fundamentalSummary={fundamentalSummary}
+                    riskReward={currentRr ?? riskReward}
+                    minRiskReward={deskMinRr}
                   />
                 ) : null}
                 {/* 6. Scenario geometry + R/R gauge side-by-side + Copy scenario */}
-                {card.price != null ? (
+                {displayPrice != null ? (
                   <article
                     style={{
                       background: colors.surface,

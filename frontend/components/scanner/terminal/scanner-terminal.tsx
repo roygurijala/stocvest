@@ -423,7 +423,23 @@ function SignalRow({
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
-        <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: colors.text }}>{row.symbol}</span>
+        <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
+          <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: colors.text }}>{row.symbol}</span>
+          {row.company ? (
+            <span
+              title={row.company}
+              style={{
+                fontSize: 11,
+                color: colors.textMuted,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {row.company}
+            </span>
+          ) : null}
+        </div>
         <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
           {row.price != null ? (
             <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: pctTone }}>${row.price.toFixed(2)}</span>
@@ -651,6 +667,24 @@ export function ScannerTerminal({
     return set;
   }, [sections]);
 
+  const allSymbolNames = useSymbolNames([...allVisibleSymbols]);
+
+  const enrichedSections = useMemo(() => {
+    const enrichSignal = (row: ScannerTerminalSignalRow): ScannerTerminalSignalRow => {
+      const sym = row.symbol.trim().toUpperCase();
+      const company = row.company?.trim() || allSymbolNames[sym]?.trim() || null;
+      if (!company || company === row.company) return row;
+      return { ...row, company };
+    };
+    return {
+      ...sections,
+      actionable: sections.actionable.map(enrichSignal),
+      developing: sections.developing.map(enrichSignal),
+      developingClosest: sections.developingClosest.map(enrichSignal),
+      developingAlso: sections.developingAlso.map(enrichSignal)
+    };
+  }, [sections, allSymbolNames]);
+
   useEffect(() => {
     const ticker = isTickerSearchQuery(filters.query);
     if (!ticker) return;
@@ -671,8 +705,8 @@ export function ScannerTerminal({
     <ScannerDetailPanel
       selection={selection}
       gaps={enrichedGapRows.all}
-      actionable={sections.actionable}
-      developing={sections.developing}
+      actionable={enrichedSections.actionable}
+      developing={enrichedSections.developing}
       radar={sections.radar}
       environment={environment}
       evaluationTrace={evaluationTrace}
@@ -825,7 +859,7 @@ export function ScannerTerminal({
               synthesis={synthesis}
               swingDesk={swingDesk}
               dayDesk={dayDesk}
-              developingClosest={sections.developingClosest}
+              developingClosest={enrichedSections.developingClosest}
               colors={colors}
               onSelectSymbol={(symbol, lane) => setSelection({ kind: "lookup", symbol, lane })}
             />
@@ -945,7 +979,7 @@ export function ScannerTerminal({
                   <FunnelLoadingSkeleton lines={2} colors={colors} />
                 ) : (
                 <div style={funnelCardGridStyle(!narrowLayout)}>
-                  {sections.actionable.map((row) => (
+                  {enrichedSections.actionable.map((row) => (
                     <SignalRow
                       key={row.id}
                       row={row}
@@ -981,7 +1015,7 @@ export function ScannerTerminal({
                     <>
                       <DevelopingSubLabel colors={colors}>Closest to triggering</DevelopingSubLabel>
                       <div style={funnelCardGridStyle(!narrowLayout)}>
-                        {sections.developingClosest.map((row) => (
+                        {enrichedSections.developingClosest.map((row) => (
                           <SignalRow
                             key={row.id}
                             row={row}
@@ -998,7 +1032,7 @@ export function ScannerTerminal({
                     <>
                       <DevelopingSubLabel colors={colors}>Also developing</DevelopingSubLabel>
                       <div style={funnelCardGridStyle(!narrowLayout)}>
-                        {sections.developingAlso.map((row) => (
+                        {enrichedSections.developingAlso.map((row) => (
                           <SignalRow
                             key={row.id}
                             row={row}

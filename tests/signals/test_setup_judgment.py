@@ -45,6 +45,26 @@ def test_near_ready_process_with_missing_layers() -> None:
     assert "Missing alignment" in j["primary_blocker"]
 
 
+def test_neutral_composite_uses_directional_count_not_all_layers() -> None:
+    layers = [
+        {"layer": "technical", "status": "available", "score": 55, "verdict": "neutral"},
+        {"layer": "news", "status": "available", "score": 50, "verdict": "neutral"},
+        {"layer": "macro", "status": "available", "score": 52, "verdict": "neutral"},
+        {"layer": "sector", "status": "available", "score": 48, "verdict": "neutral"},
+        {"layer": "geopolitical", "status": "available", "score": 45, "verdict": "neutral"},
+        {"layer": "internals", "status": "available", "score": 62, "verdict": "bullish"},
+    ]
+    j = build_setup_judgment(
+        mode="swing",
+        layers=layers,
+        signal_summary="neutral",
+        alignment_ratio=1.0,
+    )
+    assert j["process"]["layers_aligned"] == 1
+    assert j["process"]["tier"] == "not_aligned"
+    assert j["process"]["label"] == "Not aligned"
+
+
 def test_extended_rsi_weak_tradeability() -> None:
     layers = [_bullish_layer(lid) for lid in ("technical", "news", "macro", "sector", "geopolitical", "internals")]
     tech = SwingTechnicalLayerResult(
