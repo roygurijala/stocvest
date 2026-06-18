@@ -15,9 +15,11 @@ type Props = {
   bias: SignalsSetupBias;
   rows: SignalsLayerRowInput[];
   signalSummary: string;
+  /** Canonical X/6 alignment — clarifies force-summary counts vs setup progress. */
+  layerAlignmentLine?: string | null;
 };
 
-export function SignalsBiasRationalePanel({ bias, rows, signalSummary }: Props) {
+export function SignalsBiasRationalePanel({ bias, rows, signalSummary, layerAlignmentLine }: Props) {
   const { colors } = useTheme();
   const intro = buildBiasRationaleIntro(bias, rows, signalSummary);
   const biasColor =
@@ -51,6 +53,15 @@ export function SignalsBiasRationalePanel({ bias, rows, signalSummary }: Props) 
       <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted }}>
         {biasKpiSubline(bias)}
       </p>
+      {layerAlignmentLine ? (
+        <p
+          className="m-0 mt-2 text-xs font-semibold leading-snug"
+          style={{ color: colors.text }}
+          data-testid="signals-layer-alignment-kpi"
+        >
+          Layer alignment: {layerAlignmentLine}
+        </p>
+      ) : null}
       <p className="m-0 mt-3 text-sm leading-snug" style={{ color: colors.text }}>
         {intro}
       </p>

@@ -49,6 +49,8 @@ type Props = {
   setupJudgment?: SetupJudgment | null;
   /** Regular session open (Polygon `market` === open). Omit when unknown. */
   regularSessionOpen?: boolean | null;
+  riskReward?: number | null;
+  minRiskReward?: number | null;
 };
 
 export function SignalsSetupRead({
@@ -64,7 +66,9 @@ export function SignalsSetupRead({
   showFundamentalUpgrade = false,
   layout = "full",
   setupJudgment = null,
-  regularSessionOpen = null
+  regularSessionOpen = null,
+  riskReward = null,
+  minRiskReward = null
 }: Props) {
   const { colors } = useTheme();
   const [executionDetailOpen, setExecutionDetailOpen] = useState(false);
@@ -132,6 +136,8 @@ export function SignalsSetupRead({
             entryTimingWeak: setupJudgment.tradeability.band === "weak"
           })}
           executionTone={executionTone}
+          riskReward={riskReward}
+          minRiskReward={minRiskReward}
         />
       ) : null}
 
