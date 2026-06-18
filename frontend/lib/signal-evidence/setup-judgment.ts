@@ -79,15 +79,15 @@ function reconcileSetupJudgmentProcess(
     judgment.process.layersTotal !== layersTotal;
   if (!overstatedNeutral && !drifted) return judgment;
 
-  const tierMeta = resolveAlignmentDisplayTier({
+  const tier = resolveAlignmentDisplayTier({
     layersAligned,
     layersTotal
   });
   return {
     ...judgment,
     process: {
-      tier: tierMeta.tier,
-      label: tierMeta.label,
+      tier,
+      label: PROCESS_LABEL[tier],
       layersAligned,
       layersTotal
     }
