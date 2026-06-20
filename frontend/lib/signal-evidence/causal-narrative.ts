@@ -118,7 +118,8 @@ function roleForLayer(
 function defaultBecause(
   key: string,
   polarity: SignalsLayerPolarity | "unavailable",
-  upstream: string[]
+  upstream: string[],
+  direction: "bullish" | "bearish" | "" = ""
 ): string {
   const name = signalLayerDisplayName(key) ?? key;
   const upNames = upstream.map((u) => signalLayerDisplayName(u) ?? u);
@@ -145,6 +146,17 @@ function defaultBecause(
     return `${name} opposes the setup bias.`;
   }
   if (polarity === "mixed") {
+    // Under a neutral setup, a directional layer read (e.g. bullish Sector) is
+    // "mixed" only relative to the setup — describe the read, not "no edge".
+    if (direction === "bullish" || direction === "bearish") {
+      if (key === "sector") {
+        return `Sector reads ${direction}, but the overall setup is neutral — it isn't confirming a single direction on its own.`;
+      }
+      if (key === "internals") {
+        return `Market internals read ${direction}, but the tape isn't confirming a single direction overall.`;
+      }
+      return `${name} reads ${direction}, but isn't confirming a direction while the setup stays neutral.`;
+    }
     if (key === "sector") return "Sector participation is mixed — no clear leadership versus SPY.";
     if (key === "internals") return "Market internals are split — tape is not giving a clean confirmation.";
     return `${name} is mixed and does not confirm the bias.`;
@@ -177,9 +189,11 @@ function buildLayerNote(
   }
   const upstream = upstreamForLayer(key, blockingKeys);
   const role = roleForLayer(key, polarity, upstream);
+  const direction: "bullish" | "bearish" | "" =
+    row.status === "Bullish" ? "bullish" : row.status === "Bearish" ? "bearish" : "";
   const because = substantiveExplanation(row.explanation)
     ? clampText(row.explanation, 200)
-    : defaultBecause(key, polarity, upstream);
+    : defaultBecause(key, polarity, upstream, direction);
   return {
     layer: key,
     name: row.name || signalLayerDisplayName(key) || key,

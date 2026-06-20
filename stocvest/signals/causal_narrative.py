@@ -134,7 +134,13 @@ def _role_for_layer(key: str, polarity: LayerPolarity, upstream: list[str]) -> L
     return "gate"
 
 
-def _default_because(key: str, polarity: LayerPolarity, bias: str, upstream: list[str]) -> str:
+def _default_because(
+    key: str,
+    polarity: LayerPolarity,
+    bias: str,
+    upstream: list[str],
+    verdict: str = "",
+) -> str:
     name = LAYER_DISPLAY.get(key, key.title())
     up_names = [LAYER_DISPLAY.get(u, u.title()) for u in upstream]
     if polarity == "supportive":
@@ -169,6 +175,25 @@ def _default_because(key: str, polarity: LayerPolarity, bias: str, upstream: lis
             return "Trend and structure have not confirmed — continuation gates stay open."
         return f"{name} opposes the setup bias."
     if polarity == "mixed":
+        # Under a neutral setup, a directional layer verdict (e.g. bullish Sector)
+        # is "mixed" only relative to the setup — the layer itself still has a read.
+        # Describe that read instead of asserting it has no edge.
+        direction = (verdict or "").strip().lower()
+        if direction in ("bullish", "bearish"):
+            if key == "sector":
+                return (
+                    f"Sector reads {direction}, but the overall setup is neutral — "
+                    "it isn't confirming a single direction on its own."
+                )
+            if key == "internals":
+                return (
+                    f"Market internals read {direction}, but the tape isn't confirming "
+                    "a single direction overall."
+                )
+            return (
+                f"{name} reads {direction}, but isn't confirming a direction "
+                "while the setup stays neutral."
+            )
         if key == "sector":
             return "Sector participation is mixed — no clear leadership versus SPY."
         if key == "internals":
@@ -214,7 +239,7 @@ def _build_layer_note(
     because = (
         _clamp_text(reasoning, 200)
         if _substantive_reasoning(reasoning)
-        else _default_because(key, polarity, bias, upstream)
+        else _default_because(key, polarity, bias, upstream, verdict=verdict)
     )
     return {
         "layer": key,

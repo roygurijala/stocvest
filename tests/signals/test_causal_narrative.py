@@ -68,6 +68,32 @@ def test_substantive_reasoning_used():
     assert custom[:40] in news_note["because"]
 
 
+def test_neutral_setup_directional_layer_describes_read_not_no_edge():
+    # Image scenario: neutral setup, Sector reads bullish, Technical reads bearish.
+    # The fallback copy must reflect each layer's own directional read instead of
+    # asserting "no clear leadership" (which contradicts a bullish Sector verdict).
+    narrative = build_causal_narrative(
+        signal_summary="neutral",
+        layers=[
+            _layer("macro", "neutral"),
+            _layer("geopolitical", "neutral"),
+            _layer("internals", "neutral"),
+            _layer("sector", "bullish"),
+            _layer("news", "neutral"),
+            _layer("technical", "bearish"),
+        ],
+    )
+    sector_note = narrative["layer_notes"].get("sector")
+    assert sector_note is not None
+    assert sector_note["polarity"] == "mixed"
+    assert "bullish" in sector_note["because"].lower()
+    assert "no clear leadership" not in sector_note["because"].lower()
+
+    tech_note = narrative["layer_notes"].get("technical")
+    assert tech_note is not None
+    assert "bearish" in tech_note["because"].lower()
+
+
 def test_execution_note_appended():
     narrative = build_causal_narrative(
         signal_summary="bullish",
