@@ -139,11 +139,11 @@ locals {
     "GET /v1/journal/analytics"            = { module_key = "journal", authorizer = true }
     "POST /v1/journal/entries"             = { module_key = "journal", authorizer = true }
 
-    "GET /v1/trade-plans"                  = { module_key = "trade_plans", authorizer = true }
-    "PUT /v1/trade-plans"                  = { module_key = "trade_plans", authorizer = true }
-    "PUT /v1/trade-plans/sync"             = { module_key = "trade_plans", authorizer = true }
-    "DELETE /v1/trade-plans/{plan_id}"     = { module_key = "trade_plans", authorizer = true }
-    "POST /v1/trade-plans/thesis-alerts"   = { module_key = "trade_plans", authorizer = true }
+    "GET /v1/trade-plans"                = { module_key = "trade_plans", authorizer = true }
+    "PUT /v1/trade-plans"                = { module_key = "trade_plans", authorizer = true }
+    "PUT /v1/trade-plans/sync"           = { module_key = "trade_plans", authorizer = true }
+    "DELETE /v1/trade-plans/{plan_id}"   = { module_key = "trade_plans", authorizer = true }
+    "POST /v1/trade-plans/thesis-alerts" = { module_key = "trade_plans", authorizer = true }
 
     "GET /v1/pdt/status" = { module_key = "pdt", authorizer = true }
 
