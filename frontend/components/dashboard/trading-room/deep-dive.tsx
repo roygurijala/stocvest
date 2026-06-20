@@ -80,19 +80,27 @@ import {
 import { parseApiDecisionState } from "@/lib/signal-evidence/risk-stack-present";
 import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 import { feedCardAllowsScenarioGeometry } from "@/lib/dashboard/trading-room/feed-setup-tier";
+import { feedCardStateLabel } from "@/lib/dashboard/trading-room/feed-state-present";
 import { SessionMoverContext } from "@/components/dashboard/trading-room/session-mover-context";
 import { useSymbolName } from "@/lib/hooks/use-symbol-names";
+import { useTrackedPlan } from "@/lib/hooks/use-tracked-plan";
+import { buildTrackedPlanFromDeepDive } from "@/lib/trade-plan/build-tracked-plan";
+import { buildDataQualityFlags } from "@/lib/trade-plan/data-quality-present";
+import {
+  buildLiveAssessmentFromDeepDive,
+  resolveLiveVsPlanDiff,
+  resolveTriggerDisplay
+} from "@/lib/trade-plan/plan-status";
+import {
+  notifyTrackedPlanUpdated,
+  removeTrackedPlanForSymbol,
+  saveTrackedPlan
+} from "@/lib/trade-plan/tracked-plan-store";
+import { pushTrackedPlanRemovalToServer, pushTrackedPlanToServer } from "@/lib/trade-plan/tracked-plan-sync";
+import { TrackPlanPanel } from "@/components/trade-plan/track-plan-panel";
 
 type Colors = ReturnType<typeof useTheme>["colors"];
 type DeepDiveTab = "setup" | "layers" | "evolution" | "charts";
-
-const STATE_LABEL: Record<FeedState, string> = {
-  actionable: "Actionable",
-  near: "Near",
-  potential: "Potential",
-  cooling: "Cooling"
-};
-
 
 function fmtPrice(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -1118,6 +1126,97 @@ export function DeepDive({
     return lines.length > 0 ? lines : null;
   }, [scenario, currentRr, deskMinRr]);
 
+  const executionActionable = useMemo(() => {
+    if (!composite || isInsufficient) return null;
+    const raw = (composite as Record<string, unknown>).execution_actionable;
+    return typeof raw === "boolean" ? raw : null;
+  }, [composite, isInsufficient]);
+
+  const { plan: trackedPlan, refresh: refreshTrackedPlan } = useTrackedPlan(card.symbol, activeLane);
+
+  const livePlanAssessment = useMemo(() => {
+    return buildLiveAssessmentFromDeepDive({
+      currentPrice: displayPrice,
+      setupBias,
+      decisionState: apiDecisionState,
+      executionActionable,
+      entryZoneQuality: scenario?.entryZoneQuality ?? null,
+      entryLow: scenario?.entryLow ?? null,
+      entryHigh: scenario?.entryHigh ?? null,
+      currentRr: currentRr ?? scenario?.displayRr ?? null,
+      isInsufficient,
+      layersAligned: setupJudgment?.process.layersAligned ?? null,
+      layersTotal: setupJudgment?.process.layersTotal ?? null
+    });
+  }, [
+    displayPrice,
+    setupBias,
+    apiDecisionState,
+    executionActionable,
+    scenario,
+    currentRr,
+    isInsufficient,
+    setupJudgment
+  ]);
+
+  const planDiff = useMemo(() => {
+    if (!trackedPlan) return null;
+    return resolveLiveVsPlanDiff(trackedPlan, livePlanAssessment, deskMinRr);
+  }, [trackedPlan, livePlanAssessment, deskMinRr]);
+
+  const dataQualityFlags = useMemo(
+    () =>
+      buildDataQualityFlags({
+        isInsufficient,
+        unavailableMessage: unavailableMessage,
+        entryZoneQuality: scenario?.entryZoneQuality ?? null,
+        layersAligned: setupJudgment?.process.layersAligned ?? null,
+        layersTotal: setupJudgment?.process.layersTotal ?? null
+      }),
+    [isInsufficient, unavailableMessage, scenario, setupJudgment]
+  );
+
+  const triggerDisplay = useMemo(
+    () => resolveTriggerDisplay(livePlanAssessment, deskMinRr),
+    [livePlanAssessment, deskMinRr]
+  );
+
+  const handleTrackPlan = () => {
+    if (!scenario || isInsufficient || setupBias === "Neutral") return;
+    const plan = buildTrackedPlanFromDeepDive({
+      symbol: card.symbol,
+      mode: activeLane,
+      setupBias,
+      layersAligned: setupJudgment?.process.layersAligned ?? null,
+      layersTotal: setupJudgment?.process.layersTotal ?? null,
+      scenario: {
+        entryLow: scenario.entryLow,
+        entryHigh: scenario.entryHigh,
+        stopPrice: scenario.stopPrice,
+        target1: scenario.target1,
+        target2: scenario.target2,
+        currentPrice: scenario.currentPrice,
+        displayRr: scenario.displayRr ?? currentRr,
+        entryZoneQuality: scenario.entryZoneQuality ?? null
+      },
+      composite: composite as Record<string, unknown>,
+      verdictLine: pageDecision?.line ?? card.verdict,
+      deskMinRr
+    });
+    saveTrackedPlan(plan);
+    notifyTrackedPlanUpdated();
+    refreshTrackedPlan();
+    void pushTrackedPlanToServer(plan);
+  };
+
+  const handleClearPlan = () => {
+    const id = trackedPlan?.id;
+    removeTrackedPlanForSymbol(card.symbol, activeLane);
+    notifyTrackedPlanUpdated();
+    refreshTrackedPlan();
+    if (id) void pushTrackedPlanRemovalToServer(id);
+  };
+
   // Fundamental backdrop (swing only — matches signals page behaviour)
   const fundamentalSummary = useMemo<FundamentalBackdropSummary | null>(() => {
     if (activeLane !== "swing") return null;
@@ -1370,6 +1469,16 @@ export function DeepDive({
             </span>
           ) : null}
         </div>
+        {!isInsufficient && allowsScenarioGeometry ? (
+          <p
+            data-testid="deep-dive-trigger-line"
+            style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}
+          >
+            <span style={{ fontWeight: 700, color: colors.text }}>Trigger: </span>
+            {triggerDisplay.label}
+            <span style={{ color: colors.textMuted }}> — {triggerDisplay.hint}</span>
+          </p>
+        ) : null}
       </div>
 
       {/* ── Plain-English Brief: prototype-matching card ── */}
@@ -1563,6 +1672,22 @@ export function DeepDive({
                     fundamentalSummary={fundamentalSummary}
                     riskReward={currentRr ?? riskReward}
                     minRiskReward={deskMinRr}
+                  />
+                ) : null}
+                {allowsScenarioGeometry && !isInsufficient && scenario ? (
+                  <TrackPlanPanel
+                    plan={trackedPlan}
+                    diff={planDiff}
+                    onTrack={handleTrackPlan}
+                    onClear={handleClearPlan}
+                    trackingDisabled={setupBias === "Neutral"}
+                    trackDisabledReason={
+                      setupBias === "Neutral"
+                        ? "Neutral setups cannot be tracked as directional plans."
+                        : null
+                    }
+                    dataQualityFlags={dataQualityFlags}
+                    colors={colors}
                   />
                 ) : null}
                 {/* 6. Scenario geometry + R/R gauge side-by-side + Copy scenario */}

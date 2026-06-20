@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from stocvest.config.signal_parameters import TechnicalParameters
 from stocvest.data.models import Bar, Snapshot
 from stocvest.signals.indicator_scope import finalize_day_technical_chips
+from stocvest.signals.signal_math_contract import clamp_layer_score, layer_score_direction
 from stocvest.signals.vwap_state import (
     VWAPState,
     VWAP_STATE_TOOLTIP,
@@ -457,7 +458,9 @@ class TechnicalAnalyzer:
                 base_score -= params.rsi_strong_delta
 
         if volume_surge:
-            direction = 1 if base_score > 50 else -1
+            # Signal Math Contract: a surge amplifies the *existing* directional lean;
+            # at exactly neutral (50) there is no direction, so no amplification.
+            direction = layer_score_direction(base_score)
             base_score += direction * params.volume_amplifier
 
         if prev_day_high is not None and prev_day_high > 0:
@@ -476,7 +479,7 @@ class TechnicalAnalyzer:
             params=params,
         )
 
-        final_score = int(max(0, min(100, round(base_score))))
+        final_score = int(round(clamp_layer_score(base_score)))
 
         if final_score >= params.bullish_threshold:
             verdict = "bullish"
@@ -520,7 +523,9 @@ class TechnicalAnalyzer:
             parts.append(f"Session {s_roc:+.2f}% vs open")
         session_high = _session_high(bars)
         if session_high and session_high > 0:
-            pull = (price - session_high) / session_high * 100.0
+            # `pull` is a fraction (e.g. -0.02 for -2%), matching the score path above;
+            # the threshold param is also a fraction, and we render percent once.
+            pull = (price - session_high) / session_high
             if pull <= -params.session_pullback_moderate_pct:
                 parts.append(f"Pullback {pull * 100:.2f}% from session high")
         reasoning = ". ".join(parts[:4]) or f"Technical score {final_score}/100 from {len(bars)} bars"

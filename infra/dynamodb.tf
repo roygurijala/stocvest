@@ -383,6 +383,22 @@ resource "aws_dynamodb_table" "trade_journal" {
   })
 }
 
+# Tracked trade plans — one item per user; keys match DynamoDBTrackedPlanStore (userId + plans).
+resource "aws_dynamodb_table" "trade_plans" {
+  name         = "TradePlans"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-trade-plans"
+  })
+}
+
 # PDT rolling state per user; keys match DynamoDBPDTStateStore (userId, dayTradeDates, pdtExempt).
 resource "aws_dynamodb_table" "pdt_state" {
   name         = "PDTState"

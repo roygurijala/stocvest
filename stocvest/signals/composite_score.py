@@ -19,6 +19,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from stocvest.signals.signal_math_contract import (
+    DIRECTIONAL_SCORE_MAX,
+    DIRECTIONAL_SCORE_MIN,
+    DIRECTIONAL_VERDICT_THRESHOLD,
+    UNIT_MAX,
+    UNIT_MIN,
+    directional_sign,
+)
+
 
 class CompositeVerdict(str, Enum):
     BULLISH = "bullish"
@@ -117,8 +126,8 @@ class CompositeScoreEngine:
         *,
         base_weights: dict[str, float] | None = None,
         regime_weights: dict[str, dict[str, float]] | None = None,
-        bullish_threshold: float = 0.20,
-        bearish_threshold: float = -0.20,
+        bullish_threshold: float = DIRECTIONAL_VERDICT_THRESHOLD,
+        bearish_threshold: float = -DIRECTIONAL_VERDICT_THRESHOLD,
     ) -> None:
         self._base_weights = dict(base_weights or DEFAULT_BASE_WEIGHTS)
         self._regime_weights = dict(regime_weights or REGIME_WEIGHTS)
@@ -148,8 +157,8 @@ class CompositeScoreEngine:
         layer_effective_weights: dict[str, float] = {}
 
         for signal in signals:
-            score = self._clamp(signal.score, -1.0, 1.0)
-            confidence = self._clamp(signal.confidence, 0.0, 1.0)
+            score = self._clamp(signal.score, DIRECTIONAL_SCORE_MIN, DIRECTIONAL_SCORE_MAX)
+            confidence = self._clamp(signal.confidence, UNIT_MIN, UNIT_MAX)
             base_weight = self._base_weights.get(signal.layer, 0.0)
             regime_multiplier = multipliers.get(signal.layer, 1.0)
 
@@ -178,12 +187,14 @@ class CompositeScoreEngine:
         if total_effective_weight == 0:
             final_score = 0.0
         else:
-            final_score = self._clamp(weighted_sum / total_effective_weight, -1.0, 1.0)
+            final_score = self._clamp(
+                weighted_sum / total_effective_weight, DIRECTIONAL_SCORE_MIN, DIRECTIONAL_SCORE_MAX
+            )
 
         if total_confidence_weight == 0:
             final_confidence = 0.0
         else:
-            final_confidence = self._clamp(confidence_sum / total_confidence_weight, 0.0, 1.0)
+            final_confidence = self._clamp(confidence_sum / total_confidence_weight, UNIT_MIN, UNIT_MAX)
 
         raw_verdict = self._to_verdict(final_score)
         preliminary_alignment = self._alignment_meta(signals, raw_verdict, regime, layer_effective_weights)
@@ -214,9 +225,11 @@ class CompositeScoreEngine:
 
     @staticmethod
     def _layer_direction(score: float) -> CompositeVerdict:
-        if score > 0:
+        # Signal Math Contract: directional sign on the -1..+1 scale (neutral at 0).
+        sign = directional_sign(score)
+        if sign > 0:
             return CompositeVerdict.BULLISH
-        if score < 0:
+        if sign < 0:
             return CompositeVerdict.BEARISH
         return CompositeVerdict.NEUTRAL
 

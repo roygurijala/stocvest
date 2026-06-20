@@ -6,6 +6,7 @@ Pure functions; no I/O. Weekly bar = aggregate of last 5 daily sessions.
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
 from stocvest.signals.swing_technical_analyzer import _daily_rsi
@@ -39,6 +40,55 @@ def _ordered_bars(daily_bars: list[Any]) -> list[Any]:
     return sorted(daily_bars, key=_bar_timestamp)
 
 
+def _iso_week_key(ts: Any) -> tuple[int, int] | None:
+    """ISO (year, week) for a bar timestamp (datetime, date, or ISO string)."""
+    if ts is None:
+        return None
+    dt: datetime | date | None = None
+    if isinstance(ts, datetime):
+        dt = ts
+    elif isinstance(ts, date):
+        dt = ts
+    elif isinstance(ts, str):
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except ValueError:
+            try:
+                dt = date.fromisoformat(ts[:10])
+            except ValueError:
+                return None
+    if dt is None:
+        return None
+    iso = dt.isocalendar()
+    return (iso[0], iso[1])
+
+
+def _weekly_closes(ordered_bars: list[Any]) -> list[float]:
+    """Collapse ascending daily bars into one close per ISO week (the week's last close)."""
+    buckets: dict[tuple[int, int], float] = {}
+    order: list[tuple[int, int]] = []
+    for bar in ordered_bars:
+        key = _iso_week_key(_bar_timestamp(bar))
+        if key is None:
+            continue
+        close = _bar_value(bar, "close")
+        if close is None:
+            continue
+        if key not in buckets:
+            order.append(key)
+        buckets[key] = close
+    return [buckets[k] for k in order]
+
+
+def _weekly_rsi(weekly_closes: list[float]) -> float | None:
+    """RSI over weekly closes. Adaptive period when <15 weeks of history; None if too few."""
+    n = len(weekly_closes)
+    if n < 3:
+        return None
+    period = 14 if n >= 15 else max(2, n - 1)
+    return _daily_rsi(weekly_closes, period=period)
+
+
 def _verdict_to_bias(verdict: str) -> str:
     v = (verdict or "neutral").strip().lower()
     if v == "bullish":
@@ -53,7 +103,8 @@ def compute_weekly_bias(daily_bars: list[Any]) -> dict[str, Any]:
     Weekly view from the last five daily bars.
 
     ``weekly_open`` = open of bar[-5]; ``weekly_close`` = close of bar[-1].
-  RSI uses the full available daily close series (14+ sessions when present).
+  RSI is a true weekly RSI: daily bars are collapsed to one close per ISO week
+  and RSI is computed on that weekly series (adaptive period when <15 weeks).
     """
     if len(daily_bars) < _WEEKLY_BARS_MIN:
         return {
@@ -78,9 +129,7 @@ def compute_weekly_bias(daily_bars: list[Any]) -> dict[str, Any]:
         }
 
     weekly_change_pct = (weekly_close - weekly_open) / weekly_open * 100.0
-    closes = [_bar_value(b, "close") for b in ordered]
-    closes_f = [c for c in closes if c is not None]
-    rsi_raw = _daily_rsi(closes_f) if len(closes_f) >= 15 else _daily_rsi(closes_f, period=min(14, max(2, len(closes_f) - 1)))
+    rsi_raw = _weekly_rsi(_weekly_closes(ordered))
     weekly_rsi = float(rsi_raw) if rsi_raw is not None else 50.0
 
     if weekly_change_pct > _FLAT_THRESHOLD_PCT:

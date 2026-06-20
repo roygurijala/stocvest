@@ -1,6 +1,6 @@
 # STOCVEST — API contracts (immutable sections)
 
-**Last reviewed:** 2026-06-10
+**Last reviewed:** 2026-06-20 (added §4.15 tracked trade plans — B69, deploy pending)
 
 Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
 
@@ -264,3 +264,13 @@ Terraform table **`AuditEvents`**: **`pk`** = `user#{userId|anon}`, **`sk`** = `
 - `PATCH /v1/alerts/preferences` — **authenticated**; partial JSON body merges into stored preferences.
 
 - `GET /v1/alerts/history` — **authenticated**. Query **`limit`**: integer **1–50**, default **20**. Optional **`alert_type`**: a valid **`AlertType`** value (e.g. **`watchlist_maturation`**, **`signal_fired`**). Optional **`symbols`**: comma-separated tickers (uppercased server-side; each token alphanumeric plus **`.`** / **`-`**, max length **12**, up to **50** tokens). When **`alert_type`** and/or **`symbols`** is set, the service reads up to **50** newest rows, applies filters in order (**type** then **symbol**), then returns at most **`limit`** rows. Invalid **`alert_type`** → **400** (`Invalid alert_type: '…'`). When both filters are omitted, returns the newest **`limit`** rows of any type.
+
+### 4.15 Tracked trade plans + thesis alerts (B69, `trade_plans` Lambda — deploy pending)
+
+User-scoped frozen planning snapshots. **Planning only — never a broker order.** All routes **authenticated**; identity is taken from the JWT — a body carrying **`userId`** / **`user_id`** is rejected (`400`). Free text is sanitized server-side. Cap **24** plans per user (`MAX_TRACKED_PLANS_PER_USER`). DynamoDB **`TradePlans`** (one item per user). Plan JSON (camelCase): **`id`**, **`symbol`**, **`mode`** (`swing` \| `day`), **`committedAt`** (ISO), optional **`expiresAt`**, **`bias`** (`Bullish` \| `Bearish` \| `Neutral`), optional **`layersAligned`** / **`layersTotal`**, **`levels`** (**`entryLow`**, **`entryHigh`**, **`stop`**, **`target1`**, optional **`target2`**, **`priceAtCommit`**, optional **`riskRewardAtCommit`**), optional **`entryZoneQuality`**, **`parameterVersion`**, **`verdictLine`**, **`deskMinRr`**.
+
+- `GET /v1/trade-plans` — returns the caller's tracked plans (array of plan JSON).
+- `PUT /v1/trade-plans` — upsert one plan (body = plan JSON); returns the stored plan.
+- `PUT /v1/trade-plans/sync` — body **`{ "plans": [ ...plan JSON ] }`** (≤24). Server merges client + server plans **per `mode:symbol`, newest `committedAt` wins**, caps at 24, returns the merged set. This is the `localStorage`↔server reconciliation path.
+- `DELETE /v1/trade-plans/{plan_id}` — removes one plan; **404** when not found.
+- `POST /v1/trade-plans/thesis-alerts` — body **`{ "assessments": [ ... ] }`**; emits best-effort **self-notification** emails when a tracked plan's live assessment diverges from its committed thesis; returns **`{ "sent": <int> }`**. (Client-asserted; server-side verification is an open question — see `CONTEXT.md` §3 / `BACKLOG.md`.)

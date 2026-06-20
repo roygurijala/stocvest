@@ -102,6 +102,11 @@ import {
   type FeedState,
   DEFAULT_FEED_FILTERS
 } from "@/lib/dashboard/trading-room/feed-model";
+import { feedCardStateLabel } from "@/lib/dashboard/trading-room/feed-state-present";
+import { useTrackedPlansList } from "@/lib/hooks/use-tracked-plans-list";
+import { feedCardTrackedPlanKey } from "@/lib/trade-plan/tracked-plan-key";
+import { TrackedPlanBadge } from "@/components/trade-plan/tracked-plan-badge";
+import { TrackedPlansAlertStrip } from "@/components/trade-plan/tracked-plans-alert-strip";
 
 export interface DashboardTradingRoomProps {
   marketOverview: MarketOverview;
@@ -119,13 +124,6 @@ export interface DashboardTradingRoomProps {
   /** Symbol handoff from `?symbol=` / scanner intent — seeds Deep Dive on first paint. */
   openIntent?: DashboardTradingRoomDeepLink | null;
 }
-
-const STATE_LABEL: Record<FeedState, string> = {
-  actionable: "Actionable",
-  near: "Near",
-  potential: "Potential",
-  cooling: "Cooling"
-};
 
 function fmtPrice(n: number | null): string {
   if (n == null) return "—";
@@ -276,6 +274,12 @@ function TradingRoomBody({
   const { data: aiBrief } = useMarketBriefNarrative();
   const swingEnvironment = useMarketEnvironment("swing", { macroRegime: macro?.market_regime });
   const dayEnvironment = useMarketEnvironment("day", { macroRegime: macro?.market_regime });
+  const { plans: trackedPlans } = useTrackedPlansList();
+  const trackedPlanKeys = useMemo(
+    () =>
+      new Set(trackedPlans.map((p) => feedCardTrackedPlanKey({ symbol: p.symbol, lane: p.mode }))),
+    [trackedPlans]
+  );
 
   const { data: swingDesk, mutate: refreshSwingDesk } = useDeskToday("swing", { fallbackData: deskInitial?.swing });
   const { data: dayDesk, mutate: refreshDayDesk } = useDeskToday("day", {
@@ -949,6 +953,7 @@ function TradingRoomBody({
       selectedId={selected?.id ?? null}
       onSelectCard={selectCard}
       colors={colors}
+      trackedPlanKeys={trackedPlanKeys}
     >
       <SignalFeed
         day={day}
@@ -972,6 +977,7 @@ function TradingRoomBody({
         dayEnvironment={dayEnvironment}
         onRefreshFeedCard={handleRefreshFeedCard}
         refreshingCardIds={refreshingCardIds}
+        trackedPlanKeys={trackedPlanKeys}
       />
     </MobileFeedPanel>
   ) : (
@@ -997,6 +1003,7 @@ function TradingRoomBody({
       dayEnvironment={dayEnvironment}
       onRefreshFeedCard={handleRefreshFeedCard}
       refreshingCardIds={refreshingCardIds}
+      trackedPlanKeys={trackedPlanKeys}
     />
   );
   const centerPanel = selected ? (
@@ -1101,6 +1108,10 @@ function TradingRoomBody({
         isMobile={isMobile}
         colors={colors}
       />
+
+      <div style={{ paddingLeft: bleed, paddingRight: bleed }}>
+        <TrackedPlansAlertStrip />
+      </div>
 
       {/* Hide the filter bar when the desk is quiet — there's nothing to filter,
           and the feed shows the "building structure / session activity" view. */}
@@ -1284,12 +1295,14 @@ function MobileFeedChipStrip({
   cards,
   selectedId,
   onSelectCard,
-  colors
+  colors,
+  trackedPlanKeys
 }: {
   cards: FeedCard[];
   selectedId: string | null;
   onSelectCard: (card: FeedCard) => void;
   colors: ReturnType<typeof useTheme>["colors"];
+  trackedPlanKeys?: Set<string>;
 }) {
   if (cards.length === 0) return null;
   return (
@@ -1308,6 +1321,7 @@ function MobileFeedChipStrip({
       {cards.map((card) => {
         const active = card.id === selectedId;
         const tone = stateTone(card.state, colors);
+        const hasPlan = trackedPlanKeys?.has(feedCardTrackedPlanKey(card)) ?? false;
         return (
           <button
             key={card.id}
@@ -1335,7 +1349,8 @@ function MobileFeedChipStrip({
               style={{ width: 6, height: 6, borderRadius: "50%", background: tone, flex: "none" }}
             />
             {card.symbol}
-            <span style={{ color: colors.textMuted, fontWeight: 600 }}>{STATE_LABEL[card.state]}</span>
+            {hasPlan ? <TrackedPlanBadge colors={colors} compact /> : null}
+            <span style={{ color: colors.textMuted, fontWeight: 600 }}>{feedCardStateLabel(card)}</span>
           </button>
         );
       })}
@@ -1351,6 +1366,7 @@ function MobileFeedPanel({
   selectedId,
   onSelectCard,
   colors,
+  trackedPlanKeys,
   children
 }: {
   open: boolean;
@@ -1360,6 +1376,7 @@ function MobileFeedPanel({
   selectedId: string | null;
   onSelectCard: (card: FeedCard) => void;
   colors: ReturnType<typeof useTheme>["colors"];
+  trackedPlanKeys?: Set<string>;
   children: ReactNode;
 }) {
   if (!open) {
@@ -1371,6 +1388,7 @@ function MobileFeedPanel({
             selectedId={selectedId}
             onSelectCard={onSelectCard}
             colors={colors}
+            trackedPlanKeys={trackedPlanKeys}
           />
         ) : null}
         <button
@@ -1487,7 +1505,8 @@ function SignalFeed({
   swingEnvironment = null,
   dayEnvironment = null,
   onRefreshFeedCard,
-  refreshingCardIds
+  refreshingCardIds,
+  trackedPlanKeys
 }: {
   day: FeedCard[];
   swing: FeedCard[];
@@ -1512,6 +1531,7 @@ function SignalFeed({
   dayEnvironment?: MarketEnvironmentPayload | null;
   onRefreshFeedCard?: (card: FeedCard) => void | Promise<void>;
   refreshingCardIds?: Set<string>;
+  trackedPlanKeys?: Set<string>;
 }) {
   const empty = day.length === 0 && swing.length === 0;
   // Desktop scroll lives on `.trading-room-column--feed` (prototype zone model).
@@ -1548,6 +1568,7 @@ function SignalFeed({
             environment={dayEnvironment}
             onRefreshFeedCard={onRefreshFeedCard}
             refreshingCardIds={refreshingCardIds}
+            trackedPlanKeys={trackedPlanKeys}
           />
         </>
       ) : null}
@@ -1562,6 +1583,7 @@ function SignalFeed({
         environment={swingEnvironment}
         onRefreshFeedCard={onRefreshFeedCard}
         refreshingCardIds={refreshingCardIds}
+        trackedPlanKeys={trackedPlanKeys}
       />
       {empty ? (
         deskEmpty || isWeekend ? (
@@ -1625,7 +1647,8 @@ function FeedLaneSection({
   staleLabel = null,
   environment = null,
   onRefreshFeedCard,
-  refreshingCardIds
+  refreshingCardIds,
+  trackedPlanKeys
 }: {
   title: string;
   count: number;
@@ -1638,6 +1661,7 @@ function FeedLaneSection({
   environment?: MarketEnvironmentPayload | null;
   onRefreshFeedCard?: (card: FeedCard) => void | Promise<void>;
   refreshingCardIds?: Set<string>;
+  trackedPlanKeys?: Set<string>;
 }) {
   if (cards.length === 0) return null;
   return (
@@ -1686,6 +1710,7 @@ function FeedLaneSection({
           environmentHint={environmentSessionCardHint(environment, card.lane, card.state)}
           onRefresh={onRefreshFeedCard ? () => onRefreshFeedCard(card) : undefined}
           refreshing={refreshingCardIds?.has(card.id) ?? false}
+          hasTrackedPlan={trackedPlanKeys?.has(feedCardTrackedPlanKey(card)) ?? false}
         />
       ))}
     </div>
@@ -1723,7 +1748,8 @@ function SignalCard({
   staleDate = null,
   environmentHint = null,
   onRefresh,
-  refreshing = false
+  refreshing = false,
+  hasTrackedPlan = false
 }: {
   card: FeedCard;
   active: boolean;
@@ -1737,6 +1763,7 @@ function SignalCard({
   environmentHint?: string | null;
   onRefresh?: () => void;
   refreshing?: boolean;
+  hasTrackedPlan?: boolean;
 }) {
   const biasAccent = feedBiasColor(card.bias, colors);
   const sTone = stateTone(card.state, colors);
@@ -1788,6 +1815,7 @@ function SignalCard({
           <span style={{ display: "flex", alignItems: "center", gap: spacing[2], minWidth: 0 }}>
             <span style={{ fontSize: typography.scale.base, fontWeight: 700 }}>{card.symbol}</span>
             {showLaneBadge ? <span style={laneBadgeStyle(colors)}>{card.lane}</span> : null}
+            {hasTrackedPlan ? <TrackedPlanBadge colors={colors} compact /> : null}
           </span>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
             <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: pctTone }}>{fmtPrice(card.price)}</span>
@@ -1806,7 +1834,7 @@ function SignalCard({
           <span style={biasPillStyle(card.bias, colors)}>
             {card.bias === "bull" ? "Bullish" : card.bias === "bear" ? "Bearish" : "Neutral"}
           </span>
-          <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: sTone }}>{STATE_LABEL[card.state]}</span>
+          <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: sTone }}>{feedCardStateLabel(card)}</span>
         </div>
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>{card.verdict}</span>
         {environmentHint ? (

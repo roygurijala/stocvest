@@ -154,6 +154,11 @@ class EmailService:
             mode_label = "Swing" if mode_s == "swing" else "Day" if mode_s == "day" else mode_s.capitalize()
             direction = format_direction(str(context.get("direction") or ""))
             return f"STOCVEST · {sym} {direction} — {mode_label} desk actionable"
+        if alert_type == AlertType.TRACKED_PLAN_THESIS:
+            mode_s = str(context.get("mode") or "").strip().lower()
+            mode_part = f" ({mode_s})" if mode_s in ("swing", "day") else ""
+            label = str(context.get("thesis_label") or context.get("thesis_status") or "update").strip()
+            return f"STOCVEST · {sym}{mode_part} tracked plan: {label}"
         return "STOCVEST · Alert"
 
     def _alert_detail_rows(self, alert_type: AlertType, context: dict[str, Any]) -> list[tuple[str, str]]:
@@ -202,6 +207,20 @@ class EmailService:
             ar = context.get("alignment_ratio")
             if isinstance(ar, (int, float)):
                 rows.append(("Layer alignment", f"{int(round(float(ar) * 100))}%"))
+            return rows
+        if alert_type == AlertType.TRACKED_PLAN_THESIS:
+            sym = str(context.get("symbol") or "").upper()
+            mode_s = str(context.get("mode") or "swing").strip().lower()
+            mode_label = "Swing" if mode_s == "swing" else "Day" if mode_s == "day" else mode_s.capitalize()
+            rows = [
+                ("Symbol", sym),
+                ("Desk", mode_label or "—"),
+                ("Thesis", str(context.get("thesis_label") or "—")),
+                ("Trigger", str(context.get("trigger_label") or "—")),
+            ]
+            hint = str(context.get("thesis_hint") or "").strip()
+            if hint:
+                rows.append(("Note", hint[:240]))
             return rows
         sym = str(context.get("symbol") or "").upper()
         direction = format_direction(str(context.get("direction") or ""))
@@ -295,6 +314,15 @@ class EmailService:
             disclaimer = (
                 "Execution-actionable means ledger gates passed and price is inside the entry zone "
                 "at evaluation time. Informational only — not investment advice."
+            )
+        elif alert_type == AlertType.TRACKED_PLAN_THESIS:
+            sym = str(context.get("symbol") or "").strip().upper()
+            mode_s = str(context.get("mode") or "swing").strip().lower()
+            cta = f"{base}/dashboard?symbol={sym}&lane={mode_s}&ref=trade-plans"
+            cta_label = "Review tracked plan"
+            disclaimer = (
+                "Live desk read vs your frozen plan — informational only. "
+                "Your tracked entry, stop, and targets are not auto-updated. Not investment advice."
             )
         else:
             cta = f"{base}/dashboard/signals"

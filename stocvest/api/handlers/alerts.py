@@ -21,6 +21,7 @@ _BOOL_KEYS = frozenset(
         "on_gap_detected",
         "on_watchlist_maturation",
         "on_execution_actionable",
+        "on_tracked_plan_thesis",
         "watchlist_only",
         "quiet_hours_enabled",
     }

@@ -85,6 +85,7 @@ from stocvest.signals.market_context_composite_dampener import apply_market_cont
 from stocvest.data.symbol_universe_eligibility import UniverseEligibilityContext, universe_exclusion_reason
 from stocvest.data.ticker_reference_cache import get_ticker_reference
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
+from stocvest.signals.session_price_guard import session_gap_percent
 from stocvest.signals.composite_score import (
     CompositeVerdict,
     LayerSignal,
@@ -632,13 +633,23 @@ async def build_swing_composite_response(
     pattern = str(getattr(tech, "confluence_pattern", None) or "swing_composite")
     response_body["pattern"] = pattern
 
+    gap_pct_val = (
+        session_gap_percent(
+            getattr(sym_snap, "prev_close", None),
+            getattr(sym_snap, "last_trade_price", None),
+            getattr(sym_snap, "day_open", None),
+            symbol=sym,
+        )
+        if sym_snap
+        else None
+    )
     cf: Any = None
     cf_subset: dict[str, Any] | None = None
     if direction_out:
         sig_data = {
             "pattern": pattern,
             "volume_vs_avg": 1.0,
-            "gap_pct": 0.0,
+            "gap_pct": float(gap_pct_val) if gap_pct_val is not None else 0.0,
             "ema9": getattr(tech, "sma50", None),
             "last_trade_price": last_px,
         }

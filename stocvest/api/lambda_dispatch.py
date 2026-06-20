@@ -310,6 +310,13 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
 
         return _with_cors_and_audit(event=event, response=journal_dispatch_handler(event, context), module=module)
 
+    if module == "trade_plans":
+        from stocvest.api.handlers.trade_plans import trade_plans_dispatch_handler
+
+        return _with_cors_and_audit(
+            event=event, response=trade_plans_dispatch_handler(event, context), module=module
+        )
+
     if module == "pdt":
         from stocvest.api.handlers.pdt import pdt_status_handler
 

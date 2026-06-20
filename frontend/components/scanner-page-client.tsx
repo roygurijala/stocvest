@@ -571,13 +571,14 @@ export function ScannerPageClient({
   useEffect(() => {
     let cancelled = false;
     const ny = isoDateInNewYork();
+    const syms = gapSymbolsKey.split(",").filter(Boolean);
     (async () => {
       const map: Record<string, number | null> = {};
       await Promise.all(
-        overview.gapIntelligence.map(async (g) => {
-          const bars = await fetchSymbolMinuteBars(g.symbol, ny, ny, 500);
+        syms.map(async (sym) => {
+          const bars = await fetchSymbolMinuteBars(sym, ny, ny, 500);
           if (cancelled) return;
-          map[g.symbol] = computePmhFromBars(bars, ny);
+          map[sym] = computePmhFromBars(bars, ny);
         })
       );
       if (cancelled) return;
@@ -586,7 +587,11 @@ export function ScannerPageClient({
     return () => {
       cancelled = true;
     };
-  }, [gapSymbolsKey, overview.gapIntelligence]);
+    // `gapSymbolsKey` is the comma-joined gap symbols; depending on the array itself
+    // (a fresh reference after every overview merge) re-fetched 500-bar minute data
+    // for every symbol on each refresh tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gapSymbolsKey]);
 
   useEffect(() => {
     const id = window.setInterval(() => forceTick((x) => x + 1), 1000);

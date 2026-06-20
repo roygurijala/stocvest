@@ -15,7 +15,7 @@ from stocvest.api.services.opportunity_desk.funnel import FunnelMover, Opportuni
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.data.models import Snapshot, Timeframe
 from stocvest.data.symbol_universe_eligibility import snapshot_universe_exclusion_reason
-from stocvest.signals.session_price_guard import is_corporate_action_session_move
+from stocvest.signals.session_price_guard import session_gap_percent
 from stocvest.data.polygon_client import PolygonClient
 from stocvest.signals.swing_technical_analyzer import SwingTechnicalAnalyzer, SwingTechnicalLayerResult
 from stocvest.utils.config import get_settings
@@ -46,21 +46,10 @@ class QuietLeadersConfig:
 
 
 def _session_gap_percent(snap: Snapshot) -> float | None:
-    prev = snap.prev_close
-    if prev is None or prev <= 0:
-        return None
-    last = snap.last_trade_price
-    o = snap.day_open
-    if last is not None and last > 0:
-        price = float(last)
-    elif o is not None and o > 0:
-        price = float(o)
-    else:
-        return None
-    gap = (price - float(prev)) / float(prev) * 100.0
-    if is_corporate_action_session_move(float(prev), price, gap, symbol=snap.symbol):
-        return None
-    return round(gap, 4)
+    # Delegates to the shared Signal Math contract helper (single source of truth).
+    return session_gap_percent(
+        snap.prev_close, snap.last_trade_price, snap.day_open, symbol=snap.symbol
+    )
 
 
 def select_quiet_leader_snapshots(

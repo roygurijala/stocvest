@@ -45,6 +45,27 @@ def _et_calendar_date(utc_dt: datetime) -> date:
     return utc_dt.astimezone(_ET).date()
 
 
+def _tracked_plan_thesis_tuple_from_body(body: str) -> tuple[str, str] | None:
+    """Parse stored alert body; return ``(plan_id, thesis_status)`` lowercased."""
+    try:
+        d = json.loads(body or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    plan_id = str(d.get("plan_id") or d.get("planId") or "").strip()
+    status = str(d.get("thesis_status") or d.get("thesisStatus") or "").strip().lower()
+    if not plan_id or status not in ("valid", "weakened", "invalid"):
+        return None
+    return (plan_id, status)
+
+
+def _thesis_rank(status: str) -> int:
+    if status == "invalid":
+        return 2
+    if status == "weakened":
+        return 1
+    return 0
+
+
 def _maturation_transition_tuple_from_body(body: str) -> tuple[str, str, str] | None:
     """Parse stored ``preview_context_json`` body; return ``(mode, previous_state, new_state)`` lowercased."""
     try:
@@ -80,6 +101,14 @@ class DynamoDBAlertStore(Protocol):
         mode: str,
         previous_state: str,
         new_state: str,
+        *,
+        reference_utc: datetime | None = None,
+    ) -> bool: ...
+    def had_tracked_plan_thesis_alert_on_et_calendar_day(
+        self,
+        user_id: str,
+        plan_id: str,
+        thesis_status: str,
         *,
         reference_utc: datetime | None = None,
     ) -> bool: ...
@@ -179,6 +208,29 @@ class InMemoryAlertStore:
                 return True
         return False
 
+    def had_tracked_plan_thesis_alert_on_et_calendar_day(
+        self,
+        user_id: str,
+        plan_id: str,
+        thesis_status: str,
+        *,
+        reference_utc: datetime | None = None,
+    ) -> bool:
+        pid = plan_id.strip()
+        status_l = thesis_status.strip().lower()
+        ref = reference_utc if reference_utc is not None else datetime.now(timezone.utc)
+        target = _et_calendar_date(ref)
+        for rec in self.history.get(user_id, [])[:50]:
+            if rec.alert_type != AlertType.TRACKED_PLAN_THESIS:
+                continue
+            ts = _parse_alert_created_at(rec.created_at)
+            if ts is None or _et_calendar_date(ts) != target:
+                continue
+            tup = _tracked_plan_thesis_tuple_from_body(rec.body)
+            if tup == (pid, status_l):
+                return True
+        return False
+
 
 @dataclass
 class DynamoDBUserAlertStore:
@@ -199,6 +251,7 @@ class DynamoDBUserAlertStore:
             on_gap_detected=bool(it.get("onGapDetected", False)),
             on_watchlist_maturation=bool(it.get("onWatchlistMaturation", True)),
             on_execution_actionable=bool(it.get("onExecutionActionable", True)),
+            on_tracked_plan_thesis=bool(it.get("onTrackedPlanThesis", True)),
             watchlist_only=bool(it.get("watchlistOnly", True)),
             quiet_hours_enabled=bool(it.get("quietHoursEnabled", False)),
             quiet_hours_start=str(it.get("quietHoursStart") or "22:00"),
@@ -217,6 +270,7 @@ class DynamoDBUserAlertStore:
             "onGapDetected": prefs.on_gap_detected,
             "onWatchlistMaturation": prefs.on_watchlist_maturation,
             "onExecutionActionable": prefs.on_execution_actionable,
+            "onTrackedPlanThesis": prefs.on_tracked_plan_thesis,
             "watchlistOnly": prefs.watchlist_only,
             "quietHoursEnabled": prefs.quiet_hours_enabled,
             "quietHoursStart": prefs.quiet_hours_start,
@@ -349,6 +403,30 @@ class DynamoDBUserAlertStore:
                 continue
             tup = _maturation_transition_tuple_from_body(rec.body)
             if tup == (mode_l, prev_l, new_l):
+                return True
+        return False
+
+    def had_tracked_plan_thesis_alert_on_et_calendar_day(
+        self,
+        user_id: str,
+        plan_id: str,
+        thesis_status: str,
+        *,
+        reference_utc: datetime | None = None,
+    ) -> bool:
+        pid = plan_id.strip()
+        status_l = thesis_status.strip().lower()
+        ref = reference_utc if reference_utc is not None else datetime.now(timezone.utc)
+        target = _et_calendar_date(ref)
+        recent = self.get_recent_alerts(user_id, limit=50)
+        for rec in recent:
+            if rec.alert_type != AlertType.TRACKED_PLAN_THESIS:
+                continue
+            ts = _parse_alert_created_at(rec.created_at)
+            if ts is None or _et_calendar_date(ts) != target:
+                continue
+            tup = _tracked_plan_thesis_tuple_from_body(rec.body)
+            if tup == (pid, status_l):
                 return True
         return False
 

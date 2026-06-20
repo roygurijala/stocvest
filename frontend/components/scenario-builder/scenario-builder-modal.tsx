@@ -33,6 +33,7 @@ import {
 } from "@/lib/scenario/scenario-execution-timing";
 import { scenarioGeometryError } from "@/lib/scenario/scenario-geometry";
 import { resolveScenarioVerdict } from "@/lib/scenario/scenario-verdict";
+import { minRiskRewardForVerdict } from "@/lib/trade-conviction-tier";
 import type { TradeDecision } from "@/lib/signal-evidence/trade-decision";
 import { ScenarioBuilderVerdictBanner } from "@/components/scenario-builder/scenario-builder-verdict-banner";
 import { ScenarioBuilderComparisonTable } from "@/components/scenario-builder/scenario-builder-comparison-table";
@@ -45,6 +46,12 @@ import type {
   ScenarioInput,
   ScenarioUserInputs
 } from "@/lib/scenario/types";
+import { buildTrackedPlanFromScenarioInput } from "@/lib/trade-plan/build-tracked-plan";
+import {
+  notifyTrackedPlanUpdated,
+  saveTrackedPlan
+} from "@/lib/trade-plan/tracked-plan-store";
+import { pushTrackedPlanToServer } from "@/lib/trade-plan/tracked-plan-sync";
 
 import {
   allocateScaleOutShares,
@@ -138,6 +145,7 @@ export function ScenarioBuilderModal({
   const [accountSize, setAccountSize] = useState<number>(Number.NaN);
   const [orderTypeLabel, setOrderTypeLabel] = useState<"market" | "limit" | "stop">("limit");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [trackPlanState, setTrackPlanState] = useState<"idle" | "saved" | "error">("idle");
   const [executionCopyState, setExecutionCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [stopAutoAdjusted, setStopAutoAdjusted] = useState(false);
   const [activePreset, setActivePreset] = useState<ScenarioPresetId>("continuation");
@@ -398,6 +406,22 @@ export function ScenarioBuilderModal({
     } catch {
       setCopyState("error");
     }
+  };
+
+  const handleTrackPlan = () => {
+    const plan = buildTrackedPlanFromScenarioInput(input, {
+      verdictLine: systemDecision.line,
+      deskMinRr: minRiskRewardForVerdict(input.mode)
+    });
+    if (!plan) {
+      setTrackPlanState("error");
+      return;
+    }
+    saveTrackedPlan(plan);
+    notifyTrackedPlanUpdated();
+    void pushTrackedPlanToServer(plan);
+    setTrackPlanState("saved");
+    setTimeout(() => setTrackPlanState("idle"), 2500);
   };
 
   const handleCopyExecutionPlan = async () => {
@@ -1269,6 +1293,32 @@ export function ScenarioBuilderModal({
                 Reset to reference defaults
               </button>
               <div style={{ display: "flex", gap: spacing[2] }}>
+                <button
+                  type="button"
+                  onClick={handleTrackPlan}
+                  data-testid="scenario-track-plan"
+                  disabled={input.direction !== "bullish" && input.direction !== "bearish"}
+                  style={{
+                    padding: `${spacing[2]} ${spacing[4]}`,
+                    background: "transparent",
+                    color: colors.text,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: borderRadius.md,
+                    cursor:
+                      input.direction === "bullish" || input.direction === "bearish"
+                        ? "pointer"
+                        : "not-allowed",
+                    fontSize: typography.scale.sm,
+                    fontWeight: 600,
+                    opacity: input.direction === "bullish" || input.direction === "bearish" ? 1 : 0.55
+                  }}
+                >
+                  {trackPlanState === "saved"
+                    ? "Plan tracked"
+                    : trackPlanState === "error"
+                      ? "Cannot track"
+                      : "Track plan"}
+                </button>
                 <button
                   type="button"
                   onClick={onClose}

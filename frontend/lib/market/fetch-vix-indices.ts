@@ -140,8 +140,3 @@ export async function fetchVixStocksSnapshotDirect(): Promise<SnapshotPayload | 
   }
   return null;
 }
-
-/** @deprecated Use fetchVixSnapshotForDashboard */
-export async function fetchVixIndicesSnapshot(): Promise<SnapshotPayload | null> {
-  return fetchVixSnapshotForDashboard();
-}

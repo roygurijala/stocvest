@@ -31,6 +31,7 @@ import {
   minRiskRewardForVerdict,
   resolveTradeConvictionTier
 } from "@/lib/trade-conviction-tier";
+import { SIGNAL_LAYER_COUNT, ratioToLayerCount } from "@/lib/signal-math/contract";
 
 export type SignalsSetupBias = "Bullish" | "Bearish" | "Neutral";
 
@@ -231,15 +232,16 @@ export function layerRowEligibleForAlignmentCount(row: SignalsLayerRowInput): bo
   return true;
 }
 
-export const SIGNAL_LAYER_ALIGN_TOTAL = 6;
+/** Six-layer total — sourced from the Signal Math Contract so it never drifts. */
+export const SIGNAL_LAYER_ALIGN_TOTAL = SIGNAL_LAYER_COUNT;
 
-/** Map composite `alignment_ratio` (0–1) to a whole-layer X/6 count. */
+/** Map composite `alignment_ratio` (0–1) to a whole-layer X/6 count (Signal Math Contract). */
 export function alignedLayersFromAlignmentRatio(
   alignmentRatio: number | null | undefined,
   total = SIGNAL_LAYER_ALIGN_TOTAL
 ): number | null {
   if (alignmentRatio == null || !Number.isFinite(alignmentRatio)) return null;
-  return Math.round(Math.max(0, Math.min(1, alignmentRatio)) * total);
+  return ratioToLayerCount(alignmentRatio, total);
 }
 
 export function countLayerAlignment(

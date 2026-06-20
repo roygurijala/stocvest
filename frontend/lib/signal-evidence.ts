@@ -9,6 +9,7 @@ import {
   layerCopyLooksInternal
 } from "@/lib/signal-evidence/layer-plain-english";
 import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
+import { clampLayerScore, directionalToLayerScore } from "@/lib/signal-math/contract";
 import {
   parseExecutionQuality,
   type ExecutionQualityPayload
@@ -1216,15 +1217,16 @@ export function extractGeopoliticalLayerExtras(match: Record<string, unknown>): 
 function compositeSignalScoreFromBody(body: Record<string, unknown>): number | null {
   const explicit = numOrNull(body.signal_score);
   if (explicit != null) {
-    return clamp(Math.round(explicit), 0, 100);
+    return Math.round(clampLayerScore(explicit));
   }
   const strength = numOrNull(body.signal_strength);
   if (strength != null) {
-    return clamp(Math.round(strength * 100), 0, 100);
+    return Math.round(clampLayerScore(strength * 100));
   }
   const sc = numOrNull(body.score);
   if (sc != null) {
-    return clamp(Math.round(((sc + 1) / 2) * 100), 0, 100);
+    // Signal Math Contract: directional (-1..+1) → layer/UI score (0..100), 0 → 50.
+    return Math.round(directionalToLayerScore(sc));
   }
   return null;
 }
@@ -1540,6 +1542,7 @@ export function referenceLevelsFromSessionStructure(
   reference_stop_level: number | null;
   reference_target_1: number | null;
   reference_target_2: number | null;
+  reference_target_2_provenance: "2r_extension" | "t1_bump" | "resistance" | null;
 } {
   const dayLo =
     typeof input.support === "number" && Number.isFinite(input.support) && input.support > 0 ? input.support : null;
@@ -1595,6 +1598,11 @@ export function referenceLevelsFromSessionStructure(
   }
 
   let reference_target_2 = g.target2;
+  // Carry the geometry's T2 provenance so the R/R gate can tell a resistance-anchored
+  // T2 (gate-eligible) from an unanchored projection. Dropping it here made every
+  // structure-derived T2 look ineligible, so headline R/R never benefited from a
+  // valid resistance-anchored extension.
+  let reference_target_2_provenance = g.target2Provenance;
   if (
     reference_stop_level != null &&
     g.target1 != null &&
@@ -1605,6 +1613,7 @@ export function referenceLevelsFromSessionStructure(
     const t2R = roundPrice4(entry + 2.0 * (entry - reference_stop_level));
     if (t2R > g.target1 + 1e-6) {
       reference_target_2 = t2R;
+      reference_target_2_provenance = "2r_extension";
     }
   } else if (
     reference_stop_level != null &&
@@ -1616,13 +1625,15 @@ export function referenceLevelsFromSessionStructure(
     const t2R = roundPrice4(entry - 2.0 * (reference_stop_level - entry));
     if (t2R < g.target1 - 1e-6) {
       reference_target_2 = t2R;
+      reference_target_2_provenance = "2r_extension";
     }
   }
 
   return {
     reference_stop_level,
     reference_target_1: g.target1,
-    reference_target_2
+    reference_target_2,
+    reference_target_2_provenance
   };
 }
 
@@ -1772,7 +1783,12 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
         ? { low: Math.round(vwap * 0.99 * 10000) / 10000, high: Math.round(vwap * 1.01 * 10000) / 10000 }
         : null;
 
-  const { reference_stop_level, reference_target_1, reference_target_2 } = referenceLevelsFromSessionStructure({
+  const {
+    reference_stop_level,
+    reference_target_1,
+    reference_target_2,
+    reference_target_2_provenance
+  } = referenceLevelsFromSessionStructure({
     direction: evidence.direction,
     support,
     resistance,
@@ -1801,13 +1817,15 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
           entry,
           reference_target_1,
           reference_stop_level,
-          reference_target_2 ?? null
+          reference_target_2 ?? null,
+          reference_target_2_provenance
         )
       : structureRiskRewardShort(
           entry,
           reference_target_1,
           reference_stop_level,
-          reference_target_2 ?? null
+          reference_target_2 ?? null,
+          reference_target_2_provenance
         );
   }
   const risk_reward =

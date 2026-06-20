@@ -319,6 +319,7 @@ class AlertType(str, Enum):
     SIGNAL_EXPIRED = "signal_expired"
     WATCHLIST_MATURATION = "watchlist_maturation"
     EXECUTION_ACTIONABLE = "execution_actionable"
+    TRACKED_PLAN_THESIS = "tracked_plan_thesis"
 
 
 class AlertChannel(str, Enum):
@@ -341,6 +342,7 @@ class AlertPreferences(BaseModel):
     on_gap_detected: bool = False
     on_watchlist_maturation: bool = True
     on_execution_actionable: bool = True
+    on_tracked_plan_thesis: bool = True
     watchlist_only: bool = True
     quiet_hours_enabled: bool = False
     quiet_hours_start: str = "22:00"
