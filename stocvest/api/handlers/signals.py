@@ -1132,8 +1132,38 @@ def ai_explanations_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     user_profile=profile,
                 )
             )
+        elif typ == "setup_read":
+            symbol = str(body.get("symbol") or "").strip().upper()
+            if not symbol:
+                return bad_request("symbol is required.")
+            direction = str(body.get("direction") or body.get("verdict") or "two-sided")
+            desk = str(body.get("desk") or "swing")
+            raw_layers = body.get("layers")
+            layers = [x for x in raw_layers if isinstance(x, dict)] if isinstance(raw_layers, list) else []
+
+            def _str_list(value: object) -> list[str]:
+                if not isinstance(value, list):
+                    return []
+                return [str(x).strip() for x in value if str(x).strip()][:8]
+
+            result = asyncio.run(
+                svc.explain_setup_read(
+                    symbol=symbol,
+                    direction=direction,
+                    desk=desk,
+                    layers=layers,
+                    confirming=_str_list(body.get("confirming")),
+                    conflicting=_str_list(body.get("conflicting")),
+                    catalysts=_str_list(body.get("catalysts")),
+                    timing=str(body.get("timing") or ""),
+                    primary_blocker=str(body.get("primary_blocker") or ""),
+                    market_regime=str(body.get("market_regime") or ""),
+                    fallback_text=str(body.get("fallback_text") or ""),
+                    user_profile=profile,
+                )
+            )
         else:
-            return bad_request("type must be signal_capture or news_synthesis.")
+            return bad_request("type must be signal_capture, news_synthesis, or setup_read.")
     except (TypeError, ValueError) as exc:
         return bad_request(f"Invalid explanation request: {exc}")
 

@@ -175,6 +175,143 @@ class AIExplanationService:
         await self._cache_write(key, result)
         return result
 
+    async def explain_setup_read(
+        self,
+        *,
+        symbol: str,
+        direction: str,
+        desk: str,
+        layers: list[dict[str, Any]],
+        confirming: list[str],
+        conflicting: list[str],
+        catalysts: list[str],
+        timing: str,
+        primary_blocker: str,
+        market_regime: str,
+        fallback_text: str,
+        user_profile: UserProfile,
+    ) -> ExplanationResult:
+        """Unique, conversational desk read for the deep-dive / evidence brief.
+
+        Paid users (``has_ai_explanations``) get a fresh Claude-written narrative that
+        weaves the actual layer reads, named confirming/conflicting signals, catalysts,
+        timing and regime into 3-5 sentences. Free users (and any failure) fall back to
+        the deterministic rich brief the client already rendered.
+        """
+        sym = symbol.strip().upper()
+        dir_norm = (direction or "").strip().lower() or "two-sided"
+        desk_norm = "day" if "day" in (desk or "").strip().lower() else "swing"
+        det = (fallback_text or "").strip() or self._deterministic_setup_read_copy(sym, dir_norm, desk_norm)
+
+        if not user_profile.has_ai_explanations:
+            return ExplanationResult(
+                text=det, source="deterministic", upgrade_available=True, cached=False
+            )
+
+        ny_date = _ny_calendar_date()
+        fp = self._setup_read_fingerprint(
+            layers=layers, blocker=primary_blocker, timing=timing, regime=market_regime
+        )
+        key = (
+            f"stocvest:ai_explain:setup_read:{sym}:{dir_norm}:{desk_norm}:{ny_date}:{fp}"
+        )
+
+        hit = await self._cache_read(key)
+        if hit is not None:
+            return hit
+
+        text_ai = await self._claude_text_or_none(
+            system=(
+                "You are a sharp, plain-spoken trading-desk analyst writing a short read for "
+                "ONE setup. Write 3-5 sentences in a natural, varied voice — never a template. "
+                "Make THIS ticker's read feel distinct: lead with what actually stands out "
+                "(the dominant layer, a named confirming or conflicting signal, a catalyst, or "
+                "the timing blocker) rather than a fixed opening. Be concrete about which layers "
+                "agree, which push back, and what the trader should watch next. "
+                "Do NOT invent data beyond what is given. "
+                "Do NOT mention numeric scores, composite values, layer scores, percentages, or "
+                "risk/reward ratios. No investment advice, no buy/sell directives. "
+                "End with exactly: Signal data only."
+            ),
+            user_prompt=self._build_setup_read_prompt(
+                symbol=sym,
+                direction=dir_norm,
+                desk=desk_norm,
+                layers=layers,
+                confirming=confirming,
+                conflicting=conflicting,
+                catalysts=catalysts,
+                timing=timing,
+                primary_blocker=primary_blocker,
+                market_regime=market_regime,
+            ),
+            max_tokens=260,
+            temperature=0.7,
+        )
+        if text_ai:
+            result = ExplanationResult(
+                text=text_ai.strip(), source="ai", upgrade_available=False, cached=False
+            )
+        else:
+            result = ExplanationResult(
+                text=det, source="deterministic", upgrade_available=False, cached=False
+            )
+        await self._cache_write(key, result)
+        return result
+
+    def _deterministic_setup_read_copy(self, symbol: str, direction: str, desk: str) -> str:
+        lean = (
+            "leans long" if direction in ("long", "bullish")
+            else "leans short" if direction in ("short", "bearish")
+            else "is two-sided"
+        )
+        return (
+            f"{symbol} {lean} on the {desk} desk based on current layer agreement. "
+            "Open the full analysis for layer-by-layer detail. Signal data only."
+        )
+
+    def _setup_read_fingerprint(
+        self, *, layers: list[dict[str, Any]], blocker: str, timing: str, regime: str
+    ) -> str:
+        parts = [
+            f"{str(x.get('layer') or '')}:{str(x.get('status') or '')}"
+            for x in (layers or [])
+        ]
+        joined = "|".join(parts) + f"#{blocker.strip().lower()}#{timing.strip().lower()}#{regime.strip().lower()}"
+        return str(hash(joined) % (10**12))
+
+    def _build_setup_read_prompt(
+        self,
+        *,
+        symbol: str,
+        direction: str,
+        desk: str,
+        layers: list[dict[str, Any]],
+        confirming: list[str],
+        conflicting: list[str],
+        catalysts: list[str],
+        timing: str,
+        primary_blocker: str,
+        market_regime: str,
+    ) -> str:
+        layers_compact = [
+            {"layer": str(x.get("layer") or ""), "status": str(x.get("status") or "")}
+            for x in (layers or [])[:6]
+        ]
+        lines = [
+            f"symbol={symbol}",
+            f"desk={desk}",
+            f"direction={direction}",
+            f"market_regime={market_regime or 'unspecified'}",
+            f"entry_timing={timing or 'unspecified'}",
+            f"primary_blocker={primary_blocker or 'none'}",
+            f"layers={json.dumps(layers_compact)}",
+            f"confirming_signals={json.dumps([s for s in confirming[:5] if s])}",
+            f"conflicting_signals={json.dumps([s for s in conflicting[:5] if s])}",
+            f"catalysts={json.dumps([c for c in catalysts[:3] if c])}",
+        ]
+        return "\n".join(lines)
+
     def _deterministic_capture_copy(self, score: int, verdict: str, rr: float) -> str:
         rr_text = "acceptable" if rr >= 2.0 else "tight"
         _ = score  # score informs cache key only — never shown to users
@@ -266,7 +403,9 @@ class AIExplanationService:
         except Exception as exc:
             _LOG.debug("ai_explanations cache write skip: %s", type(exc).__name__)
 
-    async def _claude_text_or_none(self, *, system: str, user_prompt: str, max_tokens: int) -> str | None:
+    async def _claude_text_or_none(
+        self, *, system: str, user_prompt: str, max_tokens: int, temperature: float = 0.0
+    ) -> str | None:
         settings = get_settings()
         # Tests may monkeypatch env vars after settings cache is primed.
         api_key = (settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY") or "").strip()
@@ -275,7 +414,7 @@ class AIExplanationService:
         payload = {
             "model": AI_MODEL_FAST,
             "max_tokens": max_tokens,
-            "temperature": 0,
+            "temperature": temperature,
             "messages": [{"role": "user", "content": f"{system}\n\n{user_prompt}"}],
         }
         headers = {

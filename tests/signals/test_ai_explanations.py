@@ -226,6 +226,113 @@ async def test_news_synthesis_empty_articles_paid(monkeypatch: pytest.MonkeyPatc
     assert r.source == "deterministic"
 
 
+@pytest.mark.asyncio
+async def test_setup_read_free_user_returns_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def boom(*args: object, **kwargs: object) -> str | None:
+        raise AssertionError("Claude must not be called for free users")
+
+    monkeypatch.setattr(AIExplanationService, "_claude_text_or_none", boom)
+    svc = AIExplanationService()
+    u = UserProfile(user_id="u", subscription_plan="free")
+    r = await svc.explain_setup_read(
+        symbol="aapl",
+        direction="long",
+        desk="swing",
+        layers=[{"layer": "technical", "status": "Bullish"}],
+        confirming=["RSI rising"],
+        conflicting=[],
+        catalysts=[],
+        timing="Strong entry timing",
+        primary_blocker="",
+        market_regime="risk-on",
+        fallback_text="AAPL leans long on the swing desk — rich deterministic brief.",
+        user_profile=u,
+    )
+    assert r.source == "deterministic"
+    assert r.upgrade_available is True
+    assert r.text == "AAPL leans long on the swing desk — rich deterministic brief."
+
+
+@pytest.mark.asyncio
+async def test_setup_read_paid_user_ai(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_claude(
+        self: AIExplanationService,
+        *,
+        system: str,
+        user_prompt: str,
+        max_tokens: int,
+        temperature: float = 0.0,
+    ) -> str | None:
+        captured["temperature"] = temperature
+        captured["user_prompt"] = user_prompt
+        return "NVDA's technical layer leads while macro pushes back. Watch the gap. Signal data only."
+
+    monkeypatch.setattr(AIExplanationService, "_claude_text_or_none", fake_claude)
+    svc = AIExplanationService()
+    u = UserProfile(user_id="u", subscription_plan="swing_pro")
+    r = await svc.explain_setup_read(
+        symbol="NVDA",
+        direction="long",
+        desk="day",
+        layers=[{"layer": "technical", "status": "Bullish"}, {"layer": "macro", "status": "Bearish"}],
+        confirming=["Breakout over prior high"],
+        conflicting=["VIX elevated"],
+        catalysts=["Earnings next week"],
+        timing="Weak entry timing",
+        primary_blocker="Price extended vs SMA50",
+        market_regime="choppy",
+        fallback_text="NVDA fallback.",
+        user_profile=u,
+    )
+    assert r.source == "ai"
+    assert r.upgrade_available is False
+    assert "NVDA's technical layer" in r.text
+    assert captured["temperature"] == 0.7
+    assert "Breakout over prior high" in str(captured["user_prompt"])
+
+
+@pytest.mark.asyncio
+async def test_setup_read_cached_on_second_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"n": 0}
+
+    async def counting_claude(
+        self: AIExplanationService,
+        *,
+        system: str,
+        user_prompt: str,
+        max_tokens: int,
+        temperature: float = 0.0,
+    ) -> str | None:
+        calls["n"] += 1
+        return f"Read {calls['n']}. Signal data only."
+
+    monkeypatch.setattr(AIExplanationService, "_claude_text_or_none", counting_claude)
+    svc = AIExplanationService()
+    u = UserProfile(user_id="u", subscription_plan="swing_day_pro")
+    kwargs = dict(
+        symbol="MSFT",
+        direction="two-sided",
+        desk="swing",
+        layers=[{"layer": "sector", "status": "Bullish"}],
+        confirming=[],
+        conflicting=[],
+        catalysts=[],
+        timing="Neutral",
+        primary_blocker="",
+        market_regime="neutral",
+        fallback_text="MSFT fallback.",
+        user_profile=u,
+    )
+    first = await svc.explain_setup_read(**kwargs)
+    second = await svc.explain_setup_read(**kwargs)
+    assert calls["n"] == 1
+    assert first.cached is False
+    assert second.cached is True
+    assert first.text == second.text
+
+
 def test_news_articles_from_payload_minimal() -> None:
     raw = [{"title": "Hello", "id": "x1", "published_at": "2026-01-15T12:00:00Z", "sentiment_score": 0.5}]
     arts = news_articles_from_payload(raw)

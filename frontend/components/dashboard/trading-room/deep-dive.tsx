@@ -57,6 +57,7 @@ import type { FundamentalBackdropSummary } from "@/lib/signal-evidence/fundament
 // Reuse the exact same signals-page components so Setup/Layers are identical.
 import { SignalsBiasRationalePanel } from "@/components/signals/signals-bias-rationale-panel";
 import { SignalsSetupRead } from "@/components/signals/signals-setup-read";
+import { AiSetupRead } from "@/components/signals/ai-setup-read";
 import { SignalsLayerBreakdown } from "@/components/signals/signals-layer-breakdown";
 import { CausalNarrativePanel } from "@/components/signals/causal-narrative-panel";
 import { MarketContextPanel } from "@/components/signals/market-context-panel";
@@ -1514,6 +1515,28 @@ export function DeepDive({
             {brief}
           </p>
         </div>
+        {allowsScenarioGeometry ? (
+          <AiSetupRead
+            symbol={card.symbol}
+            direction={displayDirection.direction}
+            desk={activeLane}
+            layers={layerRows.map((r) => ({ layer: r.key, status: r.status ?? "" }))}
+            confirming={(insight?.confirming_signals ?? []).map((s) => s.label).filter(Boolean)}
+            conflicting={(insight?.conflicting_signals ?? []).map((s) => s.label).filter(Boolean)}
+            catalysts={(insight?.catalysts ?? []).map((c) => c.text).filter(Boolean)}
+            timing={setupJudgment?.tradeability.label ?? ""}
+            primaryBlocker={setupJudgment?.primaryBlocker ?? ""}
+            marketRegime={insight?.market_regime ?? ""}
+            fallbackText={brief}
+            palette={{
+              text: colors.text,
+              textMuted: colors.textMuted,
+              border: colors.border,
+              accent: colors.accent,
+              surface: colors.surfaceMuted
+            }}
+          />
+        ) : null}
         {/* meta-line + "View full analysis →" */}
         {briefMeta || true ? (
           <div

@@ -179,6 +179,53 @@ export function buildEntryZoneRrWarning(input: {
   return lines;
 }
 
+/**
+ * Stable per-input hash (FNV-1a). Lets the brief pick a phrasing variant that is
+ * deterministic for a given symbol/state — so two tickers read differently, but
+ * the same ticker always renders the same copy (cache-stable and unit-testable).
+ */
+function stableVariant(seed: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h);
+}
+
+function openerVariant(
+  v: number,
+  sym: string,
+  dir: string,
+  desk: string,
+  trend: string,
+  regimePart: string
+): string {
+  const t = trend ? `${trend} read` : "developing read";
+  const options = [
+    `${sym} is reading ${dir} on the ${desk} — ${t}${regimePart}.`,
+    `On the ${desk}, ${sym} maps to a ${dir} setup: ${t}${regimePart}.`,
+    `${sym} sets up ${dir} for the ${desk} — ${t}${regimePart}.`,
+    `Right now ${sym} leans ${dir} on the ${desk}; ${t}${regimePart}.`,
+    `${sym} is shaping a ${dir} ${desk} setup — ${t}${regimePart}.`
+  ];
+  return options[v % options.length];
+}
+
+function noInsightOpener(v: number, sym: string, dir: string, desk: string): string {
+  const options = [
+    `${sym} is setting up ${dir} on the ${desk}.`,
+    `On the ${desk}, ${sym} is shaping a ${dir} setup.`,
+    `${sym} maps to a ${dir} read on the ${desk}.`
+  ];
+  return options[v % options.length];
+}
+
+function truncateCatalyst(text: string): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length > 110 ? `${clean.slice(0, 107)}…` : clean;
+}
+
 export function buildRichBrief(input: {
   symbol: string;
   direction: TradeDirection;
@@ -201,15 +248,31 @@ export function buildRichBrief(input: {
   const dir =
     input.direction === "long" ? "long" : input.direction === "short" ? "short" : "two-sided";
   const desk = input.activeLane === "day" ? "day desk" : "swing desk";
+  const variant = stableVariant(`${input.symbol}|${input.setupBias}|${input.pageDecisionState ?? ""}`);
 
   let s1: string;
+  let s1b = "";
   if (input.insight) {
     const trend = `${input.insight.trend_strength.toLowerCase()} ${input.insight.trend_direction.toLowerCase()}`.trim();
-    const conf = input.insight.confirming_signals.length;
-    const confl = input.insight.conflicting_signals.length;
-    s1 = `${input.symbol} is showing a ${dir} setup on the ${desk} — ${trend} read${conf ? `, with ${conf} signal${conf === 1 ? "" : "s"} confirming` : ""}${confl ? ` and ${confl} pushing back` : ""}.`;
+    const regime = (input.insight.market_regime || "").trim().toLowerCase();
+    const regimePart = regime && regime !== "unknown" ? ` against a ${regime} tape` : "";
+    s1 = openerVariant(variant, input.symbol, dir, desk, trend, regimePart);
+
+    // Name the actual signals doing the work so the read is specific, not generic.
+    const conf = input.insight.confirming_signals ?? [];
+    const confl = input.insight.conflicting_signals ?? [];
+    const lead = conf[0]?.label?.trim();
+    const leadAgainst = confl[0]?.label?.trim();
+    const confPart = conf.length
+      ? `${conf.length} signal${conf.length === 1 ? "" : "s"} line up${lead ? ` (led by ${lead})` : ""}`
+      : "";
+    const conflPart = confl.length
+      ? `${confl.length} push${confl.length === 1 ? "es" : ""} back${leadAgainst ? ` (${leadAgainst})` : ""}`
+      : "";
+    s1b = [confPart, conflPart].filter(Boolean).join(", while ");
+    if (s1b) s1b = `${s1b.charAt(0).toUpperCase()}${s1b.slice(1)}.`;
   } else {
-    s1 = `${input.symbol} is setting up ${dir} on the ${desk}.`;
+    s1 = noInsightOpener(variant, input.symbol, dir, desk);
   }
 
   const s2 = buildBriefAlignmentLine(input.setupBias, input.layerRows);
@@ -218,6 +281,17 @@ export function buildRichBrief(input: {
     input.causalChainLabel && input.causalChainLabel.length < 80
       ? `Tailwind chain: ${input.causalChainLabel}.`
       : "";
+
+  // Surface the freshest catalyst by name — what's actually moving the ticker.
+  let sCat = "";
+  const catalysts = input.insight?.catalysts ?? [];
+  const topCatalyst = catalysts.find((c) => (c?.text || "").trim().length > 0);
+  if (topCatalyst) {
+    const sent = (topCatalyst.sentiment || "").trim().toLowerCase();
+    const sentPart = sent && sent !== "neutral" ? ` (${sent} catalyst)` : "";
+    const more = catalysts.length > 1 ? ` +${catalysts.length - 1} more` : "";
+    sCat = `News in play: ${truncateCatalyst(topCatalyst.text)}${sentPart}${more}.`;
+  }
 
   let s5 = "";
   if (input.setupJudgment) {
@@ -246,5 +320,5 @@ export function buildRichBrief(input: {
   }
 
   if (!s2 && !s3 && !s5) return input.verdictFallback || s1;
-  return [s1, s2, s3, s4, s5, s6].filter(Boolean).join(" ");
+  return [s1, s1b, s2, s3, s4, sCat, s5, s6].filter(Boolean).join(" ");
 }
