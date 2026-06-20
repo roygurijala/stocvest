@@ -76,6 +76,78 @@ describe("deep-dive-present", () => {
     expect(text).toContain("3 of 6 layers confirm the bearish thesis");
   });
 
+  test("buildRichBrief threads named signals, regime, and catalyst", () => {
+    const insight = {
+      signal_score: 78,
+      trend_strength: "Strong",
+      trend_direction: "Bullish",
+      risk_reward: 2.4,
+      market_regime: "risk-on",
+      confirming_signals: [{ label: "Breakout over 50-day high" }, { label: "RSI rising" }],
+      conflicting_signals: [{ label: "VIX elevated" }],
+      catalysts: [{ text: "Beats Q3 earnings expectations", sentiment: "bullish" }],
+      risk_factors: [],
+      signal_parameters: "",
+      historical_entry_zone: null,
+      reference_target_1: null,
+      reference_target_2: null,
+      reference_stop_level: null
+    } as unknown as Parameters<typeof buildRichBrief>[0]["insight"];
+
+    const text = buildRichBrief({
+      symbol: "NVDA",
+      direction: "long",
+      insight,
+      layerRows: bearishRows,
+      setupBias: "Bullish",
+      pageDecisionState: "actionable",
+      causalSummary: null,
+      causalChainLabel: null,
+      setupJudgment: {
+        tradeability: { label: "Strong entry timing", flags: [] },
+        primaryBlocker: null,
+        watchFor: null
+      },
+      currentRr: 2.4,
+      activeLane: "swing",
+      deskMinRr: 2,
+      verdictFallback: ""
+    });
+    expect(text).toContain("led by Breakout over 50-day high");
+    expect(text).toContain("VIX elevated");
+    expect(text).toContain("risk-on tape");
+    expect(text).toContain("News in play: Beats Q3 earnings expectations (bullish catalyst)");
+  });
+
+  test("buildRichBrief opener varies by symbol but is stable per symbol", () => {
+    const base = {
+      direction: "neutral" as const,
+      insight: null,
+      layerRows: bearishRows,
+      setupBias: "Neutral" as const,
+      pageDecisionState: "monitor",
+      causalSummary: "Sector is the local gate still open.",
+      causalChainLabel: null,
+      setupJudgment: {
+        tradeability: { label: "Neutral", flags: [] },
+        primaryBlocker: null,
+        watchFor: null
+      },
+      currentRr: null,
+      activeLane: "swing" as const,
+      deskMinRr: 2,
+      verdictFallback: ""
+    };
+    const openerOf = (text: string) => text.split(". ")[0];
+    const a1 = openerOf(buildRichBrief({ ...base, symbol: "AAPL" }));
+    const a2 = openerOf(buildRichBrief({ ...base, symbol: "AAPL" }));
+    const tsla = openerOf(buildRichBrief({ ...base, symbol: "TSLA" }));
+    const intc = openerOf(buildRichBrief({ ...base, symbol: "INTC" }));
+    expect(a1).toBe(a2); // stable per symbol
+    // At least one of the other symbols reads differently from AAPL.
+    expect(tsla !== a1 || intc !== a1).toBe(true);
+  });
+
   test("resolveEntryZonePosition detects above-zone price", () => {
     expect(resolveEntryZonePosition(35.73, 33.48, 34.15)).toBe("above");
     expect(resolveEntryZonePosition(34, 33.48, 34.15)).toBe("inside");

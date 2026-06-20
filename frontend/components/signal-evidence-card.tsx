@@ -56,6 +56,7 @@ import {
 import { pickNewsEmptyCopy } from "@/lib/news-empty-copy";
 import { AI_VERDICT_TIP, LAYER_NAME_HINTS } from "@/lib/ui-tooltips";
 import { AIExplanationDisplay } from "@/components/ai-explanation-display";
+import { AiSetupRead } from "@/components/signals/ai-setup-read";
 import { ScenarioBuilderInline } from "@/components/scenario-builder/scenario-builder-inline";
 import {
   augmentScenarioInputWithGapIntel,
@@ -1481,6 +1482,24 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
           source={captureEx ? captureEx.source : "deterministic"}
           cached={captureCachedFlag}
           colors={colors}
+        />
+        <AiSetupRead
+          symbol={evidence.symbol}
+          direction={evidence.direction}
+          desk={evidence.compositeMode === "day" ? "day" : "swing"}
+          layers={evidence.layers.map((l) => ({ layer: l.key, status: l.status ?? "" }))}
+          confirming={(insight.confirming_signals ?? []).map((s) => s.label).filter(Boolean)}
+          conflicting={(insight.conflicting_signals ?? []).map((s) => s.label).filter(Boolean)}
+          catalysts={(insight.catalysts ?? []).map((c) => c.text).filter(Boolean)}
+          marketRegime={insight.market_regime ?? ""}
+          fallbackText={captureDisplayText}
+          palette={{
+            text: colors.text,
+            textMuted: colors.textMuted,
+            border: colors.border,
+            accent: colors.accent,
+            surface: colors.surfaceMuted
+          }}
         />
         {/* Removed the dangling "Signal summary" caption (BRK-B Issue 5
             fix, 2026-05-13). It was a label with no value bound to it and
