@@ -12,7 +12,7 @@
  * dive and the Signals evidence card so the two surfaces stay consistent.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export interface AiSetupReadPalette {
   text: string;
@@ -54,6 +54,12 @@ export function AiSetupRead(props: AiSetupReadProps) {
   const [state, setState] = useState<ReadState>({ phase: "idle" });
   const { palette } = props;
   const upgradeHref = props.upgradeHref ?? "/pricing";
+
+  // Reset to idle when the host swaps to a different setup (symbol/direction/desk).
+  // Without this, switching tickers would keep showing the previous ticker's read.
+  useEffect(() => {
+    setState({ phase: "idle" });
+  }, [props.symbol, props.direction, props.desk]);
 
   const fetchRead = useCallback(async () => {
     setState({ phase: "loading" });

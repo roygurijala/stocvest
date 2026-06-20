@@ -11,10 +11,10 @@ const palette: AiSetupReadPalette = {
   surface: "#1c2029"
 };
 
-function renderRead() {
-  return render(
+function readEl(symbol = "NVDA", fallbackText = "NVDA leans long — deterministic brief.") {
+  return (
     <AiSetupRead
-      symbol="NVDA"
+      symbol={symbol}
       direction="long"
       desk="swing"
       layers={[{ layer: "technical", status: "Bullish" }]}
@@ -22,10 +22,14 @@ function renderRead() {
       conflicting={["VIX elevated"]}
       catalysts={["Earnings beat"]}
       marketRegime="risk-on"
-      fallbackText="NVDA leans long — deterministic brief."
+      fallbackText={fallbackText}
       palette={palette}
     />
   );
+}
+
+function renderRead() {
+  return render(readEl());
 }
 
 afterEach(() => {
@@ -76,6 +80,28 @@ describe("AiSetupRead", () => {
 
     await waitFor(() => expect(screen.getByText(/deterministic brief/)).toBeInTheDocument());
     expect(screen.getByText(/Unlock AI-written reads/)).toBeInTheDocument();
+  });
+
+  it("resets to idle when the host switches to a different symbol", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        text: "NVDA-specific read here. Signal data only.",
+        source: "ai",
+        upgrade_available: false,
+        cached: false
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(readEl("NVDA"));
+    fireEvent.click(screen.getByText("✦ AI read"));
+    await waitFor(() => expect(screen.getByText(/NVDA-specific read/)).toBeInTheDocument());
+
+    // Switching tickers must clear the previous read, not leave it stale.
+    rerender(readEl("SPCX", "SPCX maps to a two-sided read."));
+    expect(screen.queryByText(/NVDA-specific read/)).not.toBeInTheDocument();
+    expect(screen.getByText("✦ AI read")).toBeInTheDocument();
   });
 
   it("keeps the deterministic fallback when the request fails", async () => {
