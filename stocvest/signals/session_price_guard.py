@@ -110,6 +110,56 @@ def is_corporate_action_session_move(
     return False
 
 
+def session_gap_percent(
+    prev_close: float | None,
+    last_trade_price: float | None,
+    day_open: float | None = None,
+    *,
+    symbol: str | None = None,
+    recent_split_symbols: Iterable[str] | None = None,
+) -> float | None:
+    """Session gap % vs prior close, or ``None`` when not computable.
+
+    Single source of truth for the snapshot→gap convention used across movers,
+    quiet-leaders, and the composite engines. Price preference: last trade, else
+    the official day open. Corporate-action artifacts (splits etc.) return ``None``
+    so they never masquerade as a real gap.
+    """
+    if prev_close is None:
+        return None
+    try:
+        prev = float(prev_close)
+    except (TypeError, ValueError):
+        return None
+    if prev <= 0:
+        return None
+
+    price: float | None = None
+    if last_trade_price is not None:
+        try:
+            lt = float(last_trade_price)
+        except (TypeError, ValueError):
+            lt = 0.0
+        if lt > 0:
+            price = lt
+    if price is None and day_open is not None:
+        try:
+            op = float(day_open)
+        except (TypeError, ValueError):
+            op = 0.0
+        if op > 0:
+            price = op
+    if price is None:
+        return None
+
+    gap = (price - prev) / prev * 100.0
+    if is_corporate_action_session_move(
+        prev, price, gap, symbol=symbol, recent_split_symbols=recent_split_symbols
+    ):
+        return None
+    return round(gap, 4)
+
+
 def sanitize_session_change_pct(
     prev_close: float | None,
     session_price: float | None,

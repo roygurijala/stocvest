@@ -1,6 +1,6 @@
 # Signal engine (real composite)
 
-**Last updated:** 2026-06-10
+**Last updated:** 2026-06-20 (P68 — Signal Math Contract + financial-math accuracy)
 
 This document describes the **server-side** multi-layer stacks behind **`POST /v1/signals/composite/real`** (intraday / day-trade mode) and **`POST /v1/signals/composite/swing`** (daily-bar swing mode). Both reuse the same six layer *types*, `CompositeScoreEngine`, and confluence/evidence plumbing; data fetch windows and the technical implementation differ (`technical_analyzer` vs `swing_technical_analyzer`). Tunables live in `SignalParameters` (Secrets Manager JSON); defaults in `stocvest/config/signal_parameters.py` and `stocvest/config/sector_etf_defaults.py`.
 
@@ -13,6 +13,32 @@ This document describes the **server-side** multi-layer stacks behind **`POST /v
 
 - **Bars / snapshots**: Only `stocvest.data.models.Bar` and `Snapshot` field names. Polygon raw JSON is normalized exclusively in `PolygonClient._parse_snapshot()`.
 - **VIX**: `get_vix_snapshot_with_fallback()` (`stocvest/api/services/morning_brief_fetch.py`) tries `I:VIX` → `^VIX` → `VIX`. Do not hardcode a single VIX ticker in analyzers.
+
+## Signal Math Contract (P68, 2026-06-20)
+
+Single source of truth for signal scoring math, so scanner / watchlist / scenario / frontend never disagree on ranges, neutral handling, normalization, or the layer set. **Backend:** `stocvest/signals/signal_math_contract.py`. **Frontend mirror (keep in sync):** `frontend/lib/signal-math/contract.ts`.
+
+**Three score scales coexist by design — mixing them is the most common signal-math bug:**
+
+| Scale | Range | Neutral | Used by |
+|-------|-------|---------|---------|
+| Layer / UI | `0..100` | `50` | per-layer analyzers (`technical_analyzer`, …), Trade Readiness UI |
+| Directional | `-1..+1` | `0` (verdict ±`0.20`) | `CompositeScoreEngine` blend (sign = direction, magnitude = conviction) |
+| Unit | `0..1` | — | confidence, alignment ratio, normalized magnitudes (e.g. breakout strength) |
+
+**Neutral rule (load-bearing):** a value exactly on the neutral anchor contributes **no direction** (`0`) — never a defaulted bullish/bearish lean.
+
+**Helpers:** `clamp_layer_score` / `clamp_directional_score` / `clamp_unit`; `layer_score_direction` (50→0), `directional_sign` (0→0), `directional_verdict`; `ratio_to_layer_count(ratio, total)`; `normalize_to_unit(magnitude, scale)`; scale converters `layer_score_to_directional` / `directional_to_layer_score`. **Canonical layer set:** `SIGNAL_LAYERS` (sourced from `MATURATION_LAYER_KEYS`; a test pins they never drift).
+
+**Enforcement / fixes that now route through the contract:**
+
+- **Technical volume amplifier** — surge amplifies the *existing* lean via `layer_score_direction`; at exactly 50 there is no direction (previously defaulted **bearish**).
+- **ORB breakout** (`day_trading_scanner`) — `strength` = **`breakout_move / ATR`** (was `|price−midpoint|/midpoint`, which just tracked share price). Scoring is **volume-gated + strength-weighted** (`_orb_contribution`): RVOL `<1.2` → `0.05`; `1.2–1.8` → `0.20 + 0.15·strength`; `>1.8` → `0.25 + 0.20·strength`. ORB is a **supporting** signal — price movement alone must not clear the score gate.
+- **Confluence tiers** (`confluence.py`) — tier floors are driven by `n_confirming` (5/4/3); each tier's score threshold is the conflict-free score *at that floor* (`≈55/44/33` with `denom=9`) so floors actually bind and conflicts demote. `is_confluence_alert = tier != "weak"`.
+- **`gap_pct`** — composite engines compute it from prior close via `session_price_guard.session_gap_percent` (corporate-action guarded; `quiet_leaders` delegates to the same helper) instead of a hardcoded `0.0`, so confluence `gap_confirm` fires when prev close is available.
+- **Weekly RSI** (`multi_timeframe`) — a **true weekly RSI**: daily bars collapsed to one close per ISO week, RSI on that weekly series (adaptive period). Was a daily-close RSI mislabeled weekly.
+- **Layer alignment** (`layer_directional_alignment`) — ratio→whole-layer count via `ratio_to_layer_count` (no hardcoded ×6).
+- **Frontend** — `signals-page-present` alignment count + `signal-evidence` directional→0-100 conversion route through the mirror; the fallback R/R path now threads T2 **provenance** so a resistance-anchored T2 is gate-eligible.
 
 ## Layers
 

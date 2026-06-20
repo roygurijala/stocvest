@@ -291,6 +291,78 @@ class AlertTriggerService:
         if success:
             self._mark_execution_actionable_email_sent(user_id, sym_u, mode_s)
 
+    def trigger_tracked_plan_thesis_change(
+        self,
+        *,
+        user_id: str,
+        user_email: str,
+        plan_id: str,
+        symbol: str,
+        mode: str,
+        previous_status: str,
+        thesis_status: str,
+        thesis_label: str,
+        thesis_hint: str,
+        trigger_label: str,
+    ) -> None:
+        """Email when a tracked plan thesis weakens or invalidates."""
+        prev = str(previous_status or "valid").strip().lower()
+        new = str(thesis_status or "valid").strip().lower()
+        if new not in ("weakened", "invalid"):
+            return
+        from stocvest.data.alert_store import _thesis_rank
+
+        if _thesis_rank(new) <= _thesis_rank(prev):
+            return
+        prefs = self.alert_store.get_preferences(user_id)
+        if not prefs.email_enabled or not getattr(prefs, "on_tracked_plan_thesis", True):
+            return
+        sym_u = symbol.strip().upper()
+        mode_s = str(mode or "").strip().lower()
+        pid = plan_id.strip()
+        if self._in_quiet_hours(prefs):
+            _LOG.debug("tracked_plan_thesis alert skipped: quiet hours user=%s", user_ref_for_logs(user_id))
+            return
+        if self.alert_store.had_tracked_plan_thesis_alert_on_et_calendar_day(user_id, pid, new):
+            _LOG.debug(
+                "tracked_plan_thesis alert deduped user=%s plan=%s status=%s",
+                user_ref_for_logs(user_id),
+                pid,
+                new,
+            )
+            return
+        ctx: dict[str, Any] = {
+            "plan_id": pid,
+            "symbol": sym_u,
+            "mode": mode_s,
+            "previous_status": prev,
+            "thesis_status": new,
+            "thesis_label": thesis_label,
+            "thesis_hint": thesis_hint,
+            "trigger_label": trigger_label,
+        }
+        success = self.email_service.send_alert_email(
+            to_email=user_email,
+            alert_type=AlertType.TRACKED_PLAN_THESIS,
+            context=ctx,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        subj = self.email_service._build_subject(AlertType.TRACKED_PLAN_THESIS, ctx)
+        rec = AlertRecord(
+            alert_id=new_history_alert_id(),
+            user_id=user_id,
+            alert_type=AlertType.TRACKED_PLAN_THESIS,
+            channel=AlertChannel.EMAIL,
+            symbol=sym_u,
+            title=subj,
+            body=preview_context_json(ctx),
+            status=AlertStatus.SENT if success else AlertStatus.FAILED,
+            created_at=now,
+            sent_at=now if success else None,
+            error=None if success else "send_failed",
+        )
+        self.alert_store.create_alert_record(rec)
+
     def _execution_actionable_email_deduped(self, user_id: str, symbol: str, mode: str) -> bool:
         from stocvest.utils.config import get_settings
 

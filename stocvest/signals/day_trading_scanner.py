@@ -15,7 +15,8 @@ from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
 from stocvest.data.models import Bar, Snapshot, Timeframe
-from stocvest.indicators.core import OpeningRange, gap_percent, opening_range
+from stocvest.indicators.core import OpeningRange, atr, gap_percent, opening_range
+from stocvest.signals.signal_math_contract import clamp_unit, normalize_to_unit
 from stocvest.signals.session_price_guard import is_corporate_action_session_move
 from stocvest.data.symbol_universe_eligibility import (
     listing_age_exclusion_reason,
@@ -25,6 +26,18 @@ from stocvest.utils.config import get_settings
 
 # Polygon `day.v` is often 0 before 9:30 ET; require prior-session liquidity instead.
 _MIN_PRIOR_DAY_VOLUME_PREMARKET_GAP = 1_000_000.0
+
+# ORB scoring (volume-gated, strength-weighted). ORB is a *supporting* signal, not a
+# standalone trigger: without participation a breakout earns only minimal presence
+# credit; with strong participation a decisive (ATR-normalized) breakout earns the full
+# boost. RVOL = breakout-bar volume vs the recent intraday average.
+_ORB_RVOL_NOISE = 1.2  # below this → low participation, likely noise
+_ORB_RVOL_STRONG = 1.8  # above this → strong participation
+_ORB_NOISE_CREDIT = 0.05
+_ORB_MODERATE_BASE = 0.20
+_ORB_MODERATE_STRENGTH = 0.15
+_ORB_STRONG_BASE = 0.25
+_ORB_STRONG_STRENGTH = 0.20
 
 
 def _calendar_today() -> date:
@@ -480,6 +493,8 @@ class OpeningRangeBreakoutDetector:
         upper_trigger = orb.high * (1 + (self._breakout_buffer_pct / 100.0))
         lower_trigger = orb.low * (1 - (self._breakout_buffer_pct / 100.0))
 
+        atr_value = self._latest_atr(bars)
+
         for bar in eval_bars:
             volume_confirmed = bar.volume >= self._min_volume_for_confirmation
             if bar.close >= upper_trigger:
@@ -491,7 +506,7 @@ class OpeningRangeBreakoutDetector:
                     range_high=orb.high,
                     range_low=orb.low,
                     range_midpoint=orb.midpoint,
-                    strength=self._strength(bar.close, orb.midpoint),
+                    strength=self._strength(bar.close, orb.high, orb.low, atr_value),
                     volume_confirmed=volume_confirmed,
                 )
             if bar.close <= lower_trigger:
@@ -503,16 +518,41 @@ class OpeningRangeBreakoutDetector:
                     range_high=orb.high,
                     range_low=orb.low,
                     range_midpoint=orb.midpoint,
-                    strength=self._strength(bar.close, orb.midpoint),
+                    strength=self._strength(bar.close, orb.high, orb.low, atr_value),
                     volume_confirmed=volume_confirmed,
                 )
         return None
 
     @staticmethod
-    def _strength(price: float, midpoint: float) -> float:
-        if midpoint == 0:
-            return 0.0
-        return min(1.0, abs((price - midpoint) / midpoint))
+    def _latest_atr(bars: list[Bar]) -> float | None:
+        """Most recent ATR over the session bars, or None when history is too thin."""
+        series = atr(bars)
+        for value in reversed(series):
+            if value is not None and value > 0:
+                return float(value)
+        return None
+
+    @staticmethod
+    def _strength(
+        price: float, range_high: float, range_low: float, atr_value: float | None
+    ) -> float:
+        """Breakout conviction (0..1) = penetration beyond the broken edge,
+        normalized by **ATR** (Signal Math Contract unit scale).
+
+        ATR normalization makes conviction comparable across symbols and volatility
+        regimes — a fixed-dollar push past the range means more on a quiet name than
+        a volatile one. Falls back to the opening-range width when ATR is
+        unavailable (early session / thin history). Normalizing by absolute price
+        level (the original behavior) was meaningless — it just tracked share price.
+        """
+        if price >= range_high:
+            beyond = price - range_high
+        elif price <= range_low:
+            beyond = range_low - price
+        else:
+            beyond = 0.0
+        scale = atr_value if (atr_value is not None and atr_value > 0) else (range_high - range_low)
+        return normalize_to_unit(beyond, scale)
 
 
 @dataclass(frozen=True)
@@ -728,6 +768,23 @@ class IntradaySetupScanner:
         results.sort(key=lambda c: c.score, reverse=True)
         return results[: max(0, limit)]
 
+    @staticmethod
+    def _orb_contribution(strength: float, rvol: float) -> float:
+        """Volume-gated, strength-weighted ORB score contribution.
+
+        ``strength`` is the ATR-normalized breakout conviction (0..1); ``rvol`` is
+        breakout-bar relative volume. See the ``_ORB_*`` constants for the bands:
+        low participation earns only a presence credit, while a decisive breakout on
+        strong participation earns the full boost. This keeps ORB a *supporting*
+        signal rather than letting raw price movement alone clear the score gate.
+        """
+        s = clamp_unit(strength)
+        if rvol < _ORB_RVOL_NOISE:
+            return _ORB_NOISE_CREDIT
+        if rvol <= _ORB_RVOL_STRONG:
+            return _ORB_MODERATE_BASE + _ORB_MODERATE_STRENGTH * s
+        return _ORB_STRONG_BASE + _ORB_STRONG_STRENGTH * s
+
     def _scan_symbol(
         self, symbol: str, bars: list[Bar], liq: SymbolLiquidityContext | None
     ) -> IntradaySetupCandidate | None:
@@ -762,6 +819,7 @@ class IntradaySetupScanner:
 
         avg_recent_volume = sum(bar.volume for bar in bars[-10:]) / min(10, len(bars))
         volume_surge = latest.volume >= max(1.0, avg_recent_volume * 1.5)
+        rvol = float(latest.volume) / avg_recent_volume if avg_recent_volume > 0 else 0.0
 
         vwap_calc = IntradayVWAPCalculator()
         prev_vwap: float | None = None
@@ -805,10 +863,10 @@ class IntradaySetupScanner:
 
         if orb_long:
             long_triggers.append("orb_breakout_long")
-            long_score += 0.35
+            long_score += self._orb_contribution(orb_sig.strength if orb_sig else 0.0, rvol)
         if orb_short:
             short_triggers.append("orb_breakout_short")
-            short_score += 0.35
+            short_score += self._orb_contribution(orb_sig.strength if orb_sig else 0.0, rvol)
 
         if prev_vwap is not None and latest_vwap is not None:
             if prev.close < prev_vwap and latest.close > latest_vwap:

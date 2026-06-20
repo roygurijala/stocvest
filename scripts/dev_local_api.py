@@ -53,6 +53,8 @@ def _module_for_path(method: str, path_only: str) -> str | None:
         return "portfolio"
     if p.startswith("/v1/journal"):
         return "journal"
+    if p.startswith("/v1/trade-plans"):
+        return "trade_plans"
     if p.startswith("/v1/pdt"):
         return "pdt"
     if p.startswith("/v1/scanner"):

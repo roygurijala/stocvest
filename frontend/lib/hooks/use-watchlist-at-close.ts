@@ -63,7 +63,9 @@ export function useWatchlistAtClose(enabled: boolean, mode: "swing" | "day" = "s
           const sym = (row.symbol || "").trim().toUpperCase();
           if (sym) bySnap.set(sym, row);
         }
-        const next: WatchlistAtCloseItem[] = symbols.map((sym) => {
+        // Only render symbols we actually fetched snapshots for (the snapshots BFF is
+        // capped to 40/request); mapping the full list left >40 rows with null prices.
+        const next: WatchlistAtCloseItem[] = chunk.map((sym) => {
           const snap = bySnap.get(sym);
           const row: WatchlistMaturationRow | undefined = env.bySymbol[sym];
           return {

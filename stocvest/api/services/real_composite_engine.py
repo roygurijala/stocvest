@@ -68,6 +68,7 @@ from stocvest.data.symbol_universe_eligibility import UniverseEligibilityContext
 from stocvest.data.ticker_reference import TickerReference
 from stocvest.data.ticker_reference_cache import get_ticker_reference
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
+from stocvest.signals.session_price_guard import session_gap_percent
 from stocvest.signals.composite_score import (
     CompositeSignal,
     CompositeVerdict,
@@ -788,13 +789,23 @@ async def build_real_composite_response(
         }
     last_px = float(sym_snap.last_trade_price) if sym_snap and sym_snap.last_trade_price else 0.0
 
+    gap_pct_val = (
+        session_gap_percent(
+            getattr(sym_snap, "prev_close", None),
+            getattr(sym_snap, "last_trade_price", None),
+            getattr(sym_snap, "day_open", None),
+            symbol=sym,
+        )
+        if sym_snap
+        else None
+    )
     cf: Any = None
     cf_subset: dict[str, Any] | None = None
     if direction_out:
         sig_data = {
             "pattern": str(tech.orb_signal or "swing_composite"),
             "volume_vs_avg": float(tech.volume_vs_adv or 1.0),
-            "gap_pct": 0.0,
+            "gap_pct": float(gap_pct_val) if gap_pct_val is not None else 0.0,
             "ema9": tech.ema9,
             "last_trade_price": last_px,
         }

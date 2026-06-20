@@ -77,10 +77,13 @@ def test_scanner_detects_ranked_long_setup():
 def test_scanner_detects_short_setup():
     base = datetime(2026, 4, 28, 9, 30, tzinfo=_ET)
     bars = opening_block(base, "TSLA", high=101.0, low=99.0)
+    # Decisive breakdown well below the OR low on strong participation: ORB is now a
+    # volume-gated, strength-weighted contributor, so a qualifying short setup needs
+    # real conviction + volume (not just a marginal poke past the edge).
     bars.extend(
         [
             bar(99.6, dt=base + timedelta(minutes=15), symbol="TSLA", volume=100_000),
-            bar(98.4, dt=base + timedelta(minutes=16), symbol="TSLA", high=99.0, low=98.2, volume=400_000),
+            bar(97.5, dt=base + timedelta(minutes=16), symbol="TSLA", high=98.0, low=97.3, volume=900_000),
         ]
     )
 
@@ -90,6 +93,23 @@ def test_scanner_detects_short_setup():
     assert len(results) == 1
     assert results[0].direction == "short"
     assert "orb_breakout_short" in results[0].triggers
+
+
+@pytest.mark.unit
+def test_orb_contribution_is_volume_gated_and_strength_weighted():
+    """The ORB score contribution must reward participation + conviction, not raw price moves."""
+    contrib = IntradaySetupScanner._orb_contribution
+    # Low participation (RVOL < 1.2) → minimal presence credit regardless of strength.
+    assert contrib(1.0, 1.0) == 0.05
+    # Moderate participation scales with strength.
+    assert contrib(0.0, 1.5) == 0.20
+    assert contrib(1.0, 1.5) == 0.35
+    # Strong participation earns the full boost.
+    assert contrib(1.0, 2.0) == 0.45
+    # A weak breakout, even on strong volume, stays below a flat 0.35.
+    assert contrib(0.0, 2.0) == 0.25
+    # Strength is clamped to the unit scale.
+    assert contrib(5.0, 2.0) == 0.45
 
 
 @pytest.mark.unit

@@ -25,6 +25,7 @@ type AlertPrefs = {
   on_gap_detected: boolean;
   on_watchlist_maturation: boolean;
   on_execution_actionable?: boolean;
+  on_tracked_plan_thesis?: boolean;
   watchlist_only: boolean;
   quiet_hours_enabled: boolean;
   quiet_hours_start: string;
@@ -51,7 +52,8 @@ function alertHistoryTypeLabel(raw: string | null | undefined): string {
     gap_detected: "Gap",
     signal_expired: "Expired",
     watchlist_maturation: "Maturation",
-    execution_actionable: "Execution actionable"
+    execution_actionable: "Execution actionable",
+    tracked_plan_thesis: "Tracked plan thesis"
   };
   return map[t] ?? t.replace(/_/g, " ");
 }
@@ -366,6 +368,20 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
               Applies to the whole desk — not limited by “Watchlist symbols only” below. One email per symbol per day.
             </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
+              <span>Tracked plan thesis changes</span>
+              <input
+                type="checkbox"
+                className="h-6 w-6 shrink-0"
+                disabled={!prefs.email_enabled}
+                checked={prefs.on_tracked_plan_thesis ?? true}
+                onChange={(e) => void patchPref({ on_tracked_plan_thesis: e.target.checked })}
+              />
+            </label>
+            <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
+              Email when a plan you tracked weakens or invalidates vs live desk read. Your frozen levels are not changed.
+              One email per plan per status per day.
+            </p>
+            <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
               <span>
                 Watchlist symbols only <span style={{ color: colors.accent, fontSize: 10 }}>Recommended</span>
               </span>
@@ -379,7 +395,7 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
             </label>
             <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
               Limits signal-fired, confluence, gap, and maturation emails to your default watchlist. Does not limit
-              execution-actionable desk alerts above.
+              execution-actionable desk alerts or tracked-plan thesis alerts above.
             </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
               <span>Enable quiet hours</span>

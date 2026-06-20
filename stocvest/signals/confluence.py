@@ -398,11 +398,22 @@ class ConfluenceDetector:
         penalty = n_conflicting * 8
         score = max(0, min(100, int(raw - penalty)))
 
-        if score >= 80 and n_confirming >= 5:
+        # Tier floors are driven by the number of confirming signals (the design
+        # intent — see ``_historical_note``); the score threshold for each tier is
+        # the conflict-free score *at that confirming floor* so the floor is actually
+        # reachable. Previously the score thresholds (80/65/50) sat far above the
+        # score a 5/4/3-confirming setup can reach with ``denom = 9`` (≈55/44/33),
+        # so the n_confirming floors never bound and e.g. 4 confirming → "weak".
+        # Conflicts still demote via the penalty (each conflict ≈ -8).
+        moderate_floor = int((3 / denom) * 100.0)  # 3 confirming, 0 conflicts → 33
+        strong_floor = int((4 / denom) * 100.0)  # 4 confirming → 44
+        exceptional_floor = int((5 / denom) * 100.0)  # 5 confirming → 55
+
+        if n_confirming >= 5 and score >= exceptional_floor:
             tier = "exceptional"
-        elif score >= 65 and n_confirming >= 4:
+        elif n_confirming >= 4 and score >= strong_floor:
             tier = "strong"
-        elif score >= 50 and n_confirming >= 3:
+        elif n_confirming >= 3 and score >= moderate_floor:
             tier = "moderate"
         else:
             tier = "weak"
@@ -416,7 +427,7 @@ class ConfluenceDetector:
             conflicting_signals=conflicting,
             n_confirming=n_confirming,
             n_conflicting=n_conflicting,
-            is_confluence_alert=(n_confirming >= 3 and score >= 60),
+            is_confluence_alert=tier != "weak",
             historical_note=self._historical_note(n_confirming),
             disclaimer=CONFLUENCE_DISCLAIMER,
         )

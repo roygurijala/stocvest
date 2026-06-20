@@ -8,6 +8,7 @@ export const APP_PAGE_TITLE_BY_PATH: Record<string, string> = {
   "/dashboard/watchlists": "Watchlist",
   "/dashboard/setup-evolution": "Setup evolution",
   "/dashboard/setup-outcomes": "Setup outcomes",
+  "/dashboard/plans": "Trade plans",
   "/dashboard/portfolio": "Portfolio",
   "/dashboard/options": "Options",
   "/dashboard/crypto": "Crypto",

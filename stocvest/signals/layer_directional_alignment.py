@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from stocvest.models.watchlist import MATURATION_LAYER_KEYS
+from stocvest.signals.signal_math_contract import ratio_to_layer_count
 
 LayerVerdict = Literal["bullish", "bearish", "neutral", "unavailable"]
 
@@ -99,7 +100,8 @@ def composite_direction_fields(body: dict[str, Any]) -> dict[str, Any]:
     from_ratio = body.get("alignment_ratio")
     consistency = metrics["consistency_aligned"]
     if isinstance(from_ratio, (int, float)) and float(from_ratio) == float(from_ratio):
-        consistency = max(0, min(len(MATURATION_LAYER_KEYS), round(max(0.0, min(1.0, float(from_ratio))) * 6)))
+        # Signal Math Contract: alignment ratio (0..1) → whole-layer count (0..N).
+        consistency = ratio_to_layer_count(float(from_ratio))
 
     directional = int(metrics["directional_aligned"])
     total = len(MATURATION_LAYER_KEYS)
