@@ -33,6 +33,27 @@ describe("buildCausalNarrativeFromRows", () => {
     expect(narrative.summary.toLowerCase()).not.toMatch(/buy|sell|consider/);
   });
 
+  test("neutral setup describes a directional layer's own read, not 'no edge'", () => {
+    const narrative = buildCausalNarrativeFromRows({
+      signalSummary: "neutral",
+      rows: [
+        row("macro", "Macro", "Neutral"),
+        row("geopolitical", "Geopolitical", "Neutral"),
+        row("internals", "Market Internals", "Neutral"),
+        row("sector", "Sector", "Bullish"),
+        row("news", "News", "Neutral"),
+        row("technical", "Technical", "Bearish")
+      ]
+    });
+    const sector = narrative.layerNotes["sector"];
+    expect(sector).toBeDefined();
+    expect(sector?.polarity).toBe("mixed");
+    expect(sector?.because.toLowerCase()).toContain("bullish");
+    expect(sector?.because.toLowerCase()).not.toContain("no clear leadership");
+    const technical = narrative.layerNotes["technical"];
+    expect(technical?.because.toLowerCase()).toContain("bearish");
+  });
+
   test("aligned bearish setup has empty chain", () => {
     const narrative = buildCausalNarrativeFromRows({
       signalSummary: "bearish",
