@@ -26,6 +26,24 @@ class TechnicalSnapshot(BaseModel):
     bars_analyzed: int = 0
 
 
+class NewsEventCapture(BaseModel):
+    """One article-level news event captured at signal time (B71 Phase B).
+
+    Persisted inside ``news_snapshot_json`` so a later event study (B71 Phase C)
+    can join each headline's ``published_at`` + per-ticker ``sentiment_score`` to
+    the symbol's subsequent price move and learn a data-driven news sensitivity.
+    Public market-news metadata only — no user/PII content.
+    """
+
+    title: str | None = None
+    source: str | None = None
+    published_at: str | None = None
+    sentiment_score: float | None = None
+    sentiment: str | None = None
+    catalyst_type: str | None = None
+    url: str | None = None
+
+
 class NewsSnapshot(BaseModel):
     article_count: int = 0
     sentiment_score: float | None = None
@@ -33,6 +51,9 @@ class NewsSnapshot(BaseModel):
     catalyst_type: str | None = None
     catalyst_headline: str | None = None
     top_sources: list[str] = Field(default_factory=list)
+    # B71 Phase B: top article-level events (timestamp + per-ticker sentiment)
+    # for retrospective news-impact / sensitivity analysis. Empty pre-B71.
+    top_events: list[NewsEventCapture] = Field(default_factory=list)
 
 
 class MacroSnapshot(BaseModel):

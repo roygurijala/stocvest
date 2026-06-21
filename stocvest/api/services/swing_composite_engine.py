@@ -95,6 +95,11 @@ from stocvest.signals.composite_score import (
 from stocvest.signals.alignment_score import adjust_composite_with_alignment, alignment_to_response_dict
 from stocvest.signals.layer_directional_alignment import composite_direction_fields
 from stocvest.signals.geo_analyzer import GeoAnalyzer
+from stocvest.signals.news_sensitivity import layer_sensitivity_multipliers
+from stocvest.signals.news_sentiment_cache import (
+    enrich_rows_with_cached_sentiment,
+    prime_missing_news_sentiment,
+)
 from stocvest.signals.internals_analyzer import InternalsAnalyzer
 from stocvest.signals.macro_analyzer import MacroAnalyzer
 from stocvest.signals.macro_context import get_macro_context
@@ -180,6 +185,8 @@ async def build_swing_composite_response(
         bz_data: BenzingaMultiResult = _safe_result(bz_r, benzinga_multi_shell())
         bz_data = await ensure_analyst_feed(benzinga, sym, bz_data)
         news_rows = _merge_benzinga_first_news_rows(news_polygon, _benzinga_articles_to_rows(bz_data.news))
+        enrich_rows_with_cached_sentiment(news_rows)
+        await prime_missing_news_sentiment(news_rows)
         spy_snap: Snapshot | None = _safe_result(spy_r, None)
         qqq_snap: Snapshot | None = _safe_result(qqq_r, None)
         vix_snap: Snapshot | None = _safe_result(vix_r, None)
@@ -371,7 +378,8 @@ async def build_swing_composite_response(
 
     regime = _regime_for_engine(macro.market_regime)
     engine = build_composite_score_engine_from_params(params, mode="swing")
-    composite_raw = engine.compute(signals, regime=regime)
+    sensitivity = layer_sensitivity_multipliers(sic_bucket_for_geo, ticker_ref=ticker_ref)
+    composite_raw = engine.compute(signals, regime=regime, sensitivity_multipliers=sensitivity)
     sector_persist = float(sector_momentum.persistence) if sector_momentum else 0.5
     composite, alignment = adjust_composite_with_alignment(
         composite_raw,
@@ -804,6 +812,7 @@ async def build_swing_composite_response(
                     layer_scores=layer_scores,
                     confirming_labels=confirming_labs,
                     conflicting_labels=conflicting_labs,
+                    news_events=_build_catalyst_headlines(news_rows, symbol=sym),
                 )
                 rr_raw = response_body.get("risk_reward")
                 rr_f = float(rr_raw) if isinstance(rr_raw, (int, float)) else None
@@ -934,6 +943,7 @@ async def build_swing_composite_response(
                 layer_scores=layer_scores_neutral,
                 confirming_labels=[],
                 conflicting_labels=[],
+                news_events=_build_catalyst_headlines(news_rows, symbol=sym),
             )
             rb = response_body
             stop_lvl = rb.get("reference_stop_level")

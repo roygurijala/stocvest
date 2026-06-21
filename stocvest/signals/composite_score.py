@@ -134,7 +134,22 @@ class CompositeScoreEngine:
         self._bullish_threshold = bullish_threshold
         self._bearish_threshold = bearish_threshold
 
-    def compute(self, signals: list[LayerSignal], regime: str = "sideways") -> CompositeSignal:
+    def compute(
+        self,
+        signals: list[LayerSignal],
+        regime: str = "sideways",
+        *,
+        sensitivity_multipliers: dict[str, float] | None = None,
+    ) -> CompositeSignal:
+        """Combine layer signals into a normalized composite verdict.
+
+        ``sensitivity_multipliers`` is an optional per-layer **influence** scaler
+        (B71 per-symbol News/Geo sensitivity). It multiplies a layer's effective
+        weight *before* renormalization, so it only changes how much a layer
+        contributes to the blend — never the layer's directional sign, and never
+        a hard gate. Omitted / ``1.0`` entries leave behavior byte-identical to
+        the pre-B71 engine. Values are clamped to ``[0.1, 2.0]`` as a guardrail.
+        """
         if not signals:
             return CompositeSignal(
                 score=0.0,
@@ -148,6 +163,7 @@ class CompositeScoreEngine:
             )
 
         multipliers = self._regime_weights.get(regime, self._regime_weights["sideways"])
+        sensitivity = sensitivity_multipliers or {}
 
         contributions: list[LayerContribution] = []
         weighted_sum = 0.0
@@ -161,8 +177,9 @@ class CompositeScoreEngine:
             confidence = self._clamp(signal.confidence, UNIT_MIN, UNIT_MAX)
             base_weight = self._base_weights.get(signal.layer, 0.0)
             regime_multiplier = multipliers.get(signal.layer, 1.0)
+            layer_sensitivity = self._clamp(float(sensitivity.get(signal.layer, 1.0)), 0.1, 2.0)
 
-            effective_weight = base_weight * regime_multiplier * confidence
+            effective_weight = base_weight * regime_multiplier * confidence * layer_sensitivity
             layer_effective_weights[signal.layer] = effective_weight
             weighted_value = score * effective_weight
             confidence_weight = base_weight * regime_multiplier
@@ -241,7 +258,7 @@ class CompositeScoreEngine:
         layer_effective_weights: dict[str, float],
     ) -> dict[str, object]:
         if verdict == CompositeVerdict.NEUTRAL:
-            return self._neutral_plurality_alignment(signals, regime)
+            return self._neutral_plurality_alignment(signals, layer_effective_weights)
         aligned_weight = 0.0
         conflicted_weight = 0.0
         conflicted_layers: list[str] = []
@@ -265,19 +282,21 @@ class CompositeScoreEngine:
             "conflicted_weight": conflicted_weight,
         }
 
-    def _neutral_plurality_alignment(self, signals: list[LayerSignal], regime: str) -> dict[str, object]:
-        """When the net score is neutral, measure agreement as the strongest directional bucket share (weighted)."""
-        multipliers = self._regime_weights.get(regime, self._regime_weights["sideways"])
+    def _neutral_plurality_alignment(
+        self, signals: list[LayerSignal], layer_effective_weights: dict[str, float]
+    ) -> dict[str, object]:
+        """When the net score is neutral, measure agreement as the strongest directional bucket share (weighted).
+
+        Uses the same per-layer effective weights computed in :meth:`compute`
+        (base × regime × confidence × sensitivity) so neutral-state alignment
+        reflects per-symbol News/Geo sensitivity exactly like the directional path.
+        """
         bull_w = bear_w = neutral_w = 0.0
         bull_layers: list[str] = []
         bear_layers: list[str] = []
         neutral_layers: list[str] = []
         for signal in signals:
-            w = (
-                self._base_weights.get(signal.layer, 0.0)
-                * multipliers.get(signal.layer, 1.0)
-                * self._clamp(signal.confidence, 0.0, 1.0)
-            )
+            w = layer_effective_weights.get(signal.layer, 0.0)
             layer_dir = self._layer_direction(float(signal.score))
             if layer_dir == CompositeVerdict.BULLISH:
                 bull_w += w

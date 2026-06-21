@@ -97,7 +97,8 @@ Single source of truth for signal scoring math, so scanner / watchlist / scenari
 
 ### Weighting, regime, and layer direction (invariant)
 
-- Each layer contributes **`weighted_value = layer_score × effective_weight`**, where **`effective_weight = base_weight × regime_multiplier × confidence`**.
+- Each layer contributes **`weighted_value = layer_score × effective_weight`**, where **`effective_weight = base_weight × regime_multiplier × confidence × sensitivity_multiplier`**.
+- **Per-symbol News/Geo sensitivity (B71 Phase A):** `news_sensitivity.layer_sensitivity_multipliers(sic_bucket, ticker_ref=…)` maps the symbol's sector bucket (+ ADR geo override) to coarse `HIGH/MEDIUM/LOW` bands → a **down-only** multiplier (`1.0 / 0.85 / 0.6`) for the `news` and `geopolitical` layers, passed to `compute(..., sensitivity_multipliers=…)`. It scales **influence only** (renormalizes via `total_effective_weight`), **never** flips a layer's sign and **never** gates. Unknown/`default` sectors → `1.0` (identical to pre-B71). Up-weighting + data-driven sensitivity are **B71 Phases B/C** in `BACKLOG.md`.
 - Default **`REGIME_WEIGHTS`** entries are **strictly positive**; they **amplify or dampen how much** a layer counts, **not** whether a bullish layer input counts as bullish. **Do not** introduce **negative** regime multipliers without an explicit design review and coordinated API/docs updates— that would silently **invert** a layer’s contribution sign.
 - **Disagreement is first-class:** alignment metadata and the **contradiction penalty** (`_apply_contradiction_penalty`) reduce the **composite scalar** when layers conflict; they do **not** rewrite individual layer outputs.
 

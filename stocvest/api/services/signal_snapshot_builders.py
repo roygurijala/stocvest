@@ -8,11 +8,40 @@ from stocvest.data.signal_snapshots import (
     InternalsSnapshot,
     LayerScoresSnapshot,
     MacroSnapshot,
+    NewsEventCapture,
     NewsSnapshot,
     SectorSnapshot,
     TechnicalSnapshot,
     layer_scores_snapshot_from_layer_scores,
 )
+
+# Cap captured events per signal: enough for an event study, bounded write size.
+_MAX_NEWS_EVENTS = 8
+
+
+def _news_events_capture(news_events: list[dict[str, Any]] | None) -> list[NewsEventCapture]:
+    """Normalize engine ``catalyst_headlines`` rows → persisted capture models (B71 Phase B)."""
+    if not isinstance(news_events, list):
+        return []
+    out: list[NewsEventCapture] = []
+    for row in news_events:
+        if not isinstance(row, dict):
+            continue
+        title = str(row.get("text") or row.get("title") or "").strip()
+        out.append(
+            NewsEventCapture(
+                title=(title[:120] or None),
+                source=(str(row.get("source") or "").strip() or None),
+                published_at=(str(row.get("published_at") or "").strip() or None),
+                sentiment_score=_f(row.get("sentiment_score")),
+                sentiment=(str(row.get("sentiment") or "").strip() or None),
+                catalyst_type=(str(row.get("catalyst_type") or "").strip() or None),
+                url=(str(row.get("url") or "").strip() or None),
+            )
+        )
+        if len(out) >= _MAX_NEWS_EVENTS:
+            break
+    return out
 
 
 def _f(x: Any) -> float | None:
@@ -118,8 +147,15 @@ def build_real_composite_snapshot_payload(
     layer_scores: dict[str, float],
     confirming_labels: list[str],
     conflicting_labels: list[str],
+    news_events: list[dict[str, Any]] | None = None,
 ) -> dict[str, str | None]:
-    """Populate :class:`SignalRecord` JSON blobs from server-side real-composite layer outputs."""
+    """Populate :class:`SignalRecord` JSON blobs from server-side real-composite layer outputs.
+
+    ``news_events`` (optional) is the engine's ``catalyst_headlines`` list — top
+    article-level events with ``published_at`` + per-ticker ``sentiment_score`` —
+    captured into ``NewsSnapshot.top_events`` for the B71 event study. Omitted →
+    empty list (pre-B71 behavior).
+    """
     from stocvest.signals.internals_analyzer import InternalsLayerResult
     from stocvest.signals.macro_analyzer import MacroLayerResult
     from stocvest.signals.news_analyzer import NewsLayerResult
@@ -202,6 +238,7 @@ def build_real_composite_snapshot_payload(
         weighted_sentiment=n.weighted_sentiment if n else None,
         catalyst_type=n.catalyst_type if n else None,
         top_sources=[],
+        top_events=_news_events_capture(news_events),
     )
 
     macro_snap = MacroSnapshot(
