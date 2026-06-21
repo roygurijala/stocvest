@@ -95,7 +95,7 @@ from stocvest.signals.composite_score import (
 from stocvest.signals.alignment_score import adjust_composite_with_alignment, alignment_to_response_dict
 from stocvest.signals.layer_directional_alignment import composite_direction_fields
 from stocvest.signals.geo_analyzer import GeoAnalyzer
-from stocvest.signals.news_sensitivity import layer_sensitivity_multipliers
+from stocvest.signals.news_sensitivity import layer_sensitivity_multipliers, layer_sensitivity_payload
 from stocvest.signals.news_sentiment_cache import (
     enrich_rows_with_cached_sentiment,
     prime_missing_news_sentiment,
@@ -544,6 +544,7 @@ async def build_swing_composite_response(
         "alignment_ratio": composite.alignment_ratio,
         "conflicted_layers": list(composite.conflicted_layers or []),
         "market_context_flags": resolve_market_context_flags(sym, reference=ticker_ref),
+        "news_geo_sensitivity": layer_sensitivity_payload(sic_bucket_for_geo, ticker_ref=ticker_ref),
     }
     response_body.update(composite_layers_meta(layer_results, layer_ids))
     response_body["benzinga_feed_health"] = bz_data.feed_health.as_dict()

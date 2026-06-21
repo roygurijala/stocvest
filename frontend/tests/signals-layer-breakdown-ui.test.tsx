@@ -51,4 +51,44 @@ describe("SignalsLayerBreakdown", () => {
     expect(screen.getByTestId("signals-layer-force-against")).toHaveTextContent(/Internals/);
     expect(screen.getByTestId("signals-layer-row-internals")).toHaveTextContent(/conflicts with bearish thesis/i);
   });
+
+  test("renders News/Geo sensitivity chip when band is present", () => {
+    const sensitivityRows: SignalsLayerRowInput[] = [
+      { key: "technical", name: "Technical", status: "Neutral", explanation: "", score: 50 },
+      {
+        key: "news",
+        name: "News",
+        status: "Neutral",
+        explanation: "",
+        score: 50,
+        sensitivityBand: "low",
+        sensitivityMultiplier: 0.6
+      },
+      { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
+      { key: "sector", name: "Sector", status: "Neutral", explanation: "", score: 50 },
+      {
+        key: "geopolitical",
+        name: "Geopolitical",
+        status: "Neutral",
+        explanation: "",
+        score: 50,
+        sensitivityBand: "high",
+        sensitivityMultiplier: 1.0
+      },
+      { key: "internals", name: "Market Internals", status: "Neutral", explanation: "", score: 50 }
+    ];
+    render(
+      <SignalsLayerBreakdown
+        symbol="NEE"
+        tradingMode="swing"
+        bias="Neutral"
+        rows={sensitivityRows}
+        loading={false}
+        insufficient={false}
+        defaultExpanded
+      />
+    );
+    expect(screen.getByTestId("signals-layer-sensitivity-news")).toHaveTextContent(/LOW · 0\.6× weight/i);
+    expect(screen.getByTestId("signals-layer-sensitivity-geopolitical")).toHaveTextContent(/HIGH · 1× weight/i);
+  });
 });

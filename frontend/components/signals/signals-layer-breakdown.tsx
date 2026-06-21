@@ -272,6 +272,64 @@ export function SignalsLayerBreakdown({
   );
 }
 
+function sensitivityBandTone(band: string): string {
+  const b = band.toLowerCase();
+  if (b === "low") return "#f87171";
+  if (b === "medium") return "#fbbf24";
+  return "#34d399";
+}
+
+function formatSensitivityMultiplier(mult: number | null | undefined): string {
+  if (typeof mult !== "number" || !Number.isFinite(mult)) return "";
+  return `${Math.round(mult * 100) / 100}× weight`;
+}
+
+function sensitivityBlurb(layerKey: string, band: string): string {
+  const isGeo = layerKey === "geopolitical";
+  const layerName = isGeo ? "Geopolitical" : "News";
+  const b = band.toLowerCase();
+  if (b === "low") {
+    return isGeo
+      ? `This stock carries low geopolitical exposure, so the ${layerName} layer is down-weighted for it.`
+      : `This sector rarely reprices on a single headline, so the ${layerName} layer is down-weighted for this stock.`;
+  }
+  if (b === "medium") {
+    return isGeo
+      ? `This stock has moderate geopolitical exposure, so the ${layerName} layer is slightly down-weighted for it.`
+      : `This sector reacts moderately to headlines, so the ${layerName} layer is slightly down-weighted for this stock.`;
+  }
+  return isGeo
+    ? `This stock carries high geopolitical exposure, so the ${layerName} layer keeps its full weight for it.`
+    : `This sector is structurally headline-driven, so the ${layerName} layer keeps its full weight for this stock.`;
+}
+
+function SensitivityChip({
+  layerKey,
+  band,
+  multiplier,
+  layerName
+}: {
+  layerKey: string;
+  band: string;
+  multiplier: number | null | undefined;
+  layerName: string;
+}) {
+  const tone = sensitivityBandTone(band);
+  const multLabel = formatSensitivityMultiplier(multiplier);
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span
+        className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider"
+        style={{ background: `${tone}15`, color: tone, border: `1px solid ${tone}30` }}
+        data-testid={`signals-layer-sensitivity-${layerKey}`}
+      >
+        {multLabel ? `${band.toUpperCase()} · ${multLabel}` : band.toUpperCase()}
+      </span>
+      <InfoTip text={sensitivityBlurb(layerKey, band)} label={`${layerName} sensitivity`} />
+    </span>
+  );
+}
+
 function LayerRow({
   row,
   bias,
@@ -385,7 +443,16 @@ function LayerRow({
                   {row.statusLabel}
                 </span>
               )}
-              
+
+              {(row.key === "news" || row.key === "geopolitical") && row.sensitivityBand ? (
+                <SensitivityChip
+                  layerKey={row.key}
+                  band={row.sensitivityBand}
+                  multiplier={row.sensitivityMultiplier}
+                  layerName={row.name}
+                />
+              ) : null}
+
               {hint ? <InfoTip text={hint} label={row.name} /> : null}
             </div>
             
@@ -700,6 +767,18 @@ function LayerDetailDrawer({
                     {layer.reasoning ?? layer.explanation}
                   </p>
                 </div>
+              ) : null}
+
+              {(layer.key === "news" || layer.key === "geopolitical") && layer.sensitivityBand ? (
+                <LayerFactLine
+                  label={layer.key === "geopolitical" ? "Geo sensitivity" : "Headline sensitivity"}
+                  value={`${layer.sensitivityBand.toUpperCase()}${
+                    formatSensitivityMultiplier(layer.sensitivityMultiplier)
+                      ? ` · ${formatSensitivityMultiplier(layer.sensitivityMultiplier)}`
+                      : ""
+                  }`}
+                  colors={colors}
+                />
               ) : null}
 
               {layer.key === "news" && articlePack.visible.length > 0 ? (

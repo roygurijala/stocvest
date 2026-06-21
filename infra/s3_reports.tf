@@ -12,7 +12,7 @@ resource "aws_s3_bucket" "reports" {
 
   tags = merge(local.common_tags, {
     Name    = "stocvest-development-reports"
-    Purpose = "Scheduled analysis reports (read-only outputs)"
+    Purpose = "Scheduled analysis reports - read-only outputs"
   })
 }
 
