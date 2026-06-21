@@ -238,6 +238,35 @@ describe("compositeToSignalsLayerRows", () => {
     expect(internals?.participationSignal).toBe("broad_up");
   });
 
+  test("threads news_geo_sensitivity onto news and geopolitical rows", () => {
+    const rows = compositeToSignalsLayerRows({
+      news_geo_sensitivity: {
+        sic_bucket: "utilities",
+        news: { band: "low", multiplier: 0.6 },
+        geopolitical: { band: "high", multiplier: 1.0 }
+      },
+      layers: [
+        { layer: "news", status: "available", score: 50, verdict: "neutral" },
+        { layer: "geopolitical", status: "available", score: 50, verdict: "neutral" }
+      ]
+    });
+    const news = rows.find((r) => r.key === "news");
+    const geo = rows.find((r) => r.key === "geopolitical");
+    expect(news?.sensitivityBand).toBe("low");
+    expect(news?.sensitivityMultiplier).toBe(0.6);
+    expect(geo?.sensitivityBand).toBe("high");
+    expect(geo?.sensitivityMultiplier).toBe(1.0);
+  });
+
+  test("omits sensitivity fields when news_geo_sensitivity absent", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [{ layer: "news", status: "available", score: 50, verdict: "neutral" }]
+    });
+    const news = rows.find((r) => r.key === "news");
+    expect(news?.sensitivityBand).toBeUndefined();
+    expect(news?.sensitivityMultiplier).toBeUndefined();
+  });
+
   test("preserves legitimate technical score of zero", () => {
     const rows = compositeToSignalsLayerRows({
       layers: [

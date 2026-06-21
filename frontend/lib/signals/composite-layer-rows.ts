@@ -234,6 +234,31 @@ function verdictToLayerStatus(verdict: string, status: string): LayerStatus {
   return "Neutral";
 }
 
+/**
+ * Attach the B71 per-symbol News/Geo sensitivity (top-level `news_geo_sensitivity`)
+ * onto the matching layer rows so the deep-dive can show what weighting a stock gets.
+ */
+function applyNewsGeoSensitivity(
+  rows: SignalsLayerRowInput[],
+  sensitivity: unknown
+): void {
+  if (!sensitivity || typeof sensitivity !== "object") return;
+  const s = sensitivity as Record<string, unknown>;
+  const apply = (rowKey: "news" | "geopolitical", payloadKey: string) => {
+    const obj = s[payloadKey];
+    if (!obj || typeof obj !== "object") return;
+    const o = obj as Record<string, unknown>;
+    const band = strField(o.band);
+    if (!band) return;
+    const row = rows.find((r) => r.key === rowKey);
+    if (!row) return;
+    row.sensitivityBand = band;
+    row.sensitivityMultiplier = numField(o.multiplier);
+  };
+  apply("news", "news");
+  apply("geopolitical", "geopolitical");
+}
+
 export function compositeToSignalsLayerRows(
   composite: Record<string, unknown> | null | undefined
 ): SignalsLayerRowInput[] {
@@ -288,6 +313,8 @@ export function compositeToSignalsLayerRows(
       news.catalystArticles = catalystArticles;
     }
   }
+
+  applyNewsGeoSensitivity(rows, composite.news_geo_sensitivity);
 
   return rows;
 }

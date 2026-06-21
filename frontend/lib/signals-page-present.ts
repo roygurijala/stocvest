@@ -116,6 +116,13 @@ export type SignalsLayerRowInput = {
   /** Layer-specific internals data */
   breadthSignal?: string | null;
   participationSignal?: string | null;
+  /**
+   * B71 per-symbol News/Geo sensitivity (sector prior): how much this layer's
+   * weight is scaled for this stock today. `band` is HIGH/MEDIUM/LOW; `multiplier`
+   * is the down-only (<= 1.0) effective-weight factor. Display-only.
+   */
+  sensitivityBand?: string | null;
+  sensitivityMultiplier?: number | null;
 };
 
 export function layerDeltaVsBaseline(

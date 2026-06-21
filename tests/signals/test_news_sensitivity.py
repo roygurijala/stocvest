@@ -16,6 +16,7 @@ from stocvest.signals.news_sensitivity import (
     SensitivityBand,
     layer_sensitivity_bands,
     layer_sensitivity_multipliers,
+    layer_sensitivity_payload,
 )
 
 
@@ -35,6 +36,20 @@ def test_low_sensitivity_sector_downweights_news_and_geo():
     mult = layer_sensitivity_multipliers("utilities")
     assert mult["news"] < 1.0
     assert mult["geopolitical"] < 1.0
+
+
+@pytest.mark.unit
+def test_payload_exposes_bands_and_multipliers_for_ui():
+    payload = layer_sensitivity_payload("utilities")
+    assert payload["sic_bucket"] == "utilities"
+    assert payload["news"]["band"] == "low"
+    assert payload["news"]["multiplier"] < 1.0
+    assert payload["geopolitical"]["band"] == "low"
+    # Unknown sector renders neutral (HIGH / 1.0) so the UI matches pre-B71 behavior.
+    neutral = layer_sensitivity_payload(None)
+    assert neutral["sic_bucket"] == "default"
+    assert neutral["news"] == {"band": "high", "multiplier": 1.0}
+    assert neutral["geopolitical"] == {"band": "high", "multiplier": 1.0}
 
 
 @pytest.mark.unit

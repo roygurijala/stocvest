@@ -146,3 +146,26 @@ def layer_sensitivity_multipliers(
     """
     bands = layer_sensitivity_bands(sic_bucket, ticker_ref=ticker_ref)
     return {layer: _clamp_multiplier(_BAND_MULTIPLIER[band]) for layer, band in bands.items()}
+
+
+def layer_sensitivity_payload(
+    sic_bucket: str | None,
+    *,
+    ticker_ref: Any | None = None,
+) -> dict[str, Any]:
+    """Trader-legible News/Geo sensitivity for the API/UI (band + applied multiplier).
+
+    Combines :func:`layer_sensitivity_bands` and :func:`layer_sensitivity_multipliers`
+    into a single JSON-serializable object the deep-dive can render so it's clear what
+    News/Geo weighting a given symbol is receiving today.
+    """
+    bands = layer_sensitivity_bands(sic_bucket, ticker_ref=ticker_ref)
+    mults = layer_sensitivity_multipliers(sic_bucket, ticker_ref=ticker_ref)
+    return {
+        "sic_bucket": str(sic_bucket or "default"),
+        "news": {"band": bands["news"].value, "multiplier": round(mults["news"], 4)},
+        "geopolitical": {
+            "band": bands["geopolitical"].value,
+            "multiplier": round(mults["geopolitical"], 4),
+        },
+    }
