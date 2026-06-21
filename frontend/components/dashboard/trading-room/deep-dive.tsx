@@ -1537,37 +1537,16 @@ export function DeepDive({
             }}
           />
         ) : null}
-        {/* meta-line + "View full analysis →" */}
-        {briefMeta || true ? (
+        {/* meta-line (the deep dive IS the full analysis — no cross-link to the retired signals page) */}
+        {briefMeta ? (
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
               marginTop: spacing[3],
               paddingTop: spacing[2],
-              borderTop: `1px solid ${colors.border}`,
-              gap: spacing[3],
-              flexWrap: "wrap"
+              borderTop: `1px solid ${colors.border}`
             }}
           >
-            {briefMeta ? (
-              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{briefMeta}</span>
-            ) : (
-              <span />
-            )}
-            <a
-              href={`/signals?symbol=${encodeURIComponent(card.symbol)}&mode=${activeLane}`}
-              style={{
-                fontSize: typography.scale.xs,
-                fontWeight: 700,
-                color: colors.accent,
-                textDecoration: "none",
-                whiteSpace: "nowrap"
-              }}
-            >
-              View full analysis →
-            </a>
+            <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{briefMeta}</span>
           </div>
         ) : null}
       </div>
