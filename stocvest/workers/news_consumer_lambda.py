@@ -48,6 +48,21 @@ async def _process_record(record: dict[str, Any]) -> None:
             await asyncio.to_thread(r.rpush, key, payload)
     except Exception as exc:
         log.debug("redis rpush scored news skipped: %s", exc)
+
+    # B71 Phase D: content-keyed read-through cache for the composite news layer
+    # (no-op + fail-open unless STOCVEST_NEWS_SENTIMENT_CACHE_ENABLED is set).
+    try:
+        from stocvest.signals.news_sentiment_cache import write_article_sentiment
+
+        await asyncio.to_thread(
+            write_article_sentiment,
+            url=enriched.url,
+            title=enriched.title,
+            sentiment=result.sentiment.value,
+            score=float(result.score),
+        )
+    except Exception as exc:
+        log.debug("news sentiment cache write skipped: %s", exc)
     log.info(
         "Scored news article_id=%s sentiment=%s",
         enriched.article_id,

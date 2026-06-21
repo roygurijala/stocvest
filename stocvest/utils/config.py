@@ -254,6 +254,62 @@ class Settings(BaseSettings):
         "stocvest:news_scored",
         alias="STOCVEST_NEWS_SCORED_REDIS_LIST_KEY",
     )
+    # B71 Phase D — read-through Claude sentiment cache for the composite news layer.
+    # OFF by default: ships dark until cache hit-rate is validated. When enabled, the
+    # news consumer writes a content-keyed sentiment entry and the composite fills
+    # otherwise-abstaining (no-insights) headlines from it. Always fail-open.
+    stocvest_news_sentiment_cache_enabled: bool = Field(
+        False,
+        alias="STOCVEST_NEWS_SENTIMENT_CACHE_ENABLED",
+    )
+    stocvest_news_sentiment_cache_key_prefix: str = Field(
+        "stocvest:news_sent:",
+        alias="STOCVEST_NEWS_SENTIMENT_CACHE_KEY_PREFIX",
+    )
+    stocvest_news_sentiment_cache_ttl_seconds: int = Field(
+        # 6 days: must exceed the swing news lookback (120h / 5 days) so day-4/5
+        # swing headlines are still cache-resident, plus a write→read margin.
+        518400,
+        alias="STOCVEST_NEWS_SENTIMENT_CACHE_TTL_SECONDS",
+    )
+    # B71 Phase D self-prime: when the composite hits an abstaining cache MISS, enqueue
+    # that article to the triage queue for async Claude scoring so it becomes a hit on a
+    # later pass. Closes the Benzinga-REST-vs-WebSocket coverage gap without a synchronous
+    # Claude call. OFF by default; also requires the cache flag + a triage queue URL.
+    stocvest_news_sentiment_prime_enabled: bool = Field(
+        False,
+        alias="STOCVEST_NEWS_SENTIMENT_PRIME_ENABLED",
+    )
+    # Per-article re-enqueue cooldown: suppress duplicate enqueues of the same headline
+    # while it is awaiting scoring (default 6h).
+    stocvest_news_sentiment_prime_pending_ttl_seconds: int = Field(
+        21600,
+        alias="STOCVEST_NEWS_SENTIMENT_PRIME_PENDING_TTL_SECONDS",
+    )
+    # SQS send_message_batch cap is 10; bound how many misses we enqueue per scoring pass.
+    stocvest_news_sentiment_prime_max_per_pass: int = Field(
+        10,
+        alias="STOCVEST_NEWS_SENTIMENT_PRIME_MAX_PER_PASS",
+    )
+    # B71 Phase C — scheduled offline news event-study report (read-only → S3). OFF by
+    # default; the scheduled Lambda no-ops until enabled + a reports bucket is set.
+    stocvest_news_event_study_report_enabled: bool = Field(
+        False,
+        alias="STOCVEST_NEWS_EVENT_STUDY_REPORT_ENABLED",
+    )
+    stocvest_reports_s3_bucket: str = Field("", alias="STOCVEST_REPORTS_S3_BUCKET")
+    stocvest_news_event_study_s3_prefix: str = Field(
+        "news-event-study/",
+        alias="STOCVEST_NEWS_EVENT_STUDY_S3_PREFIX",
+    )
+    stocvest_news_event_study_lookback_days: int = Field(
+        120,
+        alias="STOCVEST_NEWS_EVENT_STUDY_LOOKBACK_DAYS",
+    )
+    stocvest_news_event_study_min_samples: int = Field(
+        8,
+        alias="STOCVEST_NEWS_EVENT_STUDY_MIN_SAMPLES",
+    )
     stocvest_news_worker_cloudwatch_namespace: str = Field(
         "Stocvest/NewsWorker",
         alias="STOCVEST_NEWS_WORKER_CLOUDWATCH_NAMESPACE",

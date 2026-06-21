@@ -383,6 +383,11 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
 
         return laggard_jobs_handler(event, context)
 
+    if module == "news_event_study_report":
+        from stocvest.workers.news_event_study_report_worker import handler as news_event_study_report_handler
+
+        return news_event_study_report_handler(event, context)
+
     if module == "websocket":
         from stocvest.api.handlers.websocket import (
             websocket_connect_handler,

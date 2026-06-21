@@ -12,6 +12,18 @@ variable "news_worker_desired_count" {
   default     = 0
 }
 
+variable "news_sentiment_cache_enabled" {
+  description = "B71 Phase D: enable the read-through Claude sentiment cache (consumer writes + composite reads). Default off (dark launch). Requires the ECS news worker running to populate the cache."
+  type        = bool
+  default     = false
+}
+
+variable "news_sentiment_prime_enabled" {
+  description = "B71 Phase D self-prime: let the composite enqueue abstaining cache-miss articles to the triage queue for async scoring. Default off. Requires news_sentiment_cache_enabled too."
+  type        = bool
+  default     = false
+}
+
 data "aws_secretsmanager_secret" "external_api_keys" {
   count = var.news_worker_container_image != "" ? 1 : 0
   name  = "stocvest/external-api-keys"
@@ -141,6 +153,7 @@ resource "aws_ecs_task_definition" "news_worker" {
         { name = "STOCVEST_DISABLE_REDIS", value = "0" },
         { name = "REDIS_URL", value = "redis://${aws_elasticache_replication_group.redis.primary_endpoint_address}:${aws_elasticache_replication_group.redis.port}/0" },
         { name = "STOCVEST_NEWS_TRIAGE_QUEUE_URL", value = aws_sqs_queue.news_triage.url },
+        { name = "STOCVEST_NEWS_SENTIMENT_CACHE_ENABLED", value = var.news_sentiment_cache_enabled ? "1" : "0" },
         { name = "BENZINGA_NEWS_WS_URL", value = "wss://api.benzinga.com/api/v1/news/stream" },
         { name = "POLYGON_API_KEY", value = var.polygon_api_key },
       ]

@@ -33,6 +33,7 @@ locals {
     "sector_daily_cache",
     "market_pulse_refresher",
     "laggard_jobs",
+    "news_event_study_report",
   ])
 
   lambda_common_env = {
@@ -302,7 +303,7 @@ resource "aws_lambda_function" "api" {
   role          = aws_iam_role.lambda_api_execution.arn
   handler       = "handler.lambda_handler"
   runtime       = "python3.11"
-  timeout       = each.key == "scanner" ? 300 : each.key == "signal_resolution" ? 120 : each.key == "news_consumer" ? 120 : each.key == "geo_themes" ? 30 : each.key == "macro_warmer" ? 60 : each.key == "sector_daily_cache" ? 120 : each.key == "market_pulse_refresher" ? 15 : each.key == "laggard_jobs" ? 120 : 60
+  timeout       = each.key == "scanner" ? 300 : each.key == "signal_resolution" ? 120 : each.key == "news_consumer" ? 120 : each.key == "geo_themes" ? 30 : each.key == "macro_warmer" ? 60 : each.key == "sector_daily_cache" ? 120 : each.key == "market_pulse_refresher" ? 15 : each.key == "laggard_jobs" ? 120 : each.key == "news_event_study_report" ? 300 : 60
   memory_size   = each.key == "geo_themes" ? 256 : each.key == "orb_compute" ? 256 : each.key == "macro_warmer" ? 256 : each.key == "sector_daily_cache" ? 512 : each.key == "market_pulse_refresher" ? 256 : each.key == "laggard_jobs" ? 256 : 512
 
   filename         = data.archive_file.api_lambda_placeholder.output_path
@@ -324,7 +325,8 @@ resource "aws_lambda_function" "api" {
         STOCVEST_DISABLE_REDIS         = "0"
       } : {},
       each.key == "news_consumer" ? {
-        STOCVEST_DISABLE_REDIS = "0"
+        STOCVEST_DISABLE_REDIS                = "0"
+        STOCVEST_NEWS_SENTIMENT_CACHE_ENABLED = var.news_sentiment_cache_enabled ? "1" : "0"
       } : {},
       each.key == "geo_themes" ? {
         STOCVEST_DISABLE_REDIS = "0"
@@ -341,8 +343,15 @@ resource "aws_lambda_function" "api" {
       each.key == "laggard_jobs" ? {
         STOCVEST_DISABLE_REDIS = "0"
       } : {},
+      each.key == "news_event_study_report" ? {
+        STOCVEST_NEWS_EVENT_STUDY_REPORT_ENABLED = var.news_event_study_report_enabled ? "1" : "0"
+        STOCVEST_REPORTS_S3_BUCKET               = aws_s3_bucket.reports.bucket
+      } : {},
       each.key == "signals" ? {
         STOCVEST_DISABLE_REDIS                  = "0"
+        STOCVEST_NEWS_SENTIMENT_CACHE_ENABLED   = var.news_sentiment_cache_enabled ? "1" : "0"
+        STOCVEST_NEWS_SENTIMENT_PRIME_ENABLED   = var.news_sentiment_prime_enabled ? "1" : "0"
+        STOCVEST_NEWS_TRIAGE_QUEUE_URL          = aws_sqs_queue.news_triage.url
         DYNAMODB_GAP_INTEL_CACHE_TABLE          = aws_dynamodb_table.gap_intel_cache.name
         DYNAMODB_SCANNER_EVALUATION_TRACE_TABLE = aws_dynamodb_table.scanner_evaluation_trace.name
         GAP_INTEL_TICK_SYMBOLS                  = "SPY,QQQ,IWM"
