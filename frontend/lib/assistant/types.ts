@@ -274,7 +274,7 @@ export interface AssistantMessage {
   /**
    * Deep-link to a dashboard page for this assistant turn. When present, the
    * conversation rail renders a "→ Open full analysis" CTA button below the message.
-   * Example: "/dashboard/signals?symbol=MRVL"
+   * Example: "/dashboard?symbol=MRVL"
    */
   navigate_to?: string | null;
   /**

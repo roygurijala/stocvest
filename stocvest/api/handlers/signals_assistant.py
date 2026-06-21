@@ -449,7 +449,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                     last_user_text = str(m.get("content") or "")
                     break
         if detected_sym and is_trade_planning_question(last_user_text):
-            navigate_to = f"/dashboard/signals?symbol={detected_sym}"
+            navigate_to = f"/dashboard?symbol={detected_sym}"
     except Exception:  # noqa: BLE001
         navigate_to = None
 
@@ -479,7 +479,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # If the prompt rule fired but intent wasn't pre-detected (edge case),
     # still honour the marker by using the detected_sym or page symbol.
     if "[OPEN_SIGNALS]" in result.text and not navigate_to and detected_sym:
-        navigate_to = f"/dashboard/signals?symbol={detected_sym}"
+        navigate_to = f"/dashboard?symbol={detected_sym}"
 
     return ok(
         {
