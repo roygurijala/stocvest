@@ -259,6 +259,26 @@ function applyNewsGeoSensitivity(
   apply("geopolitical", "geopolitical");
 }
 
+/**
+ * Attach the B72 per-symbol sector technical calibration (top-level
+ * `sector_technical_calibration`) onto the Technical layer row so the deep-dive
+ * can show what sector volatility regime is calibrating this stock's technicals.
+ */
+function applySectorTechnicalCalibration(
+  rows: SignalsLayerRowInput[],
+  calibration: unknown
+): void {
+  if (!calibration || typeof calibration !== "object") return;
+  const c = calibration as Record<string, unknown>;
+  const regime = strField(c.regime);
+  if (!regime) return;
+  const row = rows.find((r) => r.key === "technical");
+  if (!row) return;
+  row.techVolRegime = regime;
+  row.techRvolMultiplier = numField(c.rvol_threshold_multiplier);
+  row.techOverboughtMultiplier = numField(c.overbought_penalty_multiplier);
+}
+
 export function compositeToSignalsLayerRows(
   composite: Record<string, unknown> | null | undefined
 ): SignalsLayerRowInput[] {
@@ -315,6 +335,7 @@ export function compositeToSignalsLayerRows(
   }
 
   applyNewsGeoSensitivity(rows, composite.news_geo_sensitivity);
+  applySectorTechnicalCalibration(rows, composite.sector_technical_calibration);
 
   return rows;
 }

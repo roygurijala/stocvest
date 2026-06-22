@@ -123,6 +123,15 @@ export type SignalsLayerRowInput = {
    */
   sensitivityBand?: string | null;
   sensitivityMultiplier?: number | null;
+  /**
+   * B72 per-symbol sector technical calibration (Technical layer only): the coarse
+   * sector volatility regime (`high_beta` / `normal` / `defensive`) applied to this
+   * stock's RVOL surge bar and RSI-overbought penalty. `normal` means no calibration.
+   * Display-only.
+   */
+  techVolRegime?: string | null;
+  techRvolMultiplier?: number | null;
+  techOverboughtMultiplier?: number | null;
 };
 
 export function layerDeltaVsBaseline(
