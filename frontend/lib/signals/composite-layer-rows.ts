@@ -318,6 +318,8 @@ export function compositeToSignalsLayerRows(
       explanation: reasoning,
       reasoning: reasoning || undefined,
       score,
+      bullishThreshold: numField(entry?.bullish_threshold),
+      bearishThreshold: numField(entry?.bearish_threshold),
       sectorCachePending: sectorMeta.sectorCachePending,
       ...layerMetadataFromEntry(key, entry ?? {})
     };

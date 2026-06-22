@@ -38,6 +38,44 @@ describe("compositeToSignalsLayerRows", () => {
     expect(tech?.score).toBe(58);
   });
 
+  test("threads per-layer verdict band (bullish/bearish thresholds)", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [
+        {
+          layer: "sector",
+          status: "available",
+          score: 62,
+          verdict: "neutral",
+          bullish_threshold: 65,
+          bearish_threshold: 35
+        },
+        {
+          layer: "geopolitical",
+          status: "available",
+          score: 58,
+          verdict: "neutral",
+          bullish_threshold: 60,
+          bearish_threshold: 35
+        }
+      ]
+    });
+    const sector = rows.find((r) => r.key === "sector");
+    expect(sector?.bullishThreshold).toBe(65);
+    expect(sector?.bearishThreshold).toBe(35);
+    const geo = rows.find((r) => r.key === "geopolitical");
+    expect(geo?.bullishThreshold).toBe(60);
+    expect(geo?.bearishThreshold).toBe(35);
+  });
+
+  test("verdict band is null when the API omits thresholds", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [{ layer: "macro", status: "available", score: 46, verdict: "neutral" }]
+    });
+    const macro = rows.find((r) => r.key === "macro");
+    expect(macro?.bullishThreshold ?? null).toBeNull();
+    expect(macro?.bearishThreshold ?? null).toBeNull();
+  });
+
   test("sector row shows benchmark label when resolved", () => {
     const rows = compositeToSignalsLayerRows({
       layers: [

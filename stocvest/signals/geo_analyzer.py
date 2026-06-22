@@ -20,6 +20,11 @@ from stocvest.signals.geo_sector_impact import (
 )
 from stocvest.workers.geo_themes_updater import get_cached_themes
 
+#: Verdict band for the geopolitical layer (0–100 composite sentiment score). The score is
+#: a *magnitude*; the directional read only leaves neutral once it clears these cutoffs.
+GEO_BULLISH_THRESHOLD = 60
+GEO_BEARISH_THRESHOLD = 35
+
 GEO_HIGH_RISK_KW = (
     "war",
     "invasion",
@@ -292,10 +297,10 @@ class GeoAnalyzer:
 
         composite_score = _composite_sentiment_score_from_geo_risk(final_risk)
 
-        if composite_score >= 60:
+        if composite_score >= GEO_BULLISH_THRESHOLD:
             verdict = "bullish"
             level = "low"
-        elif composite_score <= 35:
+        elif composite_score <= GEO_BEARISH_THRESHOLD:
             verdict = "bearish"
             level = "high"
         else:
