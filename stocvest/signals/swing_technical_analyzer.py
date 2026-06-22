@@ -8,6 +8,7 @@ from typing import Optional
 from stocvest.config.signal_parameters import SwingTechnicalParameters
 from stocvest.data.models import Bar, Snapshot
 from stocvest.signals.indicator_scope import finalize_swing_technical_chips, sanitize_swing_reasoning_text
+from stocvest.signals.sector_technical_calibration import overbought_penalty_multiplier
 from stocvest.signals.technical_analyzer import _calculate_ema, _calculate_rsi
 
 
@@ -277,6 +278,8 @@ class SwingTechnicalAnalyzer:
         daily_bars: list[Bar],
         snapshot: Snapshot,
         params: SwingTechnicalParameters,
+        *,
+        sic_bucket: str | None = None,
     ) -> SwingTechnicalLayerResult:
         _ = symbol
         if len(daily_bars) < 60:
@@ -325,9 +328,21 @@ class SwingTechnicalAnalyzer:
         lh = _lower_highs_lows(bars, lookback=20)
         h_prev = (m_prev - s_prev) if m_prev is not None and s_prev is not None else None
 
+        # Durable uptrend: long-term structure intact (price above both the
+        # 50- and 200-day with a golden cross). A pullback inside a durable
+        # uptrend is read as consolidation, not breakdown — used to credit
+        # structure and to soften overlapping pullback penalties below.
+        durable_uptrend = bool(
+            gc
+            and sma50 is not None
+            and sma200 is not None
+            and last > sma50
+            and last > sma200
+        )
+
         score = 50
 
-        # SMA20 — primary swing anchor
+        # SMA20 — primary swing anchor (magnitude-scaled: shallow dip ≪ deep break)
         if sma20 is not None and sma20 > 0:
             ext20 = (last - sma20) / sma20 * 100.0
             if last > sma20:
@@ -336,7 +351,17 @@ class SwingTechnicalAnalyzer:
                 else:
                     score += params.above_sma20_score
             else:
-                score -= params.below_sma20_score
+                pct_below = (sma20 - last) / sma20 * 100.0
+                full = params.below_sma20_full_break_pct
+                scaled = (
+                    round(params.below_sma20_score * pct_below / full)
+                    if full > 0
+                    else params.below_sma20_score
+                )
+                score -= min(
+                    params.below_sma20_score,
+                    max(params.below_sma20_min_penalty, scaled),
+                )
 
         # SMA50 / SMA200 — structural context (lighter than before)
         if sma50 is not None:
@@ -362,6 +387,10 @@ class SwingTechnicalAnalyzer:
                     params.extension_penalty_cap,
                 )
 
+        # Durable-uptrend structural credit (golden cross + above both MAs).
+        if durable_uptrend:
+            score += params.golden_cross_score
+
         # Recent momentum — dominant for swing (breakdown from ATH, etc.)
         if roc is not None:
             roc_pct = roc * 100.0
@@ -376,7 +405,13 @@ class SwingTechnicalAnalyzer:
 
         if pct_from_high is not None:
             if pct_from_high <= params.pct_from_high_strong_break_pct:
-                score -= params.pct_from_high_strong_penalty
+                # Inside a durable uptrend a drop off the recent high is a
+                # pullback, not a structural breakdown — cap at the moderate tier.
+                score -= (
+                    params.pct_from_high_moderate_penalty
+                    if durable_uptrend
+                    else params.pct_from_high_strong_penalty
+                )
             elif pct_from_high <= params.pct_from_high_moderate_break_pct:
                 score -= params.pct_from_high_moderate_penalty
 
@@ -390,7 +425,10 @@ class SwingTechnicalAnalyzer:
                 score -= params.macd_histogram_negative_penalty
             elif macd_above:
                 score += params.macd_histogram_positive_score
-            if h_prev is not None and _hist_now < h_prev:
+            # Fading penalty only when momentum is still positive but rolling
+            # over (early warning). A negative histogram is already penalized
+            # above — don't double-count the same weakness.
+            if h_prev is not None and _hist_now >= 0 and _hist_now < h_prev:
                 score -= params.macd_histogram_fading_penalty
 
         sma50_extended = (
@@ -398,11 +436,15 @@ class SwingTechnicalAnalyzer:
             and sma50 > 0
             and (last - sma50) / sma50 * 100.0 >= params.extension_above_sma50_pct
         )
+        # Sector-relative overbought: high-beta uptrends can stay overbought for
+        # weeks (lighter penalty); defensives mean-revert (heavier). Neutral (1.0)
+        # for unknown sectors and callers that don't pass one.
+        ob_mult = overbought_penalty_multiplier(sic_bucket)
         if rsi is not None:
             if rsi >= params.rsi_overbought:
-                score -= params.rsi_overbought_penalty
+                score -= round(params.rsi_overbought_penalty * ob_mult)
             elif sma50_extended and rsi >= params.rsi_bullish_zone:
-                score -= params.rsi_exhaustion_extended_penalty
+                score -= round(params.rsi_exhaustion_extended_penalty * ob_mult)
             elif roc is not None and roc * 100.0 <= params.roc_moderate_down_pct and rsi < 50:
                 score -= max(5, params.rsi_score_delta // 2)
             elif rsi >= params.rsi_bullish_zone and (roc is None or roc > 0):
@@ -415,7 +457,7 @@ class SwingTechnicalAnalyzer:
         if vol_regime == "accumulation":
             score += params.volume_accumulation_score
         elif vol_regime == "distribution":
-            score -= params.volume_accumulation_score
+            score -= params.volume_distribution_penalty
         if near_high and roc is not None and roc > 0:
             score += params.near_52w_high_score
         if in_base:
