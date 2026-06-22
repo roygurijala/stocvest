@@ -9,7 +9,7 @@ from stocvest.config.signal_parameters import SwingTechnicalParameters
 from stocvest.data.models import Bar, Snapshot
 from stocvest.signals.indicator_scope import finalize_swing_technical_chips, sanitize_swing_reasoning_text
 from stocvest.signals.sector_technical_calibration import overbought_penalty_multiplier
-from stocvest.signals.technical_analyzer import _calculate_ema, _calculate_rsi
+from stocvest.signals.technical_analyzer import _calculate_atr, _calculate_ema, _calculate_rsi
 
 
 def _sma(closes: list[float], period: int) -> Optional[float]:
@@ -265,6 +265,7 @@ class SwingTechnicalLayerResult:
     base_range_pct: float = 0.0
     volume_regime: str = "neutral"
     near_range_high: bool = False
+    mean_reversion_floor_applied: bool = False
     bars_analyzed: int = 0
     reasoning: str = ""
     chips: list[str] = field(default_factory=list)
@@ -463,6 +464,52 @@ class SwingTechnicalAnalyzer:
         if in_base:
             score += params.base_formation_score
 
+        # Mean-reversion bounce floor (B73). A confirmed, deeply-oversold downtrend
+        # that has *stopped making fresh lows* is bounce-prone — historically RSI
+        # depth tracks forward bounce while still-falling "knives" do not. Lift the
+        # score off the trend floor by an amount set by how oversold it is, as a
+        # NON-additive floor (`max`) so it cannot stack with other terms, hard-capped
+        # below ``bearish_threshold`` so the verdict stays bearish — this only adds
+        # resolution among deeply-oversold names, it never flips the call.
+        mean_reversion_floor_applied = False
+        if (
+            rsi is not None
+            and _hist_now is not None
+            and sma50 is not None
+            and sma200 is not None
+            and last < sma50
+            and last < sma200
+            and _hist_now < 0
+            and rsi < params.mean_reversion_oversold_rsi
+        ):
+            span = params.mean_reversion_oversold_span
+            oversold = (
+                max(0.0, min(1.0, (params.mean_reversion_oversold_rsi - rsi) / span))
+                if span > 0
+                else 0.0
+            )
+            ext = 0.0
+            atr = _calculate_atr(bars, params.atr_period)
+            cap = params.mean_reversion_ext_atr_cap
+            if atr and atr > 0 and cap > 0:
+                ext = max(0.0, min(1.0, ((sma50 - last) / atr) / cap))
+            w = params.mean_reversion_oversold_weight
+            mr = max(0.0, min(1.0, w * oversold + (1.0 - w) * ext))
+            lookback = max(2, params.mean_reversion_stabilizing_lookback)
+            recent_low = min(closes[-lookback:])
+            # Stabilizing = today's close is not a fresh N-day low (knife filter).
+            if last > recent_low * 1.0001:
+                floor = min(
+                    params.mean_reversion_ceiling,
+                    params.mean_reversion_floor_base + round(mr * params.mean_reversion_floor_span),
+                )
+                # Compare against the post-clamp floor (0): only a floor that lifts
+                # the score above what it would otherwise clamp to is a real bounce
+                # credit worth flagging.
+                if floor > max(0, score):
+                    score = floor
+                    mean_reversion_floor_applied = True
+
         score = int(max(0, min(100, score)))
 
         if score >= params.bullish_threshold:
@@ -508,6 +555,8 @@ class SwingTechnicalAnalyzer:
             chips.append("Volume neutral")
         if near_high:
             chips.append("Near 52W High")
+        if mean_reversion_floor_applied:
+            chips.append("Oversold bounce watch")
 
         chips = finalize_swing_technical_chips(symbol, chips)
 
@@ -547,6 +596,10 @@ class SwingTechnicalAnalyzer:
                     phase=rsi_phase, macd_above=bool(macd_above), m_now=m_now, s_now=s_now
                 )
             )
+        if mean_reversion_floor_applied:
+            parts.append(
+                "Downtrend intact but deeply oversold and no longer making fresh lows — bounce-prone (mean-reversion floor)."
+            )
         reasoning = " ".join(parts) if parts else "Daily swing technical snapshot complete."
         reasoning = sanitize_swing_reasoning_text(reasoning, symbol=symbol)
 
@@ -570,6 +623,7 @@ class SwingTechnicalAnalyzer:
             base_range_pct=brp,
             volume_regime=vol_regime,
             near_range_high=near_high,
+            mean_reversion_floor_applied=mean_reversion_floor_applied,
             bars_analyzed=len(bars),
             reasoning=reasoning,
             chips=chips,
