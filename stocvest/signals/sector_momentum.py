@@ -40,9 +40,18 @@ ETF_DISPLAY_NAMES = {
     "XLB": "Materials",
     "XLU": "Utilities",
     "SMH": "Semiconductors",
+    "SOXX": "Semiconductors",
     "KBE": "Banks",
     "GLD": "Gold",
     "SLV": "Silver",
+    "XBI": "Biotech",
+    "XPH": "Pharma",
+    "IHI": "Medical Devices",
+    "XRT": "Retail",
+    "JETS": "Airlines",
+    "XTN": "Transport",
+    "ITA": "Aerospace & Defense",
+    "XME": "Metals & Mining",
 }
 
 
