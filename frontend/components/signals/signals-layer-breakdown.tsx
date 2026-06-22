@@ -330,6 +330,74 @@ function SensitivityChip({
   );
 }
 
+function techRegimeLabel(regime: string): string {
+  const r = regime.toLowerCase();
+  if (r === "high_beta") return "High-beta";
+  if (r === "defensive") return "Defensive";
+  return "Normal";
+}
+
+function techRegimeTone(regime: string): string {
+  const r = regime.toLowerCase();
+  if (r === "high_beta") return "#fbbf24";
+  if (r === "defensive") return "#60a5fa";
+  return "#94a3b8";
+}
+
+function techCalibrationBlurb(regime: string): string {
+  const r = regime.toLowerCase();
+  if (r === "high_beta") {
+    return "High-beta sector: this name runs chronically hot, so the Technical layer raises the relative-volume bar before calling a surge and penalizes an overbought RSI more lightly (momentum can persist for weeks).";
+  }
+  if (r === "defensive") {
+    return "Defensive sector: this name is normally calm, so the Technical layer lowers the relative-volume bar for a surge and penalizes an overbought RSI more heavily (it tends to mean-revert).";
+  }
+  return "Normal sector volatility: the Technical layer uses its baseline relative-volume and overbought calibration for this stock.";
+}
+
+function techCalibrationFactValue(
+  regime: string,
+  rvolMultiplier: number | null | undefined,
+  overboughtMultiplier: number | null | undefined
+): string {
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const parts = [techRegimeLabel(regime)];
+  if (typeof rvolMultiplier === "number" && Number.isFinite(rvolMultiplier)) {
+    parts.push(`RVOL bar ${round2(rvolMultiplier)}×`);
+  }
+  if (typeof overboughtMultiplier === "number" && Number.isFinite(overboughtMultiplier)) {
+    parts.push(`OB penalty ${round2(overboughtMultiplier)}×`);
+  }
+  return parts.join(" · ");
+}
+
+function SectorTechCalibrationChip({
+  regime,
+  rvolMultiplier,
+  overboughtMultiplier
+}: {
+  regime: string;
+  rvolMultiplier: number | null | undefined;
+  overboughtMultiplier: number | null | undefined;
+}) {
+  const tone = techRegimeTone(regime);
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span
+        className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider"
+        style={{ background: `${tone}15`, color: tone, border: `1px solid ${tone}30` }}
+        data-testid="signals-layer-tech-calibration"
+      >
+        {`${techRegimeLabel(regime).toUpperCase()} CAL`}
+      </span>
+      <InfoTip
+        text={techCalibrationBlurb(regime)}
+        label="Sector technical calibration"
+      />
+    </span>
+  );
+}
+
 function LayerRow({
   row,
   bias,
@@ -450,6 +518,16 @@ function LayerRow({
                   band={row.sensitivityBand}
                   multiplier={row.sensitivityMultiplier}
                   layerName={row.name}
+                />
+              ) : null}
+
+              {row.key === "technical" &&
+              row.techVolRegime &&
+              row.techVolRegime.toLowerCase() !== "normal" ? (
+                <SectorTechCalibrationChip
+                  regime={row.techVolRegime}
+                  rvolMultiplier={row.techRvolMultiplier}
+                  overboughtMultiplier={row.techOverboughtMultiplier}
                 />
               ) : null}
 
@@ -777,6 +855,20 @@ function LayerDetailDrawer({
                       ? ` · ${formatSensitivityMultiplier(layer.sensitivityMultiplier)}`
                       : ""
                   }`}
+                  colors={colors}
+                />
+              ) : null}
+
+              {layer.key === "technical" &&
+              layer.techVolRegime &&
+              layer.techVolRegime.toLowerCase() !== "normal" ? (
+                <LayerFactLine
+                  label="Sector calibration"
+                  value={techCalibrationFactValue(
+                    layer.techVolRegime,
+                    layer.techRvolMultiplier,
+                    layer.techOverboughtMultiplier
+                  )}
                   colors={colors}
                 />
               ) : null}

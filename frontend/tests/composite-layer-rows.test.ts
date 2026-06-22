@@ -267,6 +267,32 @@ describe("compositeToSignalsLayerRows", () => {
     expect(news?.sensitivityMultiplier).toBeUndefined();
   });
 
+  test("threads sector_technical_calibration onto the technical row", () => {
+    const rows = compositeToSignalsLayerRows({
+      sector_technical_calibration: {
+        sic_bucket: "semiconductors",
+        regime: "high_beta",
+        rvol_threshold_multiplier: 1.2,
+        overbought_penalty_multiplier: 0.7
+      },
+      layers: [{ layer: "technical", status: "available", score: 60, verdict: "bullish" }]
+    });
+    const tech = rows.find((r) => r.key === "technical");
+    expect(tech?.techVolRegime).toBe("high_beta");
+    expect(tech?.techRvolMultiplier).toBe(1.2);
+    expect(tech?.techOverboughtMultiplier).toBe(0.7);
+  });
+
+  test("omits sector calibration fields when sector_technical_calibration absent", () => {
+    const rows = compositeToSignalsLayerRows({
+      layers: [{ layer: "technical", status: "available", score: 60, verdict: "bullish" }]
+    });
+    const tech = rows.find((r) => r.key === "technical");
+    expect(tech?.techVolRegime).toBeUndefined();
+    expect(tech?.techRvolMultiplier).toBeUndefined();
+    expect(tech?.techOverboughtMultiplier).toBeUndefined();
+  });
+
   test("preserves legitimate technical score of zero", () => {
     const rows = compositeToSignalsLayerRows({
       layers: [

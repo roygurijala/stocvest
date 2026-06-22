@@ -91,4 +91,68 @@ describe("SignalsLayerBreakdown", () => {
     expect(screen.getByTestId("signals-layer-sensitivity-news")).toHaveTextContent(/LOW · 0\.6× weight/i);
     expect(screen.getByTestId("signals-layer-sensitivity-geopolitical")).toHaveTextContent(/HIGH · 1× weight/i);
   });
+
+  test("renders sector technical calibration chip for non-normal regimes", () => {
+    const rows: SignalsLayerRowInput[] = [
+      {
+        key: "technical",
+        name: "Technical",
+        status: "Bullish",
+        explanation: "",
+        score: 60,
+        techVolRegime: "high_beta",
+        techRvolMultiplier: 1.2,
+        techOverboughtMultiplier: 0.7
+      },
+      { key: "news", name: "News", status: "Neutral", explanation: "", score: 50 },
+      { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
+      { key: "sector", name: "Sector", status: "Neutral", explanation: "", score: 50 },
+      { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 },
+      { key: "internals", name: "Market Internals", status: "Neutral", explanation: "", score: 50 }
+    ];
+    render(
+      <SignalsLayerBreakdown
+        symbol="NVDA"
+        tradingMode="swing"
+        bias="Bullish"
+        rows={rows}
+        loading={false}
+        insufficient={false}
+        defaultExpanded
+      />
+    );
+    expect(screen.getByTestId("signals-layer-tech-calibration")).toHaveTextContent(/HIGH-BETA CAL/i);
+  });
+
+  test("hides sector technical calibration chip for normal regime", () => {
+    const rows: SignalsLayerRowInput[] = [
+      {
+        key: "technical",
+        name: "Technical",
+        status: "Neutral",
+        explanation: "",
+        score: 50,
+        techVolRegime: "normal",
+        techRvolMultiplier: 1.0,
+        techOverboughtMultiplier: 1.0
+      },
+      { key: "news", name: "News", status: "Neutral", explanation: "", score: 50 },
+      { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 50 },
+      { key: "sector", name: "Sector", status: "Neutral", explanation: "", score: 50 },
+      { key: "geopolitical", name: "Geopolitical", status: "Neutral", explanation: "", score: 50 },
+      { key: "internals", name: "Market Internals", status: "Neutral", explanation: "", score: 50 }
+    ];
+    render(
+      <SignalsLayerBreakdown
+        symbol="KO"
+        tradingMode="swing"
+        bias="Neutral"
+        rows={rows}
+        loading={false}
+        insufficient={false}
+        defaultExpanded
+      />
+    );
+    expect(screen.queryByTestId("signals-layer-tech-calibration")).not.toBeInTheDocument();
+  });
 });
