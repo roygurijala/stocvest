@@ -50,6 +50,111 @@ def make_daily_bars(
     return bars
 
 
+def _bars_from_closes(closes: list[float], volume: float = 5_000_000.0) -> list[Bar]:
+    start = datetime(2023, 1, 3, tzinfo=timezone.utc)
+    return [
+        Bar(
+            symbol="TEST",
+            timestamp=start + timedelta(days=i),
+            timeframe=Timeframe.DAY_1,
+            open=c,
+            high=c * 1.01,
+            low=c * 0.99,
+            close=c,
+            volume=volume,
+        )
+        for i, c in enumerate(closes)
+    ]
+
+
+def _oversold_downtrend_closes(slope: float, *, fresh_low: bool) -> list[float]:
+    """A long uptrend (sets SMA50/200) then a choppy decline into oversold.
+
+    ``fresh_low=True`` ends on a down-bar (today is the recent low → a "knife");
+    ``fresh_low=False`` ends on an up-bar (today is *not* the recent low →
+    stabilizing). The sawtooth keeps MACD below its signal like a real downtrend.
+    """
+    peak = 80.0 + 169 * 0.6
+    up = [80.0 + i * 0.6 for i in range(170)]
+    if fresh_low:
+        return up + [peak - i * 1.4 for i in range(1, 56)]
+    # range(1, 57) ends on i=56 (even) → an up-bar, so the last close is above the
+    # recent sawtooth low while the trend/MACD stay bearish.
+    return up + [peak - i * slope + (1.6 if i % 2 == 0 else -1.6) for i in range(1, 57)]
+
+
+def _snap(closes: list[float]) -> Snapshot:
+    return Snapshot(
+        symbol="TEST",
+        last_trade_price=closes[-1],
+        prev_close=closes[-2],
+        change_percent=0.0,
+        change=0.0,
+    )
+
+
+def test_mean_reversion_floor_lifts_stabilizing_oversold_downtrend() -> None:
+    """A confirmed downtrend (below SMA50 & SMA200, MACD<0) that is deeply oversold
+    AND no longer making fresh lows is bounce-prone: the mean-reversion floor lifts
+    it off the 0 floor into the low-bearish band — but the verdict stays bearish."""
+    closes = _oversold_downtrend_closes(1.9, fresh_low=False)
+    r = SwingTechnicalAnalyzer().analyze("TEST", _bars_from_closes(closes), _snap(closes), SwingTechnicalParameters())
+    assert r.daily_rsi is not None and r.daily_rsi < 30  # deeply oversold
+    assert r.sma50 is not None and r.sma200 is not None
+    assert closes[-1] < r.sma50 and closes[-1] < r.sma200  # confirmed downtrend
+    assert r.mean_reversion_floor_applied is True
+    assert r.score is not None and r.score >= 20  # lifted off the floor
+    assert r.score < SwingTechnicalParameters().bearish_threshold  # but still bearish
+    assert r.verdict == "bearish"
+    assert any("bounce" in ch.lower() for ch in r.chips)
+
+
+def test_mean_reversion_floor_not_applied_to_fresh_low_knife() -> None:
+    """A still-falling knife (today is a fresh low) gets NO floor — it must stay
+    pinned near zero even though it is below the MAs and oversold."""
+    closes = _oversold_downtrend_closes(1.9, fresh_low=True)
+    r = SwingTechnicalAnalyzer().analyze("TEST", _bars_from_closes(closes), _snap(closes), SwingTechnicalParameters())
+    assert r.daily_rsi is not None and r.daily_rsi < 30
+    assert r.mean_reversion_floor_applied is False
+    assert r.score is not None and r.score <= 5
+
+
+def test_mean_reversion_floor_requires_oversold_rsi() -> None:
+    """A downtrend that is NOT yet oversold (RSI ≥ threshold) gets no floor — the
+    edge is in deep oversold, not every pullback below the MAs."""
+    closes = _oversold_downtrend_closes(1.9, fresh_low=False)
+    bars = _bars_from_closes(closes)
+    # Force the RSI gate shut by pushing the oversold threshold below the RSI.
+    params = SwingTechnicalParameters(mean_reversion_oversold_rsi=5.0)
+    r = SwingTechnicalAnalyzer().analyze("TEST", bars, _snap(closes), params)
+    assert r.mean_reversion_floor_applied is False
+
+
+def test_mean_reversion_floor_is_capped_below_bearish_threshold() -> None:
+    """Even with an absurdly generous floor span, the ceiling keeps the score below
+    the bearish threshold so the floor can never flip the verdict to neutral."""
+    closes = _oversold_downtrend_closes(1.9, fresh_low=False)
+    bars = _bars_from_closes(closes)
+    params = SwingTechnicalParameters(mean_reversion_floor_base=200, mean_reversion_floor_span=200)
+    r = SwingTechnicalAnalyzer().analyze("TEST", bars, _snap(closes), params)
+    assert r.mean_reversion_floor_applied is True
+    assert r.score is not None and r.score == params.mean_reversion_ceiling
+    assert r.score < params.bearish_threshold
+    assert r.verdict == "bearish"
+
+
+def test_mean_reversion_floor_is_non_additive() -> None:
+    """The floor is a ``max`` not an addition: a floor lower than the existing score
+    leaves the score unchanged (no stacking on top of other terms)."""
+    closes = _oversold_downtrend_closes(1.9, fresh_low=False)
+    bars = _bars_from_closes(closes)
+    low = SwingTechnicalAnalyzer().analyze(
+        "TEST", bars, _snap(closes), SwingTechnicalParameters(mean_reversion_floor_base=0, mean_reversion_floor_span=0)
+    )
+    # base=span=0 → floor resolves to 0, never above the raw trend score → no lift.
+    assert low.mean_reversion_floor_applied is False
+
+
 def test_unavailable_below_60_bars() -> None:
     bars = make_daily_bars(59)
     r = SwingTechnicalAnalyzer().analyze("TEST", bars, Snapshot(symbol="TEST"), SwingTechnicalParameters())

@@ -242,6 +242,24 @@ class SwingTechnicalParameters:
 
     volume_lookback_days: int = 20
 
+    # Mean-reversion bounce floor (B73) — when a name is in a confirmed downtrend
+    # (price < SMA50 & SMA200, MACD histogram < 0) AND deeply oversold AND has
+    # *stopped making fresh lows*, lift it off the 0 floor by an amount set by how
+    # oversold it is. Applied as a NON-additive floor (`max(trend, floor)`) so it
+    # can never stack with other terms, and capped below `bearish_threshold` so it
+    # only adds resolution — it never flips the bearish verdict. Calibrated from a
+    # no-lookahead historical sweep (RSI depth monotonically tracks forward bounce;
+    # fresh-low "knives" underperform — see scripts/validate_mean_reversion_credit.py).
+    atr_period: int = 14
+    mean_reversion_oversold_rsi: float = 30.0      # only oversold downtrends qualify
+    mean_reversion_oversold_span: float = 15.0     # RSI at which oversold saturates (30-15)
+    mean_reversion_ext_atr_cap: float = 3.0        # downside extension saturates ~3 ATR below SMA50
+    mean_reversion_oversold_weight: float = 0.8    # oversold-led; extension is a minor modifier
+    mean_reversion_floor_base: int = 10            # floor just inside the oversold threshold
+    mean_reversion_floor_span: int = 28            # extra floor at maximum oversold (base+span = 38)
+    mean_reversion_ceiling: int = 38               # hard cap < bearish_threshold (never flips verdict)
+    mean_reversion_stabilizing_lookback: int = 10  # "not a fresh N-day low" knife filter
+
     bullish_threshold: int = 60
     bearish_threshold: int = 40
 
