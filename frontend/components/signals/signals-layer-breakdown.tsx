@@ -403,12 +403,11 @@ function clampPct(v: number | null | undefined): number | null {
 }
 
 /**
- * Shades the neutral dead-band on a layer score track and marks the bullish/bearish cutoffs.
- * The score (bar fill) is a magnitude; the directional read only leaves neutral once it
- * crosses these cutoffs — so a 62 sector / 58 geo visibly sits inside the shaded zone rather
- * than looking like a >50%-filled "neutral" contradiction.
+ * Translucent shading of the neutral dead-band, drawn INSIDE the (rounded, clipped) track.
+ * Pairs with `LayerScoreBandMarkers`, which draws the prominent cutoff ticks outside the
+ * clip so they can glow and extend past the bar.
  */
-function LayerScoreBandOverlay({
+function LayerScoreBandShade({
   bearish,
   bullish,
   colors,
@@ -428,29 +427,67 @@ function LayerScoreBandOverlay({
         className="absolute top-0 bottom-0"
         style={{ left: `${lo}%`, width: `${hi - lo}%`, background: `${colors.textMuted}26` }}
       />
+    </div>
+  );
+}
+
+/**
+ * Prominent bullish/bearish cutoff markers for a layer score track. Rendered as a sibling of
+ * the (overflow-hidden) track inside a `relative` wrapper so the glow + pointer cap are NOT
+ * clipped and the stem can stand taller than the bar. The score (bar fill) is a magnitude;
+ * the directional read only leaves neutral once it crosses these cutoffs — so a 62 sector /
+ * 58 geo visibly sits between them rather than looking like a >50%-filled contradiction.
+ */
+function LayerScoreBandMarkers({
+  bearish,
+  bullish,
+  colors,
+  trackHeightPx
+}: {
+  bearish: number | null | undefined;
+  bullish: number | null | undefined;
+  colors: ReturnType<typeof useTheme>["colors"];
+  trackHeightPx: number;
+}) {
+  const lo = clampPct(bearish);
+  const hi = clampPct(bullish);
+  if (lo == null || hi == null || hi <= lo) return null;
+  const capHeight = 5;
+  const stemHeight = trackHeightPx + 8;
+  const containerTop = -(capHeight + 4);
+  const marker = (pct: number, color: string, key: string) => (
+    <div
+      key={key}
+      className="absolute flex flex-col items-center pointer-events-none"
+      style={{ left: `${pct}%`, top: containerTop, transform: "translateX(-50%)", zIndex: 2 }}
+      aria-hidden
+    >
       <div
-        className="absolute top-0 bottom-0"
         style={{
-          left: `${lo}%`,
-          width: 2,
-          transform: "translateX(-1px)",
-          background: colors.bearish,
-          opacity: 0.85,
-          boxShadow: "0 0 2px rgba(0,0,0,0.6)"
+          width: 0,
+          height: 0,
+          borderLeft: "4px solid transparent",
+          borderRight: "4px solid transparent",
+          borderTop: `${capHeight}px solid ${color}`,
+          filter: `drop-shadow(0 0 3px ${color})`
         }}
       />
       <div
-        className="absolute top-0 bottom-0"
         style={{
-          left: `${hi}%`,
-          width: 2,
-          transform: "translateX(-1px)",
-          background: colors.bullish,
-          opacity: 0.85,
-          boxShadow: "0 0 2px rgba(0,0,0,0.6)"
+          width: 3,
+          height: stemHeight,
+          borderRadius: 2,
+          background: color,
+          boxShadow: `0 0 7px ${color}, 0 0 2px ${color}`
         }}
       />
     </div>
+  );
+  return (
+    <>
+      {marker(lo, colors.bearish, "bearish")}
+      {marker(hi, colors.bullish, "bullish")}
+    </>
   );
 }
 
@@ -682,13 +719,19 @@ function LayerRow({
                         boxShadow: `0 0 12px ${row.status?.toLowerCase() === "bullish" ? colors.bullish : row.status?.toLowerCase() === "bearish" ? colors.bearish : colors.accent}60`
                       }}
                     />
-                    <LayerScoreBandOverlay
+                    <LayerScoreBandShade
                       bearish={row.bearishThreshold}
                       bullish={row.bullishThreshold}
                       colors={colors}
                       heightClass="h-2.5"
                     />
                   </div>
+                  <LayerScoreBandMarkers
+                    bearish={row.bearishThreshold}
+                    bullish={row.bullishThreshold}
+                    colors={colors}
+                    trackHeightPx={10}
+                  />
                   
                   {/* Score markers */}
                   <div className="flex justify-between mt-1">
@@ -895,25 +938,33 @@ function LayerDetailDrawer({
 
                 {/* Progress bar */}
                 <div className="mt-4">
-                  <div 
-                    className="h-3 rounded-full overflow-hidden relative"
-                    style={{ background: `${colors.border}60` }}
-                  >
-                    <motion.div
-                      className="h-full rounded-full"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${levelPct}%` }}
-                      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                      style={{
-                        background: `linear-gradient(90deg, ${statusTone}, ${statusTone}80)`,
-                        boxShadow: `0 0 16px ${statusTone}60`
-                      }}
-                    />
-                    <LayerScoreBandOverlay
+                  <div className="relative">
+                    <div 
+                      className="h-3 rounded-full overflow-hidden"
+                      style={{ background: `${colors.border}60` }}
+                    >
+                      <motion.div
+                        className="h-full rounded-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${levelPct}%` }}
+                        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                        style={{
+                          background: `linear-gradient(90deg, ${statusTone}, ${statusTone}80)`,
+                          boxShadow: `0 0 16px ${statusTone}60`
+                        }}
+                      />
+                      <LayerScoreBandShade
+                        bearish={layer.bearishThreshold}
+                        bullish={layer.bullishThreshold}
+                        colors={colors}
+                        heightClass="h-3"
+                      />
+                    </div>
+                    <LayerScoreBandMarkers
                       bearish={layer.bearishThreshold}
                       bullish={layer.bullishThreshold}
                       colors={colors}
-                      heightClass="h-3"
+                      trackHeightPx={12}
                     />
                   </div>
                   <div className="flex justify-between mt-2">
