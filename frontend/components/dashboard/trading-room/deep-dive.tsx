@@ -37,6 +37,7 @@ import {
 import {
   buildBriefMetaLine,
   buildEntryZoneRrWarning,
+  buildPlainSummary,
   buildRichBrief,
   resolveDeepDiveDirection,
   resolveDeepDiveVerdictLabel,
@@ -714,6 +715,7 @@ export function DeepDive({
   dataRefreshNonce?: number;
 }) {
   const [tab, setTab] = useState<DeepDiveTab>("setup");
+  const [showBriefDetails, setShowBriefDetails] = useState(false);
   // activeLane allows switching Day/Swing within the deep dive
   const [activeLane, setActiveLane] = useState<"day" | "swing">(card.lane);
 
@@ -1278,6 +1280,33 @@ export function DeepDive({
     deskMinRr
   ]);
 
+  // Jargon-free default read; the detailed `brief` above sits behind a "details" toggle.
+  const plainSummary = useMemo(() => {
+    if (!allowsScenarioGeometry) return brief;
+    return buildPlainSummary({
+      symbol: card.symbol,
+      direction: displayDirection.direction,
+      activeLane,
+      layersAligned: setupJudgment?.process.layersAligned ?? null,
+      layersTotal: setupJudgment?.process.layersTotal ?? null,
+      decisionState: pageDecision?.state ?? null,
+      primaryBlocker: setupJudgment?.primaryBlocker ?? null,
+      currentRr,
+      deskMinRr,
+      fallback: brief
+    });
+  }, [
+    allowsScenarioGeometry,
+    brief,
+    card.symbol,
+    displayDirection.direction,
+    activeLane,
+    setupJudgment,
+    pageDecision?.state,
+    currentRr,
+    deskMinRr
+  ]);
+
   const hasComposite = !isInsufficient;
   const verdictLabel = resolveDeepDiveVerdictLabel(card.state, apiDecisionState, hasComposite);
   const verdictTone = resolveDeepDiveVerdictTone(card.state, apiDecisionState, hasComposite);
@@ -1514,8 +1543,40 @@ export function DeepDive({
           }}
         >
           <p style={{ margin: 0, fontSize: typography.scale.base, lineHeight: 1.7, color: colors.text }}>
-            {brief}
+            {plainSummary}
           </p>
+          {allowsScenarioGeometry && brief && brief !== plainSummary ? (
+            <div style={{ marginTop: spacing[2] }}>
+              <button
+                type="button"
+                onClick={() => setShowBriefDetails((v) => !v)}
+                aria-expanded={showBriefDetails}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  fontSize: typography.scale.xs,
+                  fontWeight: 600,
+                  color: colors.accent
+                }}
+              >
+                {showBriefDetails ? "Hide the detailed read ▴" : "Show the detailed read ▾"}
+              </button>
+              {showBriefDetails ? (
+                <p
+                  style={{
+                    margin: `${spacing[2]} 0 0`,
+                    fontSize: typography.scale.sm,
+                    lineHeight: 1.7,
+                    color: colors.textMuted
+                  }}
+                >
+                  {brief}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         {allowsScenarioGeometry ? (
           <AiSetupRead

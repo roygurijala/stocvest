@@ -29,6 +29,42 @@ describe("buildFeedCards", () => {
     expect(dayCards.every((c) => c.setupTier === "mover")).toBe(true);
   });
 
+  test("leader card bias follows the composite signal, not the gap move direction", () => {
+    const cards = buildFeedCards({
+      mode: "day",
+      swingDesk: null,
+      dayDesk: {
+        discovery: [
+          // Big green day (gap up) but composite reads short — pill must be bear, not bull.
+          {
+            symbol: "WYFI",
+            gap_percent: 17.9,
+            direction: "up",
+            rank_score: 90,
+            desk: "day",
+            verdict: "bearish"
+          },
+          // No composite verdict cached — pill stays neutral, never the gap direction.
+          {
+            symbol: "GAPONLY",
+            gap_percent: 12.0,
+            direction: "up",
+            rank_score: 80,
+            desk: "day"
+          }
+        ]
+      },
+      swingSetups: [],
+      daySetups: [],
+      snapshotsBySymbol: new Map(),
+      dayTradingSurfaces: true
+    });
+    const wyfi = cards.find((c) => c.symbol === "WYFI");
+    const gapOnly = cards.find((c) => c.symbol === "GAPONLY");
+    expect(wyfi?.bias).toBe("bear");
+    expect(gapOnly?.bias).toBe("neutral");
+  });
+
   test("prefers day desk discovery over swing movers fallback", () => {
     const dayDesk: DeskTodayData = {
       discovery: [
