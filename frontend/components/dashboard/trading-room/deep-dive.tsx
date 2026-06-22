@@ -47,6 +47,7 @@ import {
 } from "@/lib/dashboard/trading-room/deep-dive-present";
 import { isNonRenderableCompositeResponse } from "@/lib/api/swing-composite";
 import type { SnapshotPayload } from "@/lib/api/market";
+import { resolveSnapshotDisplayPrice } from "@/lib/api/snapshot-price";
 import { resolveDeepDiveUnavailableMessage } from "@/lib/dashboard/trading-room/composite-unavailable-present";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
 import { resolveTimeframeContext, isTimeframeCounterTrend } from "@/lib/signal-evidence/timeframe-context";
@@ -725,9 +726,7 @@ export function DeepDive({
 
   useEffect(() => {
     const hasPrice =
-      positivePrice(card.price) != null ||
-      positivePrice(snapshot?.last_trade_price) != null ||
-      positivePrice(snapshot?.day_close) != null;
+      positivePrice(card.price) != null || resolveSnapshotDisplayPrice(snapshot) != null;
     const hasCompany = Boolean(
       card.company?.trim() ||
         companyBySymbol?.get(card.symbol.trim().toUpperCase())?.trim() ||
@@ -793,10 +792,8 @@ export function DeepDive({
   const displayPrice = useMemo(() => {
     return (
       positivePrice(card.price) ??
-      positivePrice(quoteSnapshot?.last_trade_price) ??
-      positivePrice(quoteSnapshot?.day_close) ??
-      positivePrice(snapshot?.last_trade_price) ??
-      positivePrice(snapshot?.day_close) ??
+      resolveSnapshotDisplayPrice(quoteSnapshot) ??
+      resolveSnapshotDisplayPrice(snapshot) ??
       positivePrice((composite as Record<string, unknown> | null)?.last_trade_price) ??
       null
     );

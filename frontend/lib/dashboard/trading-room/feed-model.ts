@@ -68,11 +68,16 @@ function cleanNum(v: number | null | undefined): number | null {
 
 function priceFromSnapshot(snap: SnapshotPayload | undefined): number | null {
   if (!snap) return null;
+  // Positive guard: over a closed/weekend session Polygon returns day_close = 0,
+  // so reject non-positive values and fall back to the prior (Friday) close.
+  const pos = (v: number | null | undefined): number | null =>
+    typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
   return (
-    cleanNum(snap.last_trade_price) ??
-    cleanNum(snap.day_close) ??
-    cleanNum(snap.pre_market_price) ??
-    cleanNum(snap.after_hours_price)
+    pos(snap.last_trade_price) ??
+    pos(snap.day_close) ??
+    pos(snap.pre_market_price) ??
+    pos(snap.after_hours_price) ??
+    pos(snap.prev_close)
   );
 }
 

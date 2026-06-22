@@ -31,6 +31,7 @@ import { PAGE_STACK_MAX_PX } from "@/lib/layout-breakpoints";
 import { marketStatusLabelFor, resolveSessionRegimeLabel, snapPct } from "@/lib/session-header-market";
 import { isRegularSessionOpen } from "@/lib/market/regular-session";
 import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
+import { resolveSnapshotDisplayPrice } from "@/lib/api/snapshot-price";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
 import type {
@@ -536,7 +537,6 @@ function TradingRoomBody({
       return;
     }
     const snap = snapshotsBySymbol.get(sym);
-    const last = snap?.last_trade_price;
     selectCard({
       id: feedCardIdForDeepLink(sym, lane),
       symbol: sym,
@@ -546,7 +546,7 @@ function TradingRoomBody({
       bias: "neutral",
       verdict: "Looked up from search — full read below.",
       phase: null,
-      price: typeof last === "number" && Number.isFinite(last) ? last : null,
+      price: resolveSnapshotDisplayPrice(snap),
       changePct: snapPct(snap),
       alignment: null,
       rankScore: 0,

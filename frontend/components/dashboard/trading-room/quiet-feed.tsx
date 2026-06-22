@@ -20,6 +20,7 @@ import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-sys
 import type { useTheme } from "@/lib/theme-provider";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { SnapshotPayload } from "@/lib/api/market";
+import { resolveSnapshotDisplayPrice } from "@/lib/api/snapshot-price";
 import { resolveBuildingStructureRows } from "@/lib/dashboard/building-structure-present";
 import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
 import type { FeedBias, FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
@@ -253,11 +254,8 @@ export function QuietFeed({
     companyBySymbol.get(sym) ||
     symbolNames[sym] ||
     null;
-  const priceFor = (sym: string): number | null => {
-    const snap = mergedSnapshots.get(sym);
-    const p = snap?.last_trade_price ?? snap?.day_close;
-    return typeof p === "number" && Number.isFinite(p) ? p : null;
-  };
+  const priceFor = (sym: string): number | null =>
+    resolveSnapshotDisplayPrice(mergedSnapshots.get(sym));
 
   const sessionActivity = useMemo<QuietCardData[]>(() => {
     const rows: { symbol: string; gap: number; direction: "up" | "down"; rank: number; lane: FeedLane }[] = [];

@@ -19,6 +19,7 @@ import { PanelRightClose } from "lucide-react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { useTheme } from "@/lib/theme-provider";
 import type { SnapshotPayload } from "@/lib/api/market";
+import { resolveSnapshotDisplayPrice } from "@/lib/api/snapshot-price";
 import {
   formatWatchlistMaturationLabel,
   watchlistQuoteFromSnapshot,
@@ -103,7 +104,7 @@ function cardFromWatchlist(
     bias: mapBias(effectiveBias),
     verdict,
     phase: r.readiness_label?.trim() || null,
-    price: cleanNum(snap?.last_trade_price) ?? cleanNum(snap?.day_close),
+    price: resolveSnapshotDisplayPrice(snap),
     changePct: cleanNum(snap?.change_percent),
     alignment: aligned != null ? { aligned, total } : null,
     rankScore: aligned ?? 0,
