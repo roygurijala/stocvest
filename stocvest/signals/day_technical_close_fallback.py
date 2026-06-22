@@ -102,12 +102,15 @@ def resolve_day_technical_layer(
     swing_params: SwingTechnicalParameters,
     daily_bars: list[Bar],
     adv: float | None = None,
+    sic_bucket: str | None = None,
 ) -> TechnicalLayerResult:
     """
     Prefer live intraday technical; when bars are insufficient, use completed daily history.
     """
     snap = snapshot_with_prior_session_levels(snapshot, daily_bars)
-    tech = TechnicalAnalyzer().analyze(symbol, intraday_bars, snap, technical_params, adv=adv)
+    tech = TechnicalAnalyzer().analyze(
+        symbol, intraday_bars, snap, technical_params, adv=adv, sic_bucket=sic_bucket
+    )
     if not intraday_technical_needs_close_fallback(tech):
         return tech
 
@@ -117,7 +120,7 @@ def resolve_day_technical_layer(
         )
         return tech
 
-    swing = SwingTechnicalAnalyzer().analyze(symbol, daily_bars, snapshot, swing_params)
+    swing = SwingTechnicalAnalyzer().analyze(symbol, daily_bars, snapshot, swing_params, sic_bucket=sic_bucket)
     if swing.status != "available" or swing.score is None:
         tech.reasoning = (
             "Insufficient intraday bars; daily-bar fallback could not produce a structure score."

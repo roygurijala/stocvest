@@ -433,6 +433,7 @@ async def run_real_composite_engine_phase(
         swing_params=params.swing_technical,
         daily_bars=daily_bars,
         adv=adv,
+        sic_bucket=sic_bucket_for_geo,
     )
     if tech.status == "as_of_close":
         _LOG.info(

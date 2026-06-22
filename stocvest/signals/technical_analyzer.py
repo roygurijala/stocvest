@@ -12,6 +12,10 @@ from zoneinfo import ZoneInfo
 from stocvest.config.signal_parameters import TechnicalParameters
 from stocvest.data.models import Bar, Snapshot
 from stocvest.signals.indicator_scope import finalize_day_technical_chips
+from stocvest.signals.sector_technical_calibration import (
+    overbought_penalty_multiplier,
+    rvol_threshold_multiplier,
+)
 from stocvest.signals.signal_math_contract import clamp_layer_score, layer_score_direction
 from stocvest.signals.vwap_state import (
     VWAPState,
@@ -333,6 +337,7 @@ class TechnicalAnalyzer:
         params: TechnicalParameters,
         *,
         adv: float | None = None,
+        sic_bucket: str | None = None,
     ) -> TechnicalLayerResult:
         if not bars or len(bars) < self.MIN_BARS:
             return TechnicalLayerResult(
@@ -388,7 +393,10 @@ class TechnicalAnalyzer:
             str(orb_state.get("orb_status") or "unavailable"),
         )
         volume_ratio, adv_available = _compute_volume_ratio(bars, params, adv)
-        volume_surge = volume_ratio >= params.volume_surge_multiplier
+        # Sector-relative RVOL: high-beta names run chronically hot (raise the
+        # surge bar); defensives surge on less (lower it). Neutral for unknowns.
+        surge_threshold = params.volume_surge_multiplier * rvol_threshold_multiplier(sic_bucket)
+        volume_surge = volume_ratio >= surge_threshold
 
         ema_alignment: Optional[str] = None
         ema_crossed: Optional[str] = None
@@ -446,8 +454,10 @@ class TechnicalAnalyzer:
                 # Extreme overbought should be at least as strong as the zone
                 # score — previously used rsi_moderate_delta (-5) while the
                 # bullish zone used rsi_strong_delta (+10), understating the
-                # signal. Now symmetric with the zone strength.
-                base_score -= params.rsi_strong_delta
+                # signal. Now symmetric with the zone strength. Sector-relative:
+                # high-beta uptrends stay overbought for weeks (lighter penalty),
+                # defensives mean-revert (heavier).
+                base_score -= params.rsi_strong_delta * overbought_penalty_multiplier(sic_bucket)
             elif rsi >= params.rsi_bullish_zone:
                 base_score += params.rsi_strong_delta
             elif rsi <= params.rsi_oversold:

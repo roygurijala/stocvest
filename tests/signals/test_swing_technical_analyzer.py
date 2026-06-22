@@ -334,6 +334,101 @@ def test_strong_bearish_daily_setup() -> None:
     assert r.score is not None and r.score <= 30
 
 
+def _durable_uptrend_pullback_bars() -> tuple[list[Bar], Snapshot]:
+    """NVDA-like: long uptrend, then a shallow choppy drift that dips below the
+    20-day mean but stays above SMA50/SMA200 (golden cross intact)."""
+    bars = list(make_daily_bars(210, trend=0.01))
+    base = bars[-1].close
+    for i in range(16):
+        base *= 0.998
+        price = base * (1 + (0.015 if i % 2 == 0 else -0.015))
+        prev = bars[-1]
+        bars.append(
+            Bar(
+                symbol="TEST",
+                timestamp=prev.timestamp + timedelta(days=1),
+                timeframe=Timeframe.DAY_1,
+                open=base,
+                high=price * 1.012,
+                low=price * 0.988,
+                close=price,
+                volume=6_000_000.0,
+            )
+        )
+    last = bars[-1].close
+    snap = Snapshot(symbol="TEST", last_trade_price=last, prev_close=bars[-2].close, change_percent=-0.5, change=-1.0)
+    return bars, snap
+
+
+def test_durable_uptrend_credit_is_wired_and_fires() -> None:
+    """Structural credit (golden cross + above SMA50/200) must lift a durable
+    uptrend pullback: toggling ``golden_cross_score`` moves the score by exactly
+    that amount, proving the credit is wired and the pullback is read as
+    structure-intact rather than a floored breakdown."""
+    bars, snap = _durable_uptrend_pullback_bars()
+    last = bars[-1].close
+    r = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, SwingTechnicalParameters())
+    assert r.golden_cross is True
+    assert r.sma50 is not None and r.sma200 is not None
+    assert last > r.sma50 and last > r.sma200  # long-term structure intact
+    assert r.sma20 is not None and last < r.sma20  # below the short-term mean
+
+    no_credit = SwingTechnicalAnalyzer().analyze(
+        "TEST", bars, snap, SwingTechnicalParameters(golden_cross_score=0)
+    )
+    with_credit = SwingTechnicalAnalyzer().analyze(
+        "TEST", bars, snap, SwingTechnicalParameters(golden_cross_score=20)
+    )
+    assert with_credit.score is not None and no_credit.score is not None
+    assert with_credit.score - no_credit.score == 20
+
+
+def test_below_sma20_penalty_scales_with_distance() -> None:
+    """A shallow dip below the 20-day mean must cost far less than a deep break —
+    the below-SMA20 penalty is magnitude-scaled, not a flat slab."""
+    bars, snap = _durable_uptrend_pullback_bars()
+    # Gentle slope (full break only at 100% below) vs steep slope (full at 1%):
+    gentle = SwingTechnicalAnalyzer().analyze(
+        "TEST", bars, snap, SwingTechnicalParameters(below_sma20_full_break_pct=100.0)
+    )
+    steep = SwingTechnicalAnalyzer().analyze(
+        "TEST", bars, snap, SwingTechnicalParameters(below_sma20_full_break_pct=1.0)
+    )
+    assert gentle.score is not None and steep.score is not None
+    assert gentle.score > steep.score
+
+
+def test_negative_macd_not_double_penalized_by_fading() -> None:
+    """A negative MACD histogram is penalized once. The fading penalty only
+    applies while the histogram is still positive (early rollover), so changing
+    its size must not move the score on a name whose histogram is already < 0."""
+    high_start = [200.0 - i * 0.4 for i in range(180)]
+    drop = [120.0 - i * 0.6 for i in range(40)]
+    closes = high_start + drop
+    bars = make_daily_bars(len(closes), base_price=100.0, trend=0.0)
+    for i, c in enumerate(closes):
+        b = bars[i]
+        bars[i] = Bar(
+            symbol=b.symbol,
+            timestamp=b.timestamp,
+            timeframe=b.timeframe,
+            open=c * 1.001,
+            high=c * 1.01,
+            low=c * 0.99,
+            close=c,
+            volume=b.volume,
+        )
+    snap = Snapshot(symbol="TEST", last_trade_price=closes[-1], prev_close=closes[-2], change_percent=-1.0, change=-1.0)
+    light = SwingTechnicalAnalyzer().analyze(
+        "TEST", bars, snap, SwingTechnicalParameters(macd_histogram_fading_penalty=0)
+    )
+    heavy = SwingTechnicalAnalyzer().analyze(
+        "TEST", bars, snap, SwingTechnicalParameters(macd_histogram_fading_penalty=40)
+    )
+    assert light.score is not None and heavy.score is not None
+    assert light.score == heavy.score
+
+
 def test_breakdown_from_recent_high_scores_bearish_not_extended_bullish() -> None:
     """DELL-like: long uptrend then sharp ~16% drop — must not read bullish 77."""
     up = make_daily_bars(200, trend=0.008)
@@ -426,6 +521,9 @@ def test_above_sma50_score_param_actually_moves_score() -> None:
         sma20_extended_pct=999.0,
         above_sma50_score=0,
         above_sma200_score=0,
+        golden_cross_score=0,
+        below_sma20_min_penalty=0,
+        volume_distribution_penalty=0,
         extension_above_sma50_penalty=0,
         extension_above_sma50_pct=999.0,
         extension_above_sma200_penalty=0,

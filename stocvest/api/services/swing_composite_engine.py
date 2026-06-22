@@ -273,7 +273,9 @@ async def build_swing_composite_response(
             )
 
     snap_for_tech = sym_snap if sym_snap is not None else Snapshot(symbol=sym)
-    tech = SwingTechnicalAnalyzer().analyze(sym, daily_bars, snap_for_tech, params.swing_technical)
+    tech = SwingTechnicalAnalyzer().analyze(
+        sym, daily_bars, snap_for_tech, params.swing_technical, sic_bucket=sic_bucket_for_geo
+    )
     _chips_before_audit = list(getattr(tech, "chips", None) or [])
     _chips_clean = finalize_swing_technical_chips(sym, _chips_before_audit)
     if set(_chips_before_audit) != set(_chips_clean):

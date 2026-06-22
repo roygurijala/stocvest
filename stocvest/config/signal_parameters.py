@@ -183,12 +183,22 @@ class SwingTechnicalParameters:
 
     # SMA20 — primary swing anchor (price vs multi-week mean)
     above_sma20_score: int = 10
+    # Below-SMA20 is magnitude-scaled: a shallow dip below the 20-day mean is a
+    # normal pullback, a deep break is structural. ``below_sma20_score`` is the
+    # CAP (deep break); ``below_sma20_min_penalty`` the floor just below the
+    # line; full cap is reached at ``below_sma20_full_break_pct`` below SMA20.
     below_sma20_score: int = 20
+    below_sma20_min_penalty: int = 4
+    below_sma20_full_break_pct: float = 5.0
     sma20_extended_pct: float = 15.0
     sma20_extended_penalty: int = 15
 
     above_sma50_score: int = 10
     above_sma200_score: int = 5
+    # Durable-uptrend structural credit: price above BOTH SMA50 and SMA200 with
+    # SMA50 > SMA200 (golden cross). Rewards a stock whose long-term trend is
+    # intact even while it pulls back short-term, so consolidations don't floor.
+    golden_cross_score: int = 8
     extension_above_sma50_pct: float = 15.0
     extension_above_sma50_penalty: int = 8
     extension_above_sma200_pct: float = 40.0
@@ -219,6 +229,10 @@ class SwingTechnicalParameters:
     rsi_exhaustion_extended_penalty: int = 10
 
     volume_accumulation_score: int = 15
+    # Distribution is penalized lighter than accumulation is rewarded: a couple
+    # of higher-volume down days during an uptrend pullback should not slam the
+    # score as hard as sustained accumulation confirms it.
+    volume_distribution_penalty: int = 10
     near_52w_high_score: int = 8
     base_formation_score: int = 10
 
