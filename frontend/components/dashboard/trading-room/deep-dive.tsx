@@ -42,6 +42,7 @@ import {
   resolveDeepDiveVerdictLabel,
   resolveDeepDiveVerdictTone,
   resolveEntryZonePosition,
+  scenarioGeometryIsShort,
   scenarioPriceAxisPercent,
   scenarioTrackBounds
 } from "@/lib/dashboard/trading-room/deep-dive-present";
@@ -188,13 +189,17 @@ function ScenarioGeometry({
   const t1Pct = showT1 ? pct(target1 as number) : null;
   const currentLabelPct = Math.min(92, Math.max(8, currentPct));
   const inZone = currentPrice >= entryLow && currentPrice <= entryHigh;
-  const leftLabel = isShort ? (showT1 ? "Target T2" : "Target") : "Stop";
-  const rightLabel = isShort ? "Stop" : showT1 ? "Target T2" : "Target";
-  const leftPrice = isShort ? targetPrice : stopPrice;
-  const rightPrice = isShort ? stopPrice : targetPrice;
-  const leftColor = isShort ? colors.bullish : colors.bearish;
-  const rightColor = isShort ? colors.bearish : colors.bullish;
-  const trackGradient = isShort
+  // Orient by the ACTUAL level geometry, not the headline bias alone, so the Stop/Target
+  // corner labels (and profit/loss copy + gradient) follow the same value-based low→high
+  // axis the entry-zone band and current marker are placed on.
+  const short = scenarioGeometryIsShort(stopPrice, targetPrice, isShort);
+  const leftLabel = short ? (showT1 ? "Target T2" : "Target") : "Stop";
+  const rightLabel = short ? "Stop" : showT1 ? "Target T2" : "Target";
+  const leftPrice = short ? targetPrice : stopPrice;
+  const rightPrice = short ? stopPrice : targetPrice;
+  const leftColor = short ? colors.bullish : colors.bearish;
+  const rightColor = short ? colors.bearish : colors.bullish;
+  const trackGradient = short
     ? "linear-gradient(90deg, rgba(34,197,94,.45) 0%, rgba(148,163,184,.22) 50%, rgba(239,68,68,.45) 100%)"
     : "linear-gradient(90deg, rgba(239,68,68,.45) 0%, rgba(148,163,184,.22) 50%, rgba(34,197,94,.45) 100%)";
 
@@ -290,7 +295,7 @@ function ScenarioGeometry({
             ${leftPrice.toFixed(2)}
           </span>
           <span style={{ fontSize: 9.5, color: colors.textMuted }}>
-            {isShort ? "profit if price falls" : "loss if price falls"}
+            {short ? "profit if price falls" : "loss if price falls"}
           </span>
         </span>
         <span style={{ display: "flex", flexDirection: "column", gap: 1, textAlign: "right" }}>
@@ -301,7 +306,7 @@ function ScenarioGeometry({
             ${rightPrice.toFixed(2)}
           </span>
           <span style={{ fontSize: 9.5, color: colors.textMuted }}>
-            {isShort ? "loss if price rises" : "profit if price rises"}
+            {short ? "loss if price rises" : "profit if price rises"}
           </span>
         </span>
       </div>
@@ -331,7 +336,7 @@ function ScenarioGeometry({
       </div>
 
       <p style={{ margin: "8px 0 0", fontSize: 10.5, lineHeight: 1.5, color: colors.textMuted }}>
-        {isShort ? (
+        {short ? (
           <>
             Low price (left) → high price (right):{" "}
             <span style={{ color: colors.bullish, fontWeight: 700 }}>green</span> is profit toward target (down),{" "}

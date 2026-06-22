@@ -7,6 +7,7 @@ import {
   resolveDeepDiveVerdictLabel,
   resolveDeepDiveVerdictTone,
   resolveEntryZonePosition,
+  scenarioGeometryIsShort,
   scenarioPriceAxisPercent,
   scenarioTrackBounds
 } from "@/lib/dashboard/trading-room/deep-dive-present";
@@ -178,5 +179,30 @@ describe("deep-dive-present", () => {
     expect(scenarioPriceAxisPercent(51.66, trackMin, trackMax)).toBeCloseTo(100, 1);
     expect(scenarioPriceAxisPercent(35.73, trackMin, trackMax)).toBeGreaterThan(10);
     expect(scenarioPriceAxisPercent(35.73, trackMin, trackMax)).toBeLessThan(90);
+  });
+
+  describe("scenarioGeometryIsShort", () => {
+    test("valid long geometry (stop below target) orients long, matching bias", () => {
+      expect(scenarioGeometryIsShort(95, 110, false)).toBe(false);
+    });
+
+    test("valid short geometry (stop above target) orients short, matching bias", () => {
+      expect(scenarioGeometryIsShort(120, 105, true)).toBe(true);
+    });
+
+    test("inverted geometry overrides the bias so labels follow the value axis", () => {
+      // Bullish bias but stop ($215.06) is above target ($208.45): the bar must render
+      // short so the current marker (≈ target) sits beside its Target label, not mid-bar.
+      expect(scenarioGeometryIsShort(215.06, 208.45, false)).toBe(true);
+      // Bearish bias but stop below target: render long.
+      expect(scenarioGeometryIsShort(95, 110, true)).toBe(false);
+    });
+
+    test("falls back to the supplied bias when stop and target coincide or are non-finite", () => {
+      expect(scenarioGeometryIsShort(100, 100, true)).toBe(true);
+      expect(scenarioGeometryIsShort(100, 100, false)).toBe(false);
+      expect(scenarioGeometryIsShort(Number.NaN, 100, true)).toBe(true);
+      expect(scenarioGeometryIsShort(100, Number.NaN, false)).toBe(false);
+    });
   });
 });
