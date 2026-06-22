@@ -132,6 +132,14 @@ export type SignalsLayerRowInput = {
   techVolRegime?: string | null;
   techRvolMultiplier?: number | null;
   techOverboughtMultiplier?: number | null;
+  /**
+   * Verdict band for this layer's 0–100 score: the score must reach `bullishThreshold`
+   * to read bullish or fall to `bearishThreshold` to read bearish; in between it is the
+   * neutral dead-band. Used to shade the neutral zone on the score bar so a "positive but
+   * neutral" score (e.g. sector 62 / geo 58) doesn't look like a >50%-filled contradiction.
+   */
+  bullishThreshold?: number | null;
+  bearishThreshold?: number | null;
 };
 
 export function layerDeltaVsBaseline(

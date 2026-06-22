@@ -124,6 +124,48 @@ describe("SignalsLayerBreakdown", () => {
     expect(screen.getByTestId("signals-layer-tech-calibration")).toHaveTextContent(/HIGH-BETA CAL/i);
   });
 
+  test("shows neutral-band caption when a layer carries verdict thresholds", () => {
+    const bandRows: SignalsLayerRowInput[] = [
+      { key: "technical", name: "Technical", status: "Neutral", explanation: "", score: 50 },
+      { key: "news", name: "News", status: "Neutral", explanation: "", score: 50 },
+      { key: "macro", name: "Macro", status: "Neutral", explanation: "", score: 46 },
+      {
+        key: "sector",
+        name: "Sector",
+        status: "Neutral",
+        explanation: "",
+        score: 62,
+        bullishThreshold: 65,
+        bearishThreshold: 35
+      },
+      {
+        key: "geopolitical",
+        name: "Geopolitical",
+        status: "Neutral",
+        explanation: "",
+        score: 58,
+        bullishThreshold: 60,
+        bearishThreshold: 35
+      },
+      { key: "internals", name: "Market Internals", status: "Neutral", explanation: "", score: 43 }
+    ];
+    render(
+      <SignalsLayerBreakdown
+        symbol="APGE"
+        tradingMode="swing"
+        bias="Neutral"
+        rows={bandRows}
+        loading={false}
+        insufficient={false}
+        defaultExpanded
+      />
+    );
+    const sectorRow = screen.getByTestId("signals-layer-row-sector");
+    expect(sectorRow).toHaveTextContent(/Neutral band/i);
+    expect(sectorRow).toHaveTextContent(/≥65/);
+    expect(sectorRow).toHaveTextContent(/no directional edge/i);
+  });
+
   test("hides sector technical calibration chip for normal regime", () => {
     const rows: SignalsLayerRowInput[] = [
       {

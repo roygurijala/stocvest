@@ -9,6 +9,12 @@ from stocvest.data.models import Snapshot
 from stocvest.signals.morning_brief import vix_direction_from_change
 
 
+#: Verdict band for the internals layer (0–100). Score is a *magnitude*; the directional
+#: read only leaves neutral once it clears these cutoffs.
+INTERNALS_BULLISH_THRESHOLD = 60
+INTERNALS_BEARISH_THRESHOLD = 35
+
+
 def _clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
@@ -99,9 +105,9 @@ class InternalsAnalyzer:
         final = vix_score * 0.20 + breadth_score * 0.50 + participation_score * 0.30
         score_i = int(round(_clamp(final, 0.0, 100.0)))
 
-        if score_i >= 60:
+        if score_i >= INTERNALS_BULLISH_THRESHOLD:
             verdict = "bullish"
-        elif score_i <= 35:
+        elif score_i <= INTERNALS_BEARISH_THRESHOLD:
             verdict = "bearish"
         else:
             verdict = "neutral"

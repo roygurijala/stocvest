@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from stocvest.api.legal_copy import API_SIGNAL_DISCLAIMER
 from stocvest.api.services.composite_layer_detail_wire import technical_indicator_snapshot_wire
+from stocvest.api.services.layer_verdict_bands import layer_verdict_band
 from stocvest.api.services.composite_sector_wire import sector_layer_api_extras
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
@@ -671,6 +672,9 @@ async def build_real_composite_response(
             "reasoning": getattr(res, "reasoning", ""),
             "chips": list(getattr(res, "chips", []) or []),
         }
+        band = layer_verdict_band(lid, params, mode="day")
+        if band is not None:
+            row["bearish_threshold"], row["bullish_threshold"] = band
         if lid == "news":
             row["wim_summary"] = getattr(res, "wim_summary", None)
             ds = str(getattr(res, "data_state", "fresh") or "fresh")
