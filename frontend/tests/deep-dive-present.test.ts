@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import {
   buildBriefAlignmentLine,
   buildEntryZoneRrWarning,
+  buildPlainSummary,
   buildRichBrief,
+  dedupeWatchForAgainstBlocker,
   resolveDeepDiveDirection,
   resolveDeepDiveVerdictLabel,
   resolveDeepDiveVerdictTone,
@@ -75,6 +77,79 @@ describe("deep-dive-present", () => {
     expect(text).toContain("Risk/reward from current price is 0.2:1");
     expect(text).toContain("below the 2.0:1 threshold");
     expect(text).toContain("3 of 6 layers confirm the bearish thesis");
+  });
+
+  test("buildPlainSummary is jargon-free and states the idea, agreement, and so-what", () => {
+    const text = buildPlainSummary({
+      symbol: "WYFI",
+      direction: "short",
+      activeLane: "day",
+      layersAligned: 1,
+      layersTotal: 6,
+      decisionState: "blocked",
+      primaryBlocker: "Session move ~3.9× ATR — late for fresh entry",
+      currentRr: 3.7,
+      deskMinRr: 1.3,
+      fallback: "fallback"
+    });
+    expect(text).toContain("WYFI looks like a short idea");
+    expect(text).toContain("isn't tradable right now");
+    expect(text).toContain("Only 1 of the 6 checks");
+    expect(text).toContain("late to jump in");
+    // No trading jargon leaks into the plain summary.
+    expect(text).not.toMatch(/ATR|VWAP|EMA|R\/R|layer|thesis|gate/i);
+  });
+
+  test("buildPlainSummary falls back when symbol is missing", () => {
+    expect(
+      buildPlainSummary({
+        symbol: "  ",
+        direction: "long",
+        activeLane: "swing",
+        layersAligned: null,
+        layersTotal: null,
+        decisionState: null,
+        primaryBlocker: null,
+        currentRr: null,
+        deskMinRr: 1.3,
+        fallback: "fallback copy"
+      })
+    ).toBe("fallback copy");
+  });
+
+  test("dedupeWatchForAgainstBlocker drops clauses already in the blocker (incl. casing)", () => {
+    const blocker = "Session move ~3.9× ATR — late for fresh entry";
+    const watch = "Watch for pullback or structure reset — session move ~3.9× atr — late for fresh entry";
+    expect(dedupeWatchForAgainstBlocker(watch, blocker)).toBe("Watch for pullback or structure reset");
+    // No blocker → unchanged; fully-redundant watch collapses to empty.
+    expect(dedupeWatchForAgainstBlocker(watch, null)).toBe(watch);
+    expect(dedupeWatchForAgainstBlocker("session move ~3.9× atr — late for fresh entry", blocker)).toBe("");
+  });
+
+  test("buildRichBrief does not repeat the primary blocker in the watch-for line", () => {
+    const text = buildRichBrief({
+      symbol: "WYFI",
+      direction: "short",
+      insight: null,
+      layerRows: [],
+      setupBias: "Bearish",
+      pageDecisionState: "blocked",
+      causalSummary: null,
+      causalChainLabel: null,
+      setupJudgment: {
+        tradeability: { label: "Weak entry timing", flags: [] },
+        primaryBlocker: "Session move ~3.9× ATR — late for fresh entry",
+        watchFor: "Watch for pullback or structure reset — session move ~3.9× atr — late for fresh entry"
+      },
+      currentRr: 3.7,
+      activeLane: "day",
+      deskMinRr: 1.3,
+      verdictFallback: ""
+    });
+    expect(text).toContain("Primary check: Session move ~3.9× ATR — late for fresh entry");
+    expect(text).toContain("Watch for pullback or structure reset");
+    // The session-move/ATR fact appears exactly once (no caps + lowercase duplicate).
+    expect(text.toLowerCase().match(/session move ~3\.9× atr/g)?.length ?? 0).toBe(1);
   });
 
   test("buildRichBrief threads named signals, regime, and catalyst", () => {

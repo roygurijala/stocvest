@@ -249,6 +249,32 @@ function truncateCatalyst(text: string): string {
   return clean.length > 110 ? `${clean.slice(0, 107)}…` : clean;
 }
 
+function normalizeBriefClause(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[—–]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Strip any clause already stated in `blocker` from the watch-for line so the brief
+ * never repeats the same fact twice — e.g. the primary blocker "Session move ~3.9× ATR
+ * — late for fresh entry" and a watch-for line that re-embeds that same phrase (often
+ * with different casing, "…3.9× atr…"). Clauses are the em-dash / spaced-hyphen segments.
+ */
+export function dedupeWatchForAgainstBlocker(watch: string, blocker: string | null): string {
+  const w = (watch || "").trim();
+  if (!w || !blocker) return w;
+  const blockerClauses = new Set(
+    blocker.split(/\s+[—–-]\s+/).map(normalizeBriefClause).filter(Boolean)
+  );
+  const kept = w
+    .split(/\s+[—–-]\s+/)
+    .filter((seg) => !blockerClauses.has(normalizeBriefClause(seg)));
+  return kept.join(" — ").trim();
+}
+
 export function buildRichBrief(input: {
   symbol: string;
   direction: TradeDirection;
@@ -316,10 +342,10 @@ export function buildRichBrief(input: {
     sCat = `News in play: ${truncateCatalyst(topCatalyst.text)}${sentPart}${more}.`;
   }
 
+  const blocker = input.setupJudgment?.primaryBlocker ?? null;
   let s5 = "";
   if (input.setupJudgment) {
     const timing = input.setupJudgment.tradeability.label;
-    const blocker = input.setupJudgment.primaryBlocker;
     if (input.pageDecisionState === "actionable" && !blocker) {
       s5 = `${timing} — all gates cleared for this trade.`;
     } else if (blocker) {
@@ -329,6 +355,8 @@ export function buildRichBrief(input: {
     }
   }
 
+  // Never repeat the primary blocker inside the closing watch-for line.
+  const watch = dedupeWatchForAgainstBlocker(input.setupJudgment?.watchFor ?? "", blocker);
   let s6 = "";
   if (input.currentRr != null && input.currentRr > 0) {
     const gateLabel = `${input.deskMinRr.toFixed(1)}:1`;
@@ -336,12 +364,87 @@ export function buildRichBrief(input: {
       input.currentRr >= input.deskMinRr
         ? `Risk/reward from current price is ${input.currentRr.toFixed(1)}:1, clearing the ${gateLabel} gate`
         : `Risk/reward from current price is ${input.currentRr.toFixed(1)}:1 — below the ${gateLabel} threshold`;
-    const watch = input.setupJudgment?.watchFor;
     s6 = watch ? `${rrStr}. ${watch}` : `${rrStr}.`;
-  } else if (input.setupJudgment?.watchFor) {
-    s6 = input.setupJudgment.watchFor;
+  } else if (watch) {
+    s6 = watch;
   }
 
   if (!s2 && !s3 && !s5) return input.verdictFallback || s1;
   return [s1, s1b, s2, s3, s4, sCat, s5, s6].filter(Boolean).join(" ");
+}
+
+/**
+ * Plain-English summary — the jargon-free default read (2-3 short sentences) shown above
+ * the detailed/technical brief. Deliberately avoids trading shorthand (EMA, VWAP, ATR, R/R,
+ * "layers", "thesis", "gates") and translates the structured judgment into everyday words:
+ * what the idea is, how much agrees with it, and the one thing to do about it. The detailed
+ * `buildRichBrief` text remains available behind a "details" toggle for power users.
+ */
+export function buildPlainSummary(input: {
+  symbol: string;
+  direction: TradeDirection;
+  activeLane: "day" | "swing";
+  layersAligned: number | null;
+  layersTotal: number | null;
+  decisionState: string | null;
+  primaryBlocker: string | null;
+  currentRr: number | null;
+  deskMinRr: number;
+  fallback: string;
+}): string {
+  const sym = input.symbol.trim().toUpperCase();
+  if (!sym) return input.fallback;
+  const desk = input.activeLane === "day" ? "day-trading" : "swing";
+  const dirPhrase =
+    input.direction === "long"
+      ? "a buy (long) idea"
+      : input.direction === "short"
+        ? "a short idea (a bet the price falls)"
+        : "a wait-and-see idea";
+
+  // 1) What it is + how close it is to being tradable, in plain words.
+  const state = (input.decisionState || "").trim().toLowerCase();
+  let stance: string;
+  if (state === "actionable") {
+    stance = `${sym} looks like ${dirPhrase} on the ${desk} desk, and it's ready to trade now.`;
+  } else if (state === "blocked" || state === "invalidated") {
+    stance = `${sym} looks like ${dirPhrase} on the ${desk} desk, but it isn't tradable right now.`;
+  } else {
+    stance = `${sym} is shaping up as ${dirPhrase} on the ${desk} desk, but it still needs to develop.`;
+  }
+
+  // 2) How much of the analysis agrees, without naming the layers.
+  let agree = "";
+  const a = input.layersAligned;
+  const t = input.layersTotal;
+  if (a != null && t != null && t > 0 && a >= 0) {
+    if (a <= Math.ceil(t / 3)) {
+      agree = `Only ${a} of the ${t} checks back that read so far.`;
+    } else if (a >= t - 1) {
+      agree = `Almost everything we check (${a} of ${t}) backs that read.`;
+    } else {
+      agree = `${a} of the ${t} checks back that read.`;
+    }
+  }
+
+  // 3) The single most useful "so what" — translate the blocker, else the reward math.
+  const blocker = (input.primaryBlocker || "").toLowerCase();
+  let soWhat = "";
+  if (blocker.includes("atr") || blocker.includes("session move") || blocker.includes("late")) {
+    soWhat = "It has already moved a lot today, so it's late to jump in — better to wait for a pullback.";
+  } else if (blocker.includes("extended") || blocker.includes("above sma") || blocker.includes("stretched") || blocker.includes("exhaustion")) {
+    soWhat = "It looks stretched here, so it's worth waiting for the move to cool off before entering.";
+  } else if (blocker.includes("disagree") || blocker.includes("align")) {
+    soWhat = "The signals don't fully agree yet, so it's better to wait for them to line up.";
+  } else if (input.currentRr != null && input.currentRr > 0) {
+    soWhat =
+      input.currentRr >= input.deskMinRr
+        ? `If it does set up, the potential reward is roughly ${input.currentRr.toFixed(1)}× the risk.`
+        : `The potential reward is only about ${input.currentRr.toFixed(1)}× the risk right now — thinner than we'd want.`;
+  } else if (state !== "actionable") {
+    soWhat = "Wait for a cleaner entry before acting.";
+  }
+
+  const out = [stance, agree, soWhat].filter(Boolean).join(" ");
+  return out || input.fallback;
 }

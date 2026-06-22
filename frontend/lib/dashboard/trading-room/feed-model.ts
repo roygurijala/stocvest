@@ -109,6 +109,30 @@ function biasFromDirection(direction: string | null | undefined): FeedBias {
   return "neutral";
 }
 
+/**
+ * Parse a composite `signal_summary` / verdict into a directional bias. Returns null for
+ * non-directional or empty text so callers can choose their own fallback.
+ */
+function biasFromSignalVerdict(verdict: string | null | undefined): FeedBias | null {
+  const v = (verdict || "").trim().toLowerCase();
+  if (!v) return null;
+  if (/\b(bull|bullish|long)\b/.test(v)) return "bull";
+  if (/\b(bear|bearish|short)\b/.test(v)) return "bear";
+  if (/\bneutral\b/.test(v)) return "neutral";
+  return null;
+}
+
+/**
+ * Bias for a desk-leader card. The pill represents the SIGNAL, so prefer the composite
+ * read (`verdict` = signal_summary) and never let the session/gap MOVE direction stand in
+ * for it — a big green or red day is momentum, not a directional signal. When no composite
+ * direction is available the pill stays neutral so the card cannot contradict the deep-dive
+ * (which re-runs the composite on open).
+ */
+function leaderBias(leader: DeskDiscoveryLeader): FeedBias {
+  return biasFromSignalVerdict(leader.verdict) ?? "neutral";
+}
+
 /** Map a desk leader's composite status / alignment into a single verdict state. */
 function leaderState(leader: DeskDiscoveryLeader): FeedState {
   const hint = (leader.execution_hint || "").trim().toLowerCase();
@@ -200,7 +224,7 @@ function cardFromLeader(
     company,
     lane,
     state: leaderState(leader),
-    bias: biasFromDirection(leader.direction),
+    bias: leaderBias(leader),
     verdict: leaderVerdict(leader),
     phase: leader.composite_status?.trim() || null,
     price: cleanNum(leader.session_price) ?? priceFromSnapshot(snap),
