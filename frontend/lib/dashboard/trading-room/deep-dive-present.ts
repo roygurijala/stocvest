@@ -108,6 +108,29 @@ export function scenarioTrackBounds(levels: number[]): { trackMin: number; track
   return { trackMin: Math.min(...finite), trackMax: Math.max(...finite) };
 }
 
+/**
+ * Orientation for the scenario geometry bar. The entry-zone band and current marker are
+ * positioned on a value-based low→high axis, so the Stop/Target corner labels (and the
+ * profit/loss copy) must follow the *actual* level geometry, not the headline bias alone:
+ * whichever of stop/target is the higher price is the right ("up") end. Falls back to the
+ * supplied bias only when stop and target coincide (or are non-finite). This keeps the bar
+ * self-consistent even when an upstream stop/target pair is inverted relative to the bias.
+ */
+export function scenarioGeometryIsShort(
+  stopPrice: number,
+  targetPrice: number,
+  biasIsShort: boolean
+): boolean {
+  if (
+    !Number.isFinite(stopPrice) ||
+    !Number.isFinite(targetPrice) ||
+    stopPrice === targetPrice
+  ) {
+    return biasIsShort;
+  }
+  return stopPrice > targetPrice;
+}
+
 export function buildBriefAlignmentLine(bias: SignalsSetupBias, rows: SignalsLayerRowInput[]): string {
   const { aligned, total } = countLayerAlignment(rows, bias);
   if (bias === "Neutral") {
