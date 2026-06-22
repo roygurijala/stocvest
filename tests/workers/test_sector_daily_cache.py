@@ -2,13 +2,42 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from stocvest.config.sector_etf_defaults import DEFAULT_SECTOR_TO_ETF
+from stocvest.signals.sector_momentum import ETF_DISPLAY_NAMES
 from stocvest.workers import sector_daily_cache as sdc
 from stocvest.workers.sector_daily_cache import (
+    SECTOR_ETFS_TO_TRACK,
     DailyReturn,
     compute_daily_returns_for_etf,
     get_cached_sector_returns,
     update_sector_daily_cache,
 )
+
+
+def test_every_benchmark_etf_is_warmed() -> None:
+    """Every ETF the composite sector layer can resolve to (``DEFAULT_SECTOR_TO_ETF``)
+    MUST be warmed by the daily cache — otherwise that sector silently degrades to
+    the single-day live-snapshot fallback instead of multi-day persistence momentum.
+
+    This is the regression guard for the P66 ETF-coverage gap: biotech/pharma/
+    retail/airlines/defense/transport/mining/medical-devices benchmarks were mapped
+    but never warmed.
+    """
+    warmed = set(SECTOR_ETFS_TO_TRACK)
+    mapped = set(DEFAULT_SECTOR_TO_ETF.values())
+    missing = mapped - warmed
+    assert not missing, f"benchmark ETFs mapped but not warmed by sector_daily_cache: {sorted(missing)}"
+
+
+def test_no_duplicate_tracked_etfs() -> None:
+    assert len(SECTOR_ETFS_TO_TRACK) == len(set(SECTOR_ETFS_TO_TRACK))
+
+
+def test_warmed_etfs_have_display_names() -> None:
+    """Non-SPY warmed ETFs should have a human-readable momentum display name so the
+    sector layer/UI never shows a bare ticker for a benchmark we actively track."""
+    missing = [e for e in SECTOR_ETFS_TO_TRACK if e != "SPY" and e not in ETF_DISPLAY_NAMES]
+    assert not missing, f"warmed ETFs missing a display name: {missing}"
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,10 @@ from stocvest.utils.redis_client import get_sync_redis
 
 _LOG = get_logger(__name__)
 
+# Must cover every benchmark ETF the composite sector layer can resolve to via
+# ``DEFAULT_SECTOR_TO_ETF`` — otherwise that sector misses the daily cache and
+# degrades to the single-day live-snapshot fallback (no multi-day persistence
+# momentum). The invariant is enforced in tests/workers/test_sector_daily_cache.py.
 SECTOR_ETFS_TO_TRACK = [
     "SPY",
     "XLK",
@@ -34,6 +38,19 @@ SECTOR_ETFS_TO_TRACK = [
     "SMH",
     "KBE",
     "GLD",
+    # Sub-sector / industry benchmarks referenced by DEFAULT_SECTOR_TO_ETF that
+    # were previously unwarmed (biotech, pharma, medical devices, retail,
+    # airlines, transport, aerospace/defense, mining) + SOXX (semis, defensive
+    # for symbol→ETF rows that resolve to SOXX rather than SMH).
+    "XBI",
+    "XPH",
+    "IHI",
+    "XRT",
+    "JETS",
+    "XTN",
+    "ITA",
+    "XME",
+    "SOXX",
 ]
 
 SECTOR_DAILY_KEY_PREFIX = "stocvest:sector_daily:"
@@ -284,6 +301,15 @@ _ETF_DISPLAY = {
     "SMH": "Semis",
     "KBE": "Banks",
     "GLD": "Gold",
+    "XBI": "Biotech",
+    "XPH": "Pharma",
+    "IHI": "Medical devices",
+    "XRT": "Retail",
+    "JETS": "Airlines",
+    "XTN": "Transport",
+    "ITA": "Aerospace & defense",
+    "XME": "Metals & mining",
+    "SOXX": "Semis",
 }
 
 
