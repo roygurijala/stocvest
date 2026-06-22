@@ -785,6 +785,19 @@ function TradingRoomBody({
   const marketOpen = marketStatus ? isRegularSessionOpen(marketStatus) : null;
   const marketStatusLabel = marketStatusLabelFor(marketStatus?.market, marketOpen);
 
+  // When the US market is closed, day setups aren't tradable until the next open —
+  // default the feed to the Swing lane. The Day lane stays reachable (and is marked
+  // "Market closed · resumes next open" when viewed). One-shot via a ref so it never
+  // fights a manual lane switch or a deep-linked lane.
+  const didDefaultClosedLaneRef = useRef(false);
+  useEffect(() => {
+    if (didDefaultClosedLaneRef.current || marketOpen == null) return;
+    didDefaultClosedLaneRef.current = true;
+    if (marketOpen === false && dayTradingSurfaces) {
+      setFilters((f) => (f.lane === "all" ? { ...f, lane: "swing" } : f));
+    }
+  }, [marketOpen, dayTradingSurfaces]);
+
   // Sectors: prefer the latest-session move when the tape is shut (that's "today"),
   // otherwise lean on the 5-day rotation for a steadier leadership read.
   const sectors = useMemo<BriefSector[]>(() => {
@@ -959,6 +972,7 @@ function TradingRoomBody({
         day={day}
         swing={swing}
         showDay={dayTradingSurfaces}
+        marketOpen={marketOpen}
         selectedId={selected?.id ?? null}
         deskEmpty={deskEmpty}
         swingDeskData={swingDesk?.data}
@@ -985,6 +999,7 @@ function TradingRoomBody({
       day={day}
       swing={swing}
       showDay={dayTradingSurfaces}
+      marketOpen={marketOpen}
       selectedId={selected?.id ?? null}
       deskEmpty={deskEmpty}
       swingDeskData={swingDesk?.data}
@@ -1488,6 +1503,7 @@ function SignalFeed({
   day,
   swing,
   showDay,
+  marketOpen = null,
   selectedId,
   deskEmpty,
   swingDeskData,
@@ -1511,6 +1527,8 @@ function SignalFeed({
   day: FeedCard[];
   swing: FeedCard[];
   showDay: boolean;
+  /** US regular-session open state; when false the Day lane is marked not-tradable. */
+  marketOpen?: boolean | null;
   selectedId: string | null;
   deskEmpty: boolean;
   swingDeskData: DeskTodayData | null | undefined;
@@ -1566,6 +1584,7 @@ function SignalFeed({
             onSelectCard={onSelectCard}
             colors={colors}
             environment={dayEnvironment}
+            noticeLabel={marketOpen === false ? "Market closed · resumes next open" : null}
             onRefreshFeedCard={onRefreshFeedCard}
             refreshingCardIds={refreshingCardIds}
             trackedPlanKeys={trackedPlanKeys}
@@ -1645,6 +1664,7 @@ function FeedLaneSection({
   onSelectCard,
   colors,
   staleLabel = null,
+  noticeLabel = null,
   environment = null,
   onRefreshFeedCard,
   refreshingCardIds,
@@ -1658,6 +1678,8 @@ function FeedLaneSection({
   colors: ReturnType<typeof useTheme>["colors"];
   /** When non-null, shown beside the count as a staleness badge (e.g. "Fri Jun 6 close"). */
   staleLabel?: string | null;
+  /** When non-null, a neutral status pill beside the title (e.g. "Market closed · resumes next open"). */
+  noticeLabel?: string | null;
   environment?: MarketEnvironmentPayload | null;
   onRefreshFeedCard?: (card: FeedCard) => void | Promise<void>;
   refreshingCardIds?: Set<string>;
@@ -1694,6 +1716,23 @@ function FeedLaneSection({
             }}
           >
             {staleLabel} close
+          </span>
+        ) : null}
+        {noticeLabel ? (
+          <span
+            style={{
+              fontSize: 10,
+              color: colors.textMuted,
+              background: `${colors.textMuted}1a`,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 999,
+              padding: "1px 8px",
+              whiteSpace: "nowrap",
+              fontWeight: 600,
+              letterSpacing: "0.06em"
+            }}
+          >
+            {noticeLabel}
           </span>
         ) : null}
         <span style={{ flex: 1, height: 1, background: colors.border }} />
