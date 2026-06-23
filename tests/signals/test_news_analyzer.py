@@ -1,10 +1,35 @@
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from stocvest.config.signal_parameters import NewsParameters
 from stocvest.data.benzinga_client import BenzingaMultiResult, BenzingaRating
 from stocvest.signals.news_analyzer import NewsAnalyzer
 
 from tests.signals.conftest import make_negative_articles, make_positive_articles, mock_parameter_store
+
+
+def _patch_impact_flag(enabled: bool):
+    return patch(
+        "stocvest.signals.news_analyzer.get_settings",
+        return_value=SimpleNamespace(stocvest_news_impact_weighting_enabled=enabled),
+    )
+
+
+def _thin_stale_bullish_article() -> list[dict]:
+    # One stale, low-impact, low-credibility but bullish headline — exactly the case that
+    # made the flat scorer print an extreme score off a single weak article.
+    pub = (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat()
+    return [
+        {
+            "title": "Why this stock could be a winner over the next ten years",
+            "description": "An opinion piece musing about long-term potential.",
+            "tickers": ["TEST"],
+            "published_utc": pub,
+            "insights": [{"sentiment": "positive"}],
+            "publisher": {"name": "Some Random Stock Blog"},
+        }
+    ]
 
 
 def test_positive_articles_bullish(mock_parameter_store) -> None:
@@ -39,6 +64,41 @@ def test_pr_wire_filtered(mock_parameter_store) -> None:
     n = NewsAnalyzer().analyze("TEST", articles, mock_parameter_store.news)
     assert n.status == "available"
     assert n.verdict == "neutral"
+
+
+def test_impact_weighting_off_is_unchanged(mock_parameter_store) -> None:
+    # Flag OFF (default): score must equal the legacy flat-sentiment result byte-for-byte.
+    arts = _thin_stale_bullish_article()
+    legacy = NewsAnalyzer().analyze("TEST", arts, mock_parameter_store.news, mode="swing")
+    with _patch_impact_flag(False):
+        off = NewsAnalyzer().analyze("TEST", arts, mock_parameter_store.news, mode="swing")
+    assert off.score == legacy.score
+    assert not any("conviction" in c.lower() for c in off.chips)
+
+
+def test_impact_weighting_shrinks_thin_stale_signal(mock_parameter_store) -> None:
+    arts = _thin_stale_bullish_article()
+    with _patch_impact_flag(False):
+        off = NewsAnalyzer().analyze("TEST", arts, mock_parameter_store.news, mode="swing")
+    with _patch_impact_flag(True):
+        on = NewsAnalyzer().analyze("TEST", arts, mock_parameter_store.news, mode="swing")
+    assert off.score is not None and on.score is not None
+    # The lone weak headline is pulled toward neutral, not left at an extreme.
+    assert abs(on.score - 50) < abs(off.score - 50)
+    assert any("conviction" in c.lower() for c in on.chips)
+
+
+def test_impact_weighting_keeps_strong_fresh_coverage(mock_parameter_store) -> None:
+    # Fresh, credible, hard-catalyst coverage carries enough evidence that confidence
+    # saturates and the score is essentially unshrunk.
+    arts = make_positive_articles(4)
+    with _patch_impact_flag(False):
+        off = NewsAnalyzer().analyze("TEST", arts, mock_parameter_store.news, mode="swing")
+    with _patch_impact_flag(True):
+        on = NewsAnalyzer().analyze("TEST", arts, mock_parameter_store.news, mode="swing")
+    assert off.score is not None and on.score is not None
+    assert on.score >= 65
+    assert abs(on.score - off.score) <= 2
 
 
 def test_structured_analyst_consensus_chip_on_swing(mock_parameter_store) -> None:

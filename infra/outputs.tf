@@ -100,6 +100,11 @@ output "api_gateway_websocket_management_url" {
   value       = "https://${aws_apigatewayv2_api.websocket.id}.execute-api.${var.aws_region}.amazonaws.com/${aws_apigatewayv2_stage.websocket_default.name}"
 }
 
+output "news_worker_ecr_repository_url" {
+  description = "ECR repo URL for the news worker image; set news_worker_container_image to this (with a tag) after build/push."
+  value       = aws_ecr_repository.news_worker.repository_url
+}
+
 output "cognito_user_pool_id" {
   description = "Cognito user pool id (Next.js / Lambda config)."
   value       = aws_cognito_user_pool.main.id

@@ -17,12 +17,18 @@ from stocvest.signals.analyst_rating_score import (
     compute_structured_analyst_score,
 )
 from stocvest.signals.news_copy import no_qualifying_news_reasoning
+from stocvest.signals.news_impact import (
+    apply_confidence_shrink,
+    confidence_from_weight,
+    resolve_relevance_impact,
+)
 from stocvest.signals.news_ipo_narrative import classify_ipo_narrative_adjustment
 from stocvest.signals.news_sentiment import (
     DAY_NEWS_LOOKBACK_HOURS,
     SWING_NEWS_LOOKBACK_HOURS,
     swing_recency_weight,
 )
+from stocvest.utils.config import get_settings
 
 
 @dataclass
@@ -251,6 +257,8 @@ class NewsAnalyzer:
         catalyst_headline: str | None = None
         ipo_competitive_filtered = 0
         ipo_stake_boosted = 0
+        impact_weighting = get_settings().stocvest_news_impact_weighting_enabled
+        ri_claude_articles = 0
 
         for art in quality:
             title = str(art.get("title") or "")
@@ -294,6 +302,11 @@ class NewsAnalyzer:
             elif ipo_adj.tag == "ipo_narrative_stake_repricing":
                 ipo_stake_boosted += 1
             combined *= ipo_adj.weight_multiplier
+            if impact_weighting:
+                rel_factor, imp_factor, ri_source = resolve_relevance_impact(art, sym)
+                combined *= rel_factor * imp_factor
+                if ri_source == "claude":
+                    ri_claude_articles += 1
             weights.append(combined)
             sentiments.append(sent)
 
@@ -334,6 +347,18 @@ class NewsAnalyzer:
         weighted_avg = max(-1.0, min(1.0, weighted_avg + event_adjust))
         score = int(round((weighted_avg + 1) / 2 * 100))
 
+        # Relevance × impact × age confidence shrink (flag-gated): when the read is driven
+        # purely by headlines (no independent analyst corroboration), pull the score toward
+        # neutral if the total relevance/impact-weighted evidence is thin. A lone, low-impact,
+        # stale headline can no longer print an extreme score. Analyst-active reads are left
+        # intact so a real rating action is never neutralized by sparse headline volume.
+        impact_confidence: float | None = None
+        if impact_weighting and not analyst_active:
+            impact_confidence = confidence_from_weight(wsum)
+            shrunk = apply_confidence_shrink(score, impact_confidence)
+            if shrunk != score:
+                score = shrunk
+
         if score >= params.bullish_threshold:
             verdict = "bullish"
         elif score <= params.bearish_threshold:
@@ -352,6 +377,9 @@ class NewsAnalyzer:
             chips.append(f"Stake repricing noted ({ipo_stake_boosted})")
         if benzinga_data and benzinga_data.wim:
             chips.append("WIM context")
+        if impact_confidence is not None and impact_confidence < 0.999:
+            src = "Claude" if ri_claude_articles else "heuristic"
+            chips.append(f"Conviction {impact_confidence*100:.0f}% ({src} relevance×impact)")
         chips.extend(analyst_chips)
 
         reasoning = (
@@ -363,6 +391,11 @@ class NewsAnalyzer:
             reasoning += (
                 f" {ipo_competitive_filtered} headline(s) dampened as IPO competitive narrative "
                 "(not fundamental issuer news)."
+            )
+        if impact_confidence is not None and impact_confidence < 0.999:
+            reasoning += (
+                f" Conviction {impact_confidence*100:.0f}%: thin relevance×impact evidence, so the "
+                "score is held toward neutral until stronger or more relevant coverage appears."
             )
 
         return _fill_benzinga_fields(

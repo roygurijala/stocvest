@@ -60,6 +60,8 @@ async def _process_record(record: dict[str, Any]) -> None:
             title=enriched.title,
             sentiment=result.sentiment.value,
             score=float(result.score),
+            relevance=float(result.relevance),
+            impact=float(result.impact),
         )
     except Exception as exc:
         log.debug("news sentiment cache write skipped: %s", exc)

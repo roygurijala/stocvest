@@ -99,6 +99,7 @@ from stocvest.signals.geo_analyzer import GeoAnalyzer
 from stocvest.signals.news_sensitivity import layer_sensitivity_multipliers, layer_sensitivity_payload
 from stocvest.signals.sector_technical_calibration import sector_technical_calibration_payload
 from stocvest.signals.news_sentiment_cache import (
+    enrich_rows_with_cached_impact,
     enrich_rows_with_cached_sentiment,
     prime_missing_news_sentiment,
 )
@@ -188,6 +189,7 @@ async def build_swing_composite_response(
         bz_data = await ensure_analyst_feed(benzinga, sym, bz_data)
         news_rows = _merge_benzinga_first_news_rows(news_polygon, _benzinga_articles_to_rows(bz_data.news))
         enrich_rows_with_cached_sentiment(news_rows)
+        enrich_rows_with_cached_impact(news_rows)
         await prime_missing_news_sentiment(news_rows)
         spy_snap: Snapshot | None = _safe_result(spy_r, None)
         qqq_snap: Snapshot | None = _safe_result(qqq_r, None)
