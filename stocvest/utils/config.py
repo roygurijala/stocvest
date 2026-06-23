@@ -291,6 +291,17 @@ class Settings(BaseSettings):
         10,
         alias="STOCVEST_NEWS_SENTIMENT_PRIME_MAX_PER_PASS",
     )
+    # News relevance × impact × age weighting for the composite News layer. When ON,
+    # each article's contribution is scaled by its relevance (credible, on-topic) and
+    # impact (market-moving catalyst), and the final score is shrunk toward neutral (50)
+    # when total effective evidence is thin — so a lone, low-impact, stale headline can no
+    # longer print an extreme score. Relevance/impact come from Claude (read-through cache)
+    # when available, else a validated heuristic fallback. OFF by default (ships dark): when
+    # OFF the News layer score is byte-identical to the legacy flat-sentiment average.
+    stocvest_news_impact_weighting_enabled: bool = Field(
+        False,
+        alias="STOCVEST_NEWS_IMPACT_WEIGHTING_ENABLED",
+    )
     # B71 Phase C — scheduled offline news event-study report (read-only → S3). OFF by
     # default; the scheduled Lambda no-ops until enabled + a reports bucket is set.
     stocvest_news_event_study_report_enabled: bool = Field(

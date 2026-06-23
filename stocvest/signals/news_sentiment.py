@@ -54,12 +54,20 @@ def swing_recency_weight(published_at: datetime, now: datetime) -> float:
 
 @dataclass(frozen=True)
 class SentimentResult:
-    """Normalized sentiment analysis output."""
+    """Normalized sentiment analysis output.
+
+    ``relevance`` (0–1, how materially the article is about the ticker) and ``impact``
+    (0–1, how market-moving the catalyst is) power the News-layer relevance × impact ×
+    age weighting. They default to ``1.0`` so legacy callers / older cached entries that
+    only carry polarity behave exactly as before.
+    """
 
     sentiment: Newssentiment
     score: float
     confidence: float
     rationale: str
+    relevance: float = 1.0
+    impact: float = 1.0
 
 
 class NewsSentimentScorer:
@@ -142,12 +150,18 @@ class NewsSentimentScorer:
 
     def _build_payload(self, article: NewsArticle) -> dict[str, Any]:
         prompt = (
-            "You are a financial-news sentiment classifier.\n"
+            "You are a financial-news analyst classifier.\n"
             "Classify the article for the listed ticker context.\n"
-            "Return strict JSON only with keys: sentiment, score, confidence, rationale.\n"
+            "Return strict JSON only with keys: sentiment, score, confidence, relevance, "
+            "impact, rationale.\n"
             "sentiment must be one of: bullish, bearish, neutral.\n"
             "score must be a float from -1.0 to 1.0.\n"
             "confidence must be a float from 0.0 to 1.0.\n"
+            "relevance must be a float 0.0-1.0 = how materially this article is about the "
+            "ticker's own fundamentals/outlook (1.0 = directly about the company; low = a "
+            "passing mention, listicle, or competitor/macro piece).\n"
+            "impact must be a float 0.0-1.0 = how market-moving the catalyst is (1.0 = hard "
+            "catalyst like earnings/M&A/FDA/guidance; low = opinion/recap with no new fact).\n"
             "rationale must be <= 240 chars.\n\n"
             f"Title: {article.title}\n"
             f"Description: {article.description or ''}\n"
@@ -254,12 +268,29 @@ class NewsSentimentScorer:
         if len(rationale) > 240:
             rationale = rationale[:240]
 
+        # relevance/impact are additive: default to 1.0 when the model omits them so
+        # older prompts / cached payloads keep their legacy (unweighted) behavior.
+        relevance = self._optional_unit(parsed.get("relevance"))
+        impact = self._optional_unit(parsed.get("impact"))
+
         return SentimentResult(
             sentiment=Newssentiment(sentiment_raw),
             score=score,
             confidence=confidence,
             rationale=rationale,
+            relevance=relevance,
+            impact=impact,
         )
+
+    @staticmethod
+    def _optional_unit(raw: Any, default: float = 1.0) -> float:
+        """Parse an optional 0..1 float, clamping; fall back to ``default`` when absent/invalid."""
+        if raw is None:
+            return default
+        try:
+            return max(0.0, min(1.0, float(raw)))
+        except (TypeError, ValueError):
+            return default
 
     @staticmethod
     def _load_json_from_text(text: str) -> dict[str, Any]:

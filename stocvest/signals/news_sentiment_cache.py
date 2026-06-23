@@ -118,12 +118,30 @@ def _row_key(row: dict[str, Any]) -> str | None:
     )
 
 
-def write_article_sentiment(*, url: str | None, title: str | None, sentiment: str, score: float) -> bool:
-    """Persist one article's Claude sentiment for later read-through. Fail-open → ``bool`` written.
+def _opt_unit(value: float | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        return max(0.0, min(1.0, round(float(value), 4)))
+    except (TypeError, ValueError):
+        return None
+
+
+def write_article_sentiment(
+    *,
+    url: str | None,
+    title: str | None,
+    sentiment: str,
+    score: float,
+    relevance: float | None = None,
+    impact: float | None = None,
+) -> bool:
+    """Persist one article's Claude sentiment (+ optional relevance/impact) for read-through.
 
     Called from the async news consumer. No-op (returns ``False``) when the cache
     is disabled, Redis is unavailable, the label is invalid, or no content key
-    can be derived.
+    can be derived. ``relevance``/``impact`` (0–1) power the News-layer impact
+    weighting; they are stored only when provided so legacy entries stay polarity-only.
     """
     settings = get_settings()
     if not settings.stocvest_news_sentiment_cache_enabled:
@@ -141,8 +159,14 @@ def write_article_sentiment(*, url: str | None, title: str | None, sentiment: st
         if r is None:
             return False
         ttl = max(60, int(settings.stocvest_news_sentiment_cache_ttl_seconds))
-        payload = json.dumps({"sentiment": label, "score": round(float(score), 4)})
-        r.setex(key, ttl, payload)
+        body: dict[str, Any] = {"sentiment": label, "score": round(float(score), 4)}
+        rel = _opt_unit(relevance)
+        imp = _opt_unit(impact)
+        if rel is not None:
+            body["relevance"] = rel
+        if imp is not None:
+            body["impact"] = imp
+        r.setex(key, ttl, json.dumps(body))
         return True
     except Exception as exc:  # noqa: BLE001 — cache writes must never break ingestion
         _LOG.debug("news sentiment cache write skipped: %s", exc)
@@ -210,6 +234,67 @@ def enrich_rows_with_cached_sentiment(rows: list[dict[str, Any]]) -> int:
         enriched,
     )
     _emit_cache_metrics(CacheCandidates=len(candidates), CacheHits=enriched)
+    return enriched
+
+
+def enrich_rows_with_cached_impact(rows: list[dict[str, Any]]) -> int:
+    """Attach Claude ``claude_relevance`` / ``claude_impact`` onto rows from the cache.
+
+    Unlike :func:`enrich_rows_with_cached_sentiment` (which only fills *abstaining* rows'
+    polarity), this looks up **every** row so the News-layer relevance × impact weighting
+    can use Claude's per-article estimates when present. One batched ``MGET``. Gated on
+    ``stocvest_news_impact_weighting_enabled``; fail-open (any error / miss leaves rows
+    untouched). Returns the count of rows enriched with at least one Claude value.
+    """
+    settings = get_settings()
+    if not settings.stocvest_news_impact_weighting_enabled or not isinstance(rows, list):
+        return 0
+
+    candidates: list[tuple[dict[str, Any], str]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = _row_key(row)
+        if key:
+            candidates.append((row, key))
+    if not candidates:
+        return 0
+
+    try:
+        from stocvest.utils.redis_client import get_sync_redis
+
+        r = get_sync_redis()
+        if r is None:
+            return 0
+        values = r.mget([key for _, key in candidates])
+    except Exception as exc:  # noqa: BLE001 — read-through must never break scoring
+        _LOG.debug("news impact cache read skipped: %s", exc)
+        return 0
+
+    enriched = 0
+    for (row, _key), raw in zip(candidates, values or []):
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            continue
+        got = False
+        if "relevance" in data:
+            try:
+                row["claude_relevance"] = max(0.0, min(1.0, float(data["relevance"])))
+                got = True
+            except (TypeError, ValueError):
+                pass
+        if "impact" in data:
+            try:
+                row["claude_impact"] = max(0.0, min(1.0, float(data["impact"])))
+                got = True
+            except (TypeError, ValueError):
+                pass
+        if got:
+            enriched += 1
+    _LOG.info("news_impact_cache enrich candidates=%d hits=%d", len(candidates), enriched)
     return enriched
 
 

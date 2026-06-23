@@ -24,6 +24,29 @@ variable "news_sentiment_prime_enabled" {
   default     = false
 }
 
+variable "news_impact_weighting_enabled" {
+  description = "B74: weight the composite News layer by relevance x impact x age and shrink thin evidence toward neutral. Default off (ships dark; OFF = byte-identical legacy News score). Tier 1 works on the heuristic alone; Claude per-article relevance/impact additionally requires news_sentiment_cache_enabled (+ prime or the ECS worker) to populate the cache."
+  type        = bool
+  default     = false
+}
+
+# ECR repo for the news-worker image. Created unconditionally so you can build/push
+# (see scripts/build_push_news_worker.ps1) BEFORE setting news_worker_container_image
+# to its repository_url and bumping news_worker_desired_count > 0.
+resource "aws_ecr_repository" "news_worker" {
+  name                 = "stocvest-news-worker"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-news-worker-ecr"
+  })
+}
+
 data "aws_secretsmanager_secret" "external_api_keys" {
   count = var.news_worker_container_image != "" ? 1 : 0
   name  = "stocvest/external-api-keys"

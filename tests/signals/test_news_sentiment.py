@@ -56,6 +56,42 @@ async def test_score_article_parses_claude_json(monkeypatch: pytest.MonkeyPatch)
     assert result.sentiment == Newssentiment.BULLISH
     assert result.score == pytest.approx(0.78)
     assert result.confidence == pytest.approx(0.84)
+    # relevance/impact omitted by the model → backward-compatible 1.0 defaults.
+    assert result.relevance == pytest.approx(1.0)
+    assert result.impact == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_score_article_parses_relevance_and_impact(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("POLYGON_API_KEY", "polygon-test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-test")
+    get_settings.cache_clear()
+
+    scorer = NewsSentimentScorer()
+    article = make_article()
+
+    with respx.mock(assert_all_called=True) as router:
+        router.post(ANTHROPIC_API_URL).mock(
+            return_value=Response(
+                200,
+                json={
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                '{"sentiment":"bullish","score":0.6,"confidence":0.7,'
+                                '"relevance":0.95,"impact":0.4,"rationale":"On-topic but soft catalyst."}'
+                            ),
+                        }
+                    ]
+                },
+            )
+        )
+        result = await scorer.score_article(article)
+
+    assert result.relevance == pytest.approx(0.95)
+    assert result.impact == pytest.approx(0.4)
 
 
 @pytest.mark.unit

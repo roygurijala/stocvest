@@ -16,6 +16,7 @@ def _settings(
     *,
     prime_enabled: bool = False,
     queue_url: str = "https://sqs.local/triage",
+    impact_enabled: bool = False,
 ):
     return SimpleNamespace(
         stocvest_news_sentiment_cache_enabled=enabled,
@@ -25,6 +26,7 @@ def _settings(
         stocvest_news_sentiment_prime_pending_ttl_seconds=21600,
         stocvest_news_sentiment_prime_max_per_pass=10,
         stocvest_news_triage_queue_url=queue_url,
+        stocvest_news_impact_weighting_enabled=impact_enabled,
         aws_region="us-east-1",
     )
 
@@ -203,6 +205,57 @@ def test_enrich_cache_miss_leaves_rows_untouched(enabled, monkeypatch):
     rows = [{"title": "x", "article_url": "https://x.com/x", "insights": []}]
     assert nsc.enrich_rows_with_cached_sentiment(rows) == 0
     assert rows[0].get("sentiment") is None
+
+
+# ── relevance/impact persistence + read-through ─────────────────────────────────
+
+
+@pytest.mark.unit
+def test_write_persists_relevance_and_impact_when_provided(enabled, monkeypatch):
+    fake = _FakeRedis()
+    monkeypatch.setattr(redis_client, "get_sync_redis", lambda: fake)
+    assert nsc.write_article_sentiment(
+        url="https://x.com/a", title="t", sentiment="bullish", score=0.5, relevance=0.9, impact=0.4
+    ) is True
+    _, _, payload = fake.setex_calls[0]
+    body = json.loads(payload)
+    assert body["relevance"] == 0.9 and body["impact"] == 0.4
+
+
+@pytest.mark.unit
+def test_impact_enrich_noop_when_flag_disabled(monkeypatch):
+    # cache on, impact flag OFF → no Claude relevance/impact attached.
+    monkeypatch.setattr(nsc, "get_settings", lambda: _settings(True, impact_enabled=False))
+    key = nsc.sentiment_cache_key(url="https://x.com/a", title="a")
+    fake = _FakeRedis({key: json.dumps({"sentiment": "positive", "score": 0.6, "relevance": 0.9, "impact": 0.3})})
+    monkeypatch.setattr(redis_client, "get_sync_redis", lambda: fake)
+    rows = [{"title": "a", "article_url": "https://x.com/a"}]
+    assert nsc.enrich_rows_with_cached_impact(rows) == 0
+    assert "claude_relevance" not in rows[0]
+
+
+@pytest.mark.unit
+def test_impact_enrich_attaches_claude_values(monkeypatch):
+    monkeypatch.setattr(nsc, "get_settings", lambda: _settings(True, impact_enabled=True))
+    key = nsc.sentiment_cache_key(url="https://x.com/a", title="a")
+    fake = _FakeRedis({key: json.dumps({"sentiment": "positive", "score": 0.6, "relevance": 0.9, "impact": 0.3})})
+    monkeypatch.setattr(redis_client, "get_sync_redis", lambda: fake)
+    rows = [{"title": "a", "article_url": "https://x.com/a"}]
+    assert nsc.enrich_rows_with_cached_impact(rows) == 1
+    assert rows[0]["claude_relevance"] == 0.9
+    assert rows[0]["claude_impact"] == 0.3
+
+
+@pytest.mark.unit
+def test_impact_enrich_ignores_polarity_only_entries(monkeypatch):
+    # A legacy entry without relevance/impact must not attach Claude factors.
+    monkeypatch.setattr(nsc, "get_settings", lambda: _settings(True, impact_enabled=True))
+    key = nsc.sentiment_cache_key(url="https://x.com/a", title="a")
+    fake = _FakeRedis({key: json.dumps({"sentiment": "positive", "score": 0.6})})
+    monkeypatch.setattr(redis_client, "get_sync_redis", lambda: fake)
+    rows = [{"title": "a", "article_url": "https://x.com/a"}]
+    assert nsc.enrich_rows_with_cached_impact(rows) == 0
+    assert "claude_relevance" not in rows[0]
 
 
 # ── self-prime (enqueue cache misses for async scoring) ─────────────────────────
