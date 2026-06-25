@@ -340,6 +340,16 @@ class SwingTechnicalAnalyzer:
             and last > sma50
             and last > sma200
         )
+        # Price has broken below both key MAs. When this is true a 50>200 "golden
+        # cross" is a lagging artifact (the averages haven't caught the breakdown
+        # yet), not bullish structure — used to keep the chip/brief from reading
+        # "uptrend" on a collapsing name (e.g. price 55% below its high, below all MAs).
+        below_key_mas = bool(
+            sma50 is not None
+            and sma200 is not None
+            and last < sma50
+            and last < sma200
+        )
 
         score = 50
 
@@ -538,7 +548,7 @@ class SwingTechnicalAnalyzer:
             else:
                 chips.append(f"RSI {rsi:.0f}")
         if gc:
-            chips.append("Golden Cross")
+            chips.append("Golden Cross (lagging)" if below_key_mas else "Golden Cross")
         elif dc:
             chips.append("Death Cross")
         if hh:
@@ -571,7 +581,26 @@ class SwingTechnicalAnalyzer:
                 f"Price {pct_from_high:.0f}% below {params.recent_high_lookback_sessions}-session high — breakdown risk."
             )
         if sma50 is not None and sma200 is not None:
-            parts.append(f"Price vs SMA50 (${sma50:.2f}) and SMA200 (${sma200:.2f}) — {'uptrend' if gc else 'mixed' if not dc else 'downtrend'} structure.")
+            if below_key_mas:
+                # Price under both MAs is broken structure regardless of a stale 50>200 cross.
+                struct = "broken"
+                cross_note = (
+                    " (50-day still above 200-day, but that golden cross is lagging — price has broken below both)"
+                    if gc
+                    else ""
+                )
+            elif durable_uptrend:
+                struct = "uptrend"
+                cross_note = ""
+            elif dc:
+                struct = "downtrend"
+                cross_note = ""
+            else:
+                struct = "mixed"
+                cross_note = ""
+            parts.append(
+                f"Price vs SMA50 (${sma50:.2f}) and SMA200 (${sma200:.2f}) — {struct} structure{cross_note}."
+            )
         rsi_phase = _rsi_momentum_phase(rsi, params)
         if rsi is not None:
             if rsi >= params.rsi_overbought:
