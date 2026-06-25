@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from datetime import date, datetime, timedelta, timezone
@@ -21,6 +22,13 @@ log = get_logger(__name__)
 NEUTRAL_MOVE_PCT = 0.1
 GSI_NAME = "scope_generated_at"
 _ET = ZoneInfo("America/New_York")
+
+# Outcome resolution does one Polygon REST lookup per unresolved row. Running these
+# sequentially over a growing table blows past the 120s Lambda timeout (and starves
+# the 1d pass, which runs after 1h). Resolve with bounded concurrency and a per-pass
+# cap so each invocation drains a large, deterministic chunk newest-first.
+_RESOLVE_CONCURRENCY = 8
+_RESOLVE_MAX_PER_PASS = 2500
 
 _MAX_HISTORY_QUERY_ROUNDS = 12
 
@@ -349,7 +357,10 @@ class InMemorySignalRecorder:
         *,
         horizon: str,
         items: list[dict[str, Any]] | None = None,
+        max_items: int | None = _RESOLVE_MAX_PER_PASS,
+        concurrency: int = _RESOLVE_CONCURRENCY,
     ) -> int:
+        _ = concurrency  # no network here — accepted for signature parity with the DynamoDB store
         if horizon not in {"1h", "1d"}:
             raise ValueError("horizon must be 1h or 1d")
         now = datetime.now(timezone.utc)
@@ -359,16 +370,26 @@ class InMemorySignalRecorder:
         outcome_attr = "outcome_1h" if horizon == "1h" else "outcome_1d"
         updated = 0
         source = list(self._items.values()) if items is None else items
+
+        todo: list[tuple[dict[str, Any], datetime]] = []
         for it in source:
             if _item_ledger_validation_still_open(it):
                 continue
             if it.get(resolved_attr):
+                continue
+            if not str(it.get("signal_id") or ""):
                 continue
             gen = datetime.fromisoformat(str(it["generated_at"]).replace("Z", "+00:00"))
             if gen.tzinfo is None:
                 gen = gen.replace(tzinfo=timezone.utc)
             if gen > cutoff_time:
                 continue
+            todo.append((it, gen))
+        todo.sort(key=lambda t: t[1], reverse=True)
+        if max_items is not None and max_items > 0:
+            todo = todo[:max_items]
+
+        for it, gen in todo:
             sym = str(it["symbol"]).upper()
             price_after = await polygon.get_evaluated_price_after_signal(sym, gen, horizon=horizon)
             if price_after is None:
@@ -376,9 +397,7 @@ class InMemorySignalRecorder:
             price_at = float(it["price_at_signal"])
             direction = str(it["direction"])
             outcome = outcome_from_prices(direction, price_at, float(price_after))
-            sid = str(it.get("signal_id") or "")
-            if not sid:
-                continue
+            sid = str(it["signal_id"])
             it[price_attr] = Decimal(str(float(price_after)))
             it[outcome_attr] = outcome
             it[resolved_attr] = True
@@ -722,6 +741,8 @@ class DynamoDBSignalRecorder:
         *,
         horizon: str,
         items: list[dict[str, Any]] | None = None,
+        max_items: int | None = _RESOLVE_MAX_PER_PASS,
+        concurrency: int = _RESOLVE_CONCURRENCY,
     ) -> int:
         if horizon not in {"1h", "1d"}:
             raise ValueError("horizon must be 1h or 1d")
@@ -730,8 +751,10 @@ class DynamoDBSignalRecorder:
         resolved_attr = "resolved_1h" if horizon == "1h" else "resolved_1d"
         price_attr = "price_1h_after" if horizon == "1h" else "price_1d_after"
         outcome_attr = "outcome_1h" if horizon == "1h" else "outcome_1d"
-        updated = 0
         source = self._scan_all() if items is None else items
+
+        # 1) Cheap, network-free filter → the rows that still need this horizon resolved.
+        todo: list[tuple[dict[str, Any], datetime]] = []
         for item in source:
             if not item.get("signal_id"):
                 continue
@@ -744,53 +767,80 @@ class DynamoDBSignalRecorder:
                 gen = gen.replace(tzinfo=timezone.utc)
             if gen > cutoff_time:
                 continue
-            sym = str(item["symbol"]).upper()
-            price_after = await polygon.get_evaluated_price_after_signal(sym, gen, horizon=horizon)
-            if price_after is None:
-                continue
-            price_at = float(item["price_at_signal"])
-            direction = str(item["direction"])
-            outcome = outcome_from_prices(direction, price_at, float(price_after))
-            expr_parts = [
-                f"#{price_attr} = :p",
-                f"#{outcome_attr} = :o",
-                f"#{resolved_attr} = :r",
-            ]
-            names: dict[str, str] = {
-                f"#{price_attr}": price_attr,
-                f"#{outcome_attr}": outcome_attr,
-                f"#{resolved_attr}": resolved_attr,
-            }
-            vals: dict[str, Any] = {
-                ":p": Decimal(str(float(price_after))),
-                ":o": outcome,
-                ":r": True,
-            }
-            try:
-                self._table.update_item(
-                    Key={"signal_id": item["signal_id"]},
-                    UpdateExpression="SET " + ", ".join(expr_parts),
-                    ExpressionAttributeNames=names,
-                    ExpressionAttributeValues=vals,
-                )
-            except ClientError as exc:
-                log.warning("resolve update failed signal_id=%s: %s", item.get("signal_id"), exc)
-                continue
-            updated += 1
-            uid = item.get("user_id")
-            if uid and not str(item.get("signal_id", "")).startswith("pub-"):
-                from stocvest.api.services.signal_backtest_capture import platform_mirror_signal_id
+            todo.append((item, gen))
 
-                mirror_id = platform_mirror_signal_id(str(item["signal_id"]))
+        # Newest-first so the freshly generated rows (what reporting/accuracy reads)
+        # always resolve promptly; any older backlog drains over subsequent runs.
+        todo.sort(key=lambda t: t[1], reverse=True)
+        if max_items is not None and max_items > 0:
+            todo = todo[:max_items]
+        if not todo:
+            return 0
+
+        # 2) Fetch prices with bounded concurrency (independent network calls — the
+        #    dominant cost), processed in chunks so each chunk's results are persisted
+        #    before the next starts. This keeps incremental progress durable even if the
+        #    Lambda hits its timeout mid-pass (newest rows, processed first, are saved).
+        async def _fetch_price(entry: tuple[dict[str, Any], datetime]) -> float | None:
+            item, gen = entry
+            sym = str(item["symbol"]).upper()
+            try:
+                return await polygon.get_evaluated_price_after_signal(sym, gen, horizon=horizon)
+            except Exception as exc:  # noqa: BLE001 — never let one symbol abort the pass
+                log.warning("resolve price lookup failed signal_id=%s: %s", item.get("signal_id"), exc)
+                return None
+
+        chunk = max(1, concurrency)
+        updated = 0
+        for start in range(0, len(todo), chunk):
+            window = todo[start : start + chunk]
+            prices = await asyncio.gather(*(_fetch_price(e) for e in window))
+            for (item, _gen), price_after in zip(window, prices):
+                if price_after is None:
+                    continue
+                price_at = float(item["price_at_signal"])
+                direction = str(item["direction"])
+                outcome = outcome_from_prices(direction, price_at, float(price_after))
+                expr_parts = [
+                    f"#{price_attr} = :p",
+                    f"#{outcome_attr} = :o",
+                    f"#{resolved_attr} = :r",
+                ]
+                names: dict[str, str] = {
+                    f"#{price_attr}": price_attr,
+                    f"#{outcome_attr}": outcome_attr,
+                    f"#{resolved_attr}": resolved_attr,
+                }
+                vals: dict[str, Any] = {
+                    ":p": Decimal(str(float(price_after))),
+                    ":o": outcome,
+                    ":r": True,
+                }
                 try:
                     self._table.update_item(
-                        Key={"signal_id": mirror_id},
+                        Key={"signal_id": item["signal_id"]},
                         UpdateExpression="SET " + ", ".join(expr_parts),
                         ExpressionAttributeNames=names,
                         ExpressionAttributeValues=vals,
                     )
-                except ClientError:
-                    pass
+                except ClientError as exc:
+                    log.warning("resolve update failed signal_id=%s: %s", item.get("signal_id"), exc)
+                    continue
+                updated += 1
+                uid = item.get("user_id")
+                if uid and not str(item.get("signal_id", "")).startswith("pub-"):
+                    from stocvest.api.services.signal_backtest_capture import platform_mirror_signal_id
+
+                    mirror_id = platform_mirror_signal_id(str(item["signal_id"]))
+                    try:
+                        self._table.update_item(
+                            Key={"signal_id": mirror_id},
+                            UpdateExpression="SET " + ", ".join(expr_parts),
+                            ExpressionAttributeNames=names,
+                            ExpressionAttributeValues=vals,
+                        )
+                    except ClientError:
+                        pass
         return updated
 
     def has_open_validation_position(self, user_id: str, symbol: str, mode: str) -> bool:

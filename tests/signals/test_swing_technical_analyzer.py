@@ -655,3 +655,63 @@ def test_above_sma50_score_param_actually_moves_score() -> None:
     boosted = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, isolated)
     assert baseline.score == 50
     assert boosted.score == 80
+
+
+def _golden_cross_then_crash_closes() -> list[float]:
+    """A long uptrend (SMA50 ends well above SMA200 → golden cross) followed by a
+    sharp crash that drops price below all key MAs — like SPCH ($28 → ~$12, 50>200
+    still true but lagging). RSI lands ~mid-30s (not deeply oversold) so the B73
+    bounce floor does not apply."""
+    up = [10.0 + (28.0 - 10.0) * (i / 219.0) for i in range(220)]
+    crash = [28.0 * (0.94 ** k) for k in range(1, 15)]  # ~ -57% over 14 sessions
+    return up + crash
+
+
+def test_lagging_golden_cross_not_labeled_uptrend_on_breakdown() -> None:
+    """A stale 50>200 cross on a stock that has broken below both MAs must read as
+    BROKEN structure (chip 'Golden Cross (lagging)'), not bullish 'uptrend' — and the
+    bearish score is unchanged (display-only fix)."""
+    closes = _golden_cross_then_crash_closes()
+    r = SwingTechnicalAnalyzer().analyze("TEST", _bars_from_closes(closes), _snap(closes), SwingTechnicalParameters())
+    assert r.sma50 is not None and r.sma200 is not None
+    assert r.sma50 > r.sma200  # golden cross present
+    assert closes[-1] < r.sma50 and closes[-1] < r.sma200  # but price below both
+    assert r.verdict == "bearish"
+    # Chip is qualified, never the bare bullish "Golden Cross".
+    assert "Golden Cross (lagging)" in r.chips
+    assert "Golden Cross" not in r.chips
+    # Brief says broken, not uptrend.
+    assert "broken structure" in r.reasoning
+    assert "uptrend structure" not in r.reasoning
+    assert "lagging" in r.reasoning
+
+
+def test_lagging_golden_cross_contributes_zero_score_credit() -> None:
+    """Pins the score gate behind the label fix: when price has broken below both
+    MAs the golden-cross structural credit must NOT fire, so the final score is
+    invariant to ``golden_cross_score`` (the credit is gated on ``durable_uptrend``
+    = price above both MAs, not the raw 50>200 cross). SPCH live: raw pre-clamp -42,
+    clamped to 0 regardless of the credit param."""
+    from dataclasses import replace
+
+    closes = _golden_cross_then_crash_closes()
+    bars = _bars_from_closes(closes)
+    snap = _snap(closes)
+    base = SwingTechnicalParameters()
+    no_credit = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, replace(base, golden_cross_score=0))
+    huge_credit = SwingTechnicalAnalyzer().analyze("TEST", bars, snap, replace(base, golden_cross_score=200))
+    assert no_credit.score == huge_credit.score  # credit does not enter the math
+    assert huge_credit.verdict == "bearish"
+
+
+def test_durable_uptrend_keeps_plain_golden_cross_and_uptrend_label() -> None:
+    """A genuine uptrend (price above both MAs, 50>200) still reads as uptrend with a
+    plain 'Golden Cross' chip — the fix must not regress healthy names."""
+    bars = make_daily_bars(260, base_price=10.0, trend=0.005)
+    closes = [b.close for b in bars]
+    r = SwingTechnicalAnalyzer().analyze("TEST", bars, _snap(closes), SwingTechnicalParameters())
+    assert r.sma50 is not None and r.sma200 is not None
+    assert closes[-1] > r.sma50 and closes[-1] > r.sma200  # durable uptrend
+    assert "Golden Cross" in r.chips
+    assert "Golden Cross (lagging)" not in r.chips
+    assert "uptrend structure" in r.reasoning

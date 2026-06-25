@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 
 from stocvest.api.handlers.signals import public_recent_signals_handler, swing_composite_handler
 from stocvest.api.services.signal_recorder import (
+    DynamoDBSignalRecorder,
     InMemorySignalRecorder,
     get_signal_recorder,
     outcome_from_prices,
@@ -285,6 +287,92 @@ def test_resolve_signals_marks_incorrect_outcome() -> None:
     asyncio.run(_run())
     rows = rec.get_public_recent(limit=10)
     assert rows[0]["outcome_1h"] == "incorrect"
+
+
+class _ScanTable:
+    """Minimal DynamoDB table double: supports scan() + update_item() SET."""
+
+    def __init__(self, items: list[dict]) -> None:
+        self._items = {it["signal_id"]: it for it in items}
+
+    def scan(self, **kwargs):  # noqa: ANN003
+        _ = kwargs
+        return {"Items": list(self._items.values())}
+
+    def update_item(self, *, Key, UpdateExpression, ExpressionAttributeNames, ExpressionAttributeValues):  # noqa: N803
+        _ = UpdateExpression
+        it = self._items.get(Key["signal_id"])
+        if it is None:
+            return {}
+        for attr in ExpressionAttributeNames.values():
+            if attr.startswith("price_"):
+                it[attr] = ExpressionAttributeValues[":p"]
+            elif attr.startswith("outcome_"):
+                it[attr] = ExpressionAttributeValues[":o"]
+            elif attr.startswith("resolved_"):
+                it[attr] = ExpressionAttributeValues[":r"]
+        return {}
+
+
+def _dynamo_rows(n: int, base: datetime) -> list[dict]:
+    return [
+        {
+            "signal_id": f"d{i}",
+            "symbol": f"S{i}",
+            "direction": "bullish",
+            "price_at_signal": Decimal("100"),
+            "generated_at": (base + timedelta(minutes=i * 5)).isoformat().replace("+00:00", "Z"),
+            "scope_key": "PUBLIC",
+        }
+        for i in range(n)
+    ]
+
+
+def test_dynamo_resolve_signals_concurrent_resolves_all() -> None:
+    """Bounded-concurrency pass resolves every eligible row with the right outcome."""
+    base = datetime.now(timezone.utc) - timedelta(hours=3)
+    items = _dynamo_rows(6, base)
+    rec = DynamoDBSignalRecorder(table=_ScanTable(items))
+
+    class _FakePoly:
+        def __init__(self) -> None:
+            self.max_inflight = 0
+            self._inflight = 0
+
+        async def get_evaluated_price_after_signal(self, symbol: str, generated_at: datetime, *, horizon: str) -> float:
+            _ = (symbol, generated_at, horizon)
+            self._inflight += 1
+            self.max_inflight = max(self.max_inflight, self._inflight)
+            await asyncio.sleep(0)
+            self._inflight -= 1
+            return 102.0
+
+    poly = _FakePoly()
+    n = asyncio.run(rec.resolve_signals(60, poly, horizon="1h", concurrency=3))
+    assert n == 6
+    assert all(it.get("resolved_1h") is True for it in items)
+    assert all(it.get("outcome_1h") == "correct" for it in items)
+    assert poly.max_inflight > 1  # actually ran concurrently
+
+
+def test_dynamo_resolve_signals_cap_resolves_newest_first() -> None:
+    """When more rows are eligible than the per-pass cap, only the newest resolve."""
+    base = datetime.now(timezone.utc) - timedelta(hours=3)
+    items = _dynamo_rows(6, base)  # d0 oldest .. d5 newest
+    by_id = {it["signal_id"]: it for it in items}
+    rec = DynamoDBSignalRecorder(table=_ScanTable(items))
+
+    class _FakePoly:
+        async def get_evaluated_price_after_signal(self, symbol: str, generated_at: datetime, *, horizon: str) -> float:
+            _ = (symbol, generated_at, horizon)
+            return 102.0
+
+    n = asyncio.run(rec.resolve_signals(60, _FakePoly(), horizon="1h", max_items=2, concurrency=4))
+    assert n == 2
+    assert by_id["d5"].get("resolved_1h") is True
+    assert by_id["d4"].get("resolved_1h") is True
+    for sid in ("d3", "d2", "d1", "d0"):
+        assert by_id[sid].get("resolved_1h") is not True
 
 
 def test_get_signal_history_filters_by_symbol() -> None:
