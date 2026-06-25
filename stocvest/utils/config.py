@@ -302,6 +302,16 @@ class Settings(BaseSettings):
         False,
         alias="STOCVEST_NEWS_IMPACT_WEIGHTING_ENABLED",
     )
+    # Day ledger monitor — take profit at the reference target level (reference_structure_level)
+    # when the snapshot last price reaches it, checked before the VWAP-violation rule. The live
+    # day monitor otherwise has no profit target: winners only exit on a VWAP break against the
+    # trade or the time flatten, leaving favorable excursion on the table (replay: avg MFE
+    # +1.86% > avg MAE -1.55%; adding the target moved day expectancy from -0.79% to -0.39%/trade).
+    # OFF by default (ships dark): when OFF the monitor's exit behavior is byte-identical to legacy.
+    stocvest_day_profit_target_exit_enabled: bool = Field(
+        False,
+        alias="STOCVEST_DAY_PROFIT_TARGET_EXIT_ENABLED",
+    )
     # B71 Phase C — scheduled offline news event-study report (read-only → S3). OFF by
     # default; the scheduled Lambda no-ops until enabled + a reports bucket is set.
     stocvest_news_event_study_report_enabled: bool = Field(
