@@ -26,6 +26,7 @@ from stocvest.api.services.validation_timing import (
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.data.polygon_client import PolygonClient
 from stocvest.signals.macro_analyzer import MacroAnalyzer
+from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -83,6 +84,17 @@ def _snapshots_by_symbol(snaps: list[Any] | dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _target_reached(direction: str, target: float, last_px: float) -> bool:
+    if target <= 0 or last_px <= 0:
+        return False
+    d = direction.lower()
+    if d == "bullish":
+        return last_px >= target
+    if d == "bearish":
+        return last_px <= target
+    return False
+
+
 def _vwap_violated(direction: str, vwap: float, last_px: float) -> bool:
     if vwap <= 0 or last_px <= 0:
         return False
@@ -98,6 +110,7 @@ async def run_ledger_position_monitor(client: PolygonClient, recorder: Any) -> d
     """Process open validation rows; returns counts."""
     now = datetime.now(timezone.utc)
     counts: dict[str, int] = {"swing_closed": 0, "day_closed": 0, "skipped": 0, "errors": 0}
+    day_target_exit_enabled = bool(get_settings().stocvest_day_profit_target_exit_enabled)
 
     try:
         regime_current = await _current_macro_regime(client)
@@ -191,7 +204,18 @@ async def run_ledger_position_monitor(client: PolygonClient, recorder: Any) -> d
                 exit_reason_d: str | None = None
                 px: float | None = None
 
+                target = rec.reference_structure_level
                 if (
+                    day_target_exit_enabled
+                    and target is not None
+                    and last_px is not None
+                    and last_px > 0
+                    and _target_reached(rec.direction, float(target), last_px)
+                ):
+                    px = last_px
+                    exit_rule_d = "day_profit_target"
+                    exit_reason_d = "Profit target (reference level) reached"
+                elif (
                     last_px is not None
                     and vwap is not None
                     and last_px > 0
