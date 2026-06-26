@@ -121,6 +121,19 @@ variable "weight_rotation_alert_email" {
   sensitive   = true
 }
 
+variable "alert_email_failure_alarm_email" {
+  description = <<-EOT
+    Optional ops email address for the alert-email delivery-failure alarm.
+    When set, an SNS subscription delivers a page whenever any alert email send
+    fails (Stocvest/Alerts EmailSendOutcome Result=failed). Catches provider
+    outages (token bad, account blocked/over-limit, inactive recipient) that
+    previously failed silently. Leave empty to skip the email subscription.
+  EOT
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "weight_rotation_degradation_threshold_pp" {
   description = <<-EOT
     Percentage-point degradation threshold for the CloudWatch alarm.
