@@ -59,7 +59,6 @@ export async function GET(req: Request) {
   }
 
   let names: Record<string, string> = {};
-  let upstreamOk = false;
 
   try {
     const res = await stocvestAuthedFetch(
@@ -67,7 +66,6 @@ export async function GET(req: Request) {
       { method: "GET" }
     );
     if (res.ok) {
-      upstreamOk = true;
       const data = (await res.json().catch(() => ({}))) as { names?: Record<string, string> };
       names = data.names ?? {};
     }
@@ -81,7 +79,11 @@ export async function GET(req: Request) {
     names = { ...names, ...direct };
   }
 
-  if (!upstreamOk && Object.keys(names).length === 0) {
+  // Mark degraded whenever nothing resolved — including a 200-with-empty upstream,
+  // which happens when the backend's own Polygon reference lookup fails or rate-limits.
+  // The client treats `degraded` as "retry later" rather than caching empties forever
+  // (which would make company names silently vanish until a full page reload).
+  if (Object.keys(names).length === 0) {
     return NextResponse.json({ names: {}, degraded: true }, { status: 200 });
   }
 
