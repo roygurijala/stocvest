@@ -33,6 +33,22 @@ describe("symbol names BFF", () => {
     expect(body.names.DELL).toBe("Dell Technologies Inc.");
   });
 
+  test("degrades on a 200-with-empty upstream so the client retries instead of caching empties", async () => {
+    // Backend handler swallows its own Polygon failure and returns ok({names:{}}).
+    stocvestAuthedFetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ names: {} }), { status: 200 })
+    );
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 500 })) as typeof fetch);
+    delete process.env.POLYGON_API_KEY;
+
+    const { GET } = await import("@/app/api/stocvest/market/symbol-names/route");
+    const res = await GET(new Request("http://localhost/api/stocvest/market/symbol-names?symbols=ON"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { names: Record<string, string>; degraded?: boolean };
+    expect(body.names).toEqual({});
+    expect(body.degraded).toBe(true);
+  });
+
   test("returns degraded when upstream and Polygon both fail", async () => {
     stocvestAuthedFetchMock.mockRejectedValue(new Error("network"));
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 500 })) as typeof fetch);
