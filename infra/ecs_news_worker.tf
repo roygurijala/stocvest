@@ -30,6 +30,12 @@ variable "news_impact_weighting_enabled" {
   default     = false
 }
 
+variable "day_profit_target_exit_enabled" {
+  description = "Day ledger monitor take-profit: close an open day validation position at the reference target (reference_structure_level) when the snapshot last price reaches it, checked before the VWAP-violation rule. Sets STOCVEST_DAY_PROFIT_TARGET_EXIT_ENABLED on the signal_resolution Lambda. Default off (OFF = legacy exits byte-identical)."
+  type        = bool
+  default     = false
+}
+
 # ECR repo for the news-worker image. Created unconditionally so you can build/push
 # (see scripts/build_push_news_worker.ps1) BEFORE setting news_worker_container_image
 # to its repository_url and bumping news_worker_desired_count > 0.
@@ -182,6 +188,9 @@ resource "aws_ecs_task_definition" "news_worker" {
       ]
       secrets = [
         {
+          # The worker's WebSocket reads BENZINGA_API_KEY (settings.benzinga_api_key).
+          # Map it from the generic BENZINGA_API_KEY secret field (the dedicated
+          # BENZINGA_NEWS_API_KEY also returned 401, so test the generic key here).
           name      = "BENZINGA_API_KEY"
           valueFrom = "${data.aws_secretsmanager_secret.external_api_keys[0].arn}:BENZINGA_API_KEY::"
         },

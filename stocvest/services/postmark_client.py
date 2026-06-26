@@ -42,6 +42,15 @@ def send_postmark_html_email(
     try:
         with httpx.Client(timeout=timeout_seconds) as client:
             resp = client.post(POSTMARK_EMAIL_URL, headers=headers, json=payload)
-        return resp.status_code == 200
+        if resp.status_code != 200:
+            return False
+        # A true accept is HTTP 200 *and* ErrorCode 0. Postmark can return 200 with a
+        # non-zero ErrorCode (e.g. inactive recipient / account sending blocked); treat
+        # those as soft failures so callers record FAILED rather than a misleading SENT.
+        try:
+            data = resp.json()
+        except ValueError:
+            return False
+        return int(data.get("ErrorCode", -1)) == 0
     except httpx.HTTPError:
         return False

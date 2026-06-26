@@ -347,6 +347,9 @@ resource "aws_lambda_function" "api" {
         STOCVEST_NEWS_EVENT_STUDY_REPORT_ENABLED = var.news_event_study_report_enabled ? "1" : "0"
         STOCVEST_REPORTS_S3_BUCKET               = aws_s3_bucket.reports.bucket
       } : {},
+      each.key == "signal_resolution" ? {
+        STOCVEST_DAY_PROFIT_TARGET_EXIT_ENABLED = var.day_profit_target_exit_enabled ? "1" : "0"
+      } : {},
       each.key == "signals" ? {
         STOCVEST_DISABLE_REDIS                  = "0"
         STOCVEST_NEWS_SENTIMENT_CACHE_ENABLED   = var.news_sentiment_cache_enabled ? "1" : "0"

@@ -8,6 +8,7 @@ from typing import Any
 
 from stocvest.data.models import AlertType
 from stocvest.services.alert_email_present import format_alert_pattern, format_direction
+from stocvest.services.alert_metrics import publish_email_send_outcome
 from stocvest.services.postmark_client import send_postmark_html_email
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -19,29 +20,31 @@ class EmailService:
     """Thin Postmark wrapper; failures are logged and surfaced as ``False`` return values."""
 
     def send_alert_email(self, *, to_email: str, alert_type: AlertType, context: dict[str, Any]) -> bool:
+        ok = False
         try:
             settings = get_settings()
             sender = (settings.stocvest_email_sender or "").strip()
             token = (settings.postmark_server_token or "").strip()
             if not sender or not token or not (to_email or "").strip():
                 _LOG.warning("email send skipped: missing sender, Postmark token, or recipient")
-                return False
-            subj = self._build_subject(alert_type, context)
-            body_html = self._build_html_body(alert_type, context)
-            ok = send_postmark_html_email(
-                server_token=token,
-                sender=sender,
-                to_email=to_email.strip(),
-                subject=subj,
-                html_body=body_html,
-                message_stream=settings.postmark_message_stream,
-            )
-            if not ok:
-                _LOG.warning("Postmark send_alert_email failed for %s", to_email.strip())
-            return ok
+            else:
+                subj = self._build_subject(alert_type, context)
+                body_html = self._build_html_body(alert_type, context)
+                ok = send_postmark_html_email(
+                    server_token=token,
+                    sender=sender,
+                    to_email=to_email.strip(),
+                    subject=subj,
+                    html_body=body_html,
+                    message_stream=settings.postmark_message_stream,
+                )
+                if not ok:
+                    _LOG.warning("Postmark send_alert_email failed for %s", to_email.strip())
         except Exception as exc:  # noqa: BLE001 — delivery errors must not propagate
             _LOG.warning("Postmark send_alert_email failed: %s", exc)
-            return False
+            ok = False
+        publish_email_send_outcome(success=ok)
+        return ok
 
     def send_trial_reminder_email(
         self,
@@ -194,6 +197,17 @@ class EmailService:
             hi = context.get("entry_zone_high")
             if isinstance(lo, (int, float)) and isinstance(hi, (int, float)):
                 rows.append(("Entry zone", f"${float(lo):.2f}–${float(hi):.2f}"))
+            stop = context.get("stop")
+            if stop is None:
+                stop = context.get("stop_level")
+            if isinstance(stop, (int, float)):
+                rows.append(("Stop loss", f"${float(stop):.2f}"))
+            t1 = context.get("target_1")
+            t2 = context.get("target_2")
+            if isinstance(t1, (int, float)) and isinstance(t2, (int, float)):
+                rows.append(("Take profit", f"${float(t1):.2f} → ${float(t2):.2f}"))
+            elif isinstance(t1, (int, float)):
+                rows.append(("Take profit", f"${float(t1):.2f}"))
             price = context.get("price")
             if isinstance(price, (int, float)):
                 rows.append(("Price", f"${float(price):.2f}"))

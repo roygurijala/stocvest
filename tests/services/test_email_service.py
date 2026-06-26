@@ -150,3 +150,28 @@ def test_html_execution_actionable_shows_strength_setup_and_zone() -> None:
     assert "$43.50" in html_out
     assert "Risk / reward" in html_out
     assert "Layer alignment" in html_out
+
+
+def test_html_execution_actionable_shows_stop_and_take_profit() -> None:
+    es = EmailService()
+    html_out = es._build_html_body(
+        AlertType.EXECUTION_ACTIONABLE,
+        {
+            "symbol": "NRIX",
+            "mode": "swing",
+            "direction": "bullish",
+            "strength": 75,
+            "entry_zone_low": 21.90,
+            "entry_zone_high": 22.35,
+            "stop": 15.07,
+            "target_1": 23.09,
+            "target_2": 45.00,
+            "price": 22.35,
+            "risk_reward": 1.6,
+        },
+    )
+    assert "Stop loss" in html_out
+    assert "$15.07" in html_out
+    assert "Take profit" in html_out
+    assert "$23.09" in html_out
+    assert "$45.00" in html_out
