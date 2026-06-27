@@ -66,3 +66,117 @@ def test_long_geometry_uses_analyst_target_as_resistance() -> None:
     assert t2 == 12.0
     assert prov == "resistance"
     assert stop is not None
+
+
+# --- B76: swing target geometry v2 (analyst-T2 cap + session-high T1 guard) -------------
+# Reproduces the served ATAI swing geometry: entry at the high of day ($5.31) with a
+# Perplexity analyst PT of $14 (+163%) that legacy logic promotes to a fantasy T2.
+
+_ATAI_BARS = [{"low": 3.6, "high": h} for h in [4.0, 4.5, 5.0, 5.1, 5.2, 5.25, 5.3]]
+
+
+def test_long_geometry_v2_off_is_legacy_atai() -> None:
+    """Flag OFF: served geometry is byte-identical to legacy (T1 = HOD, T2 = $14 analyst)."""
+    from stocvest.api.services.swing_composite_evidence import _long_side_geometry
+
+    _, t1, t2, _, prov = _long_side_geometry(
+        day_lo=5.05,
+        day_hi=5.31,
+        vwap=5.15,
+        prev_close=5.2,
+        last=5.31,
+        entry=5.31,
+        atr=0.5,
+        daily_bars=_ATAI_BARS,
+        analyst_target_levels=[14.0],
+        target_geometry_v2=False,
+    )
+    assert t1 == 5.31  # degenerate: T1 == entry == session high
+    assert t2 == 14.0  # uncapped analyst PT
+    assert prov == "resistance"
+
+
+def test_long_geometry_v2_caps_distant_analyst_target() -> None:
+    """Flag ON: a +163% analyst PT is dropped as a swing T2 (beyond the 40% band)."""
+    from stocvest.api.services.swing_composite_evidence import _long_side_geometry
+
+    stop, t1, t2, _, prov = _long_side_geometry(
+        day_lo=5.05,
+        day_hi=5.31,
+        vwap=5.15,
+        prev_close=5.2,
+        last=5.31,
+        entry=5.31,
+        atr=0.5,
+        daily_bars=_ATAI_BARS,
+        analyst_target_levels=[14.0],
+        target_geometry_v2=True,
+        analyst_max_pct=40.0,
+    )
+    assert t2 != 14.0
+    assert prov != "resistance"  # the only resistance candidate (analyst $14) was capped out
+    if t2 is not None:
+        assert t2 < 14.0
+
+
+def test_long_geometry_v2_rebuilds_degenerate_session_high_t1() -> None:
+    """Flag ON: a session-high T1 sitting on entry is rebuilt so T1 offers real reward."""
+    from stocvest.api.services.swing_composite_evidence import _long_side_geometry
+
+    _, t1, _, _, _ = _long_side_geometry(
+        day_lo=5.05,
+        day_hi=5.31,
+        vwap=5.15,
+        prev_close=5.2,
+        last=5.31,
+        entry=5.31,
+        atr=0.5,
+        daily_bars=_ATAI_BARS,
+        analyst_target_levels=[14.0],
+        target_geometry_v2=True,
+        analyst_max_pct=40.0,
+    )
+    assert t1 is not None
+    assert t1 > 5.31  # T1 must clear entry, not sit on it
+
+
+def test_long_geometry_v2_keeps_session_high_when_it_offers_reward() -> None:
+    """Flag ON but price below HOD: session high still clears entry, so T1 is unchanged."""
+    from stocvest.api.services.swing_composite_evidence import _long_side_geometry
+
+    _, t1, _, _, _ = _long_side_geometry(
+        day_lo=8.0,
+        day_hi=11.4,
+        vwap=9.0,
+        prev_close=8.5,
+        last=9.44,
+        entry=9.44,
+        daily_bars=[{"low": 2.0, "high": h} for h in [3.0, 4.5, 6.0, 8.0, 9.0, 10.5, 11.4]],
+        target_geometry_v2=True,
+    )
+    assert t1 == 11.4
+
+
+def test_scan_resistance_extra_proximity_pct_caps_analyst_level() -> None:
+    from stocvest.signals.structure_resistance_scanner import scan_nearest_resistance_above
+
+    bars = [{"low": 3.6, "high": h} for h in [4.0, 4.5, 5.0, 5.2, 5.3]]
+    # Without a cap the distant analyst level is honored (legacy behavior).
+    assert (
+        scan_nearest_resistance_above(bars, last=5.31, floor_above=5.31, extra_levels=[14.0])
+        == 14.0
+    )
+    # With a 40% cap it is dropped (14 > 5.31 * 1.40 = 7.434).
+    assert (
+        scan_nearest_resistance_above(
+            bars, last=5.31, floor_above=5.31, extra_levels=[14.0], extra_proximity_pct=40.0
+        )
+        is None
+    )
+    # A nearer analyst level inside the band still passes.
+    assert (
+        scan_nearest_resistance_above(
+            bars, last=5.31, floor_above=5.31, extra_levels=[6.5], extra_proximity_pct=40.0
+        )
+        == 6.5
+    )

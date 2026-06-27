@@ -94,14 +94,23 @@ def scan_nearest_resistance_above(
     pivot_window: int = PIVOT_WINDOW,
     recent_window: int = RECENT_WINDOW,
     extra_levels: list[float] | None = None,
+    extra_proximity_pct: float | None = None,
 ) -> float | None:
     """
     Nearest structural resistance strictly above ``floor_above`` and ``last``,
     within ``proximity_pct`` of ``last``. Returns None when no honest level exists.
+
+    ``extra_levels`` (e.g. analyst price targets) bypass the structural ``proximity_pct``
+    band by default. Pass ``extra_proximity_pct`` to also bound them: an extra level beyond
+    ``last * (1 + extra_proximity_pct/100)`` is dropped — prevents a long-horizon analyst PT
+    from becoming an unrealistic swing target.
     """
     if not bars or last <= 0 or floor_above <= 0:
         return None
     hi_cap = last * (1.0 + proximity_pct / 100.0)
+    extra_hi_cap = (
+        last * (1.0 + extra_proximity_pct / 100.0) if extra_proximity_pct is not None else None
+    )
     candidates: list[float] = []
     for level in _high_candidates(bars, pivot_window=pivot_window, recent_window=recent_window):
         if level > floor_above + 1e-6 and level > last + 1e-6 and level <= hi_cap + 1e-6:
@@ -111,9 +120,14 @@ def scan_nearest_resistance_above(
             level = float(raw)
         except (TypeError, ValueError):
             continue
-        # Analyst / external targets may sit beyond the structural proximity band.
-        if level > floor_above + 1e-6 and level > last + 1e-6:
-            candidates.append(level)
+        # Analyst / external targets may sit beyond the structural proximity band, but are
+        # still bounded by ``extra_proximity_pct`` when provided so a 12-month PT can't
+        # masquerade as a swing target.
+        if level <= floor_above + 1e-6 or level <= last + 1e-6:
+            continue
+        if extra_hi_cap is not None and level > extra_hi_cap + 1e-6:
+            continue
+        candidates.append(level)
     if not candidates:
         return None
     return round(min(candidates), 4)

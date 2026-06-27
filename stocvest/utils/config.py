@@ -312,6 +312,28 @@ class Settings(BaseSettings):
         False,
         alias="STOCVEST_DAY_PROFIT_TARGET_EXIT_ENABLED",
     )
+    # B76 — swing/day target geometry v2. Fixes two defects that produce misleading
+    # risk/reward in the deep-dive "what-if" planner:
+    #   (A) analyst price targets (Benzinga/Perplexity, ~12-month fundamental PTs) reach
+    #       T2 with no distance cap, so a +163% PT (e.g. ATAI $14 vs $5.31 entry) becomes
+    #       the headline reward and shows a fantasy 5.6:1.
+    #   (B) T1 = raw session high collapses onto entry when price prints at the high of
+    #       day, leaving T1 with zero reward so the planner promotes the distant T2.
+    # When ON: analyst-target T2 is capped to ``analyst_target_max_pct_from_entry`` and a
+    # degenerate session-high T1 falls back to in-band structural resistance, then 1R.
+    # OFF by default (ships dark): when OFF the served geometry is byte-identical to legacy.
+    stocvest_swing_target_geometry_v2_enabled: bool = Field(
+        False,
+        alias="STOCVEST_SWING_TARGET_GEOMETRY_V2_ENABLED",
+    )
+    # Max distance (percent above entry) an analyst price target may sit and still be used
+    # as a swing T2 when target geometry v2 is enabled. Beyond this it is dropped as a
+    # swing target (it remains visible in ``analyst_target_levels``). Lenient vs the 25%
+    # structural proximity band so near-term PTs still qualify.
+    stocvest_analyst_target_max_pct_from_entry: float = Field(
+        40.0,
+        alias="STOCVEST_ANALYST_TARGET_MAX_PCT_FROM_ENTRY",
+    )
     # B71 Phase C — scheduled offline news event-study report (read-only → S3). OFF by
     # default; the scheduled Lambda no-ops until enabled + a reports bucket is set.
     stocvest_news_event_study_report_enabled: bool = Field(
