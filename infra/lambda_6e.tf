@@ -351,15 +351,15 @@ resource "aws_lambda_function" "api" {
         STOCVEST_DAY_PROFIT_TARGET_EXIT_ENABLED = var.day_profit_target_exit_enabled ? "1" : "0"
       } : {},
       each.key == "signals" ? {
-        STOCVEST_DISABLE_REDIS                  = "0"
-        STOCVEST_NEWS_SENTIMENT_CACHE_ENABLED   = var.news_sentiment_cache_enabled ? "1" : "0"
-        STOCVEST_NEWS_SENTIMENT_PRIME_ENABLED   = var.news_sentiment_prime_enabled ? "1" : "0"
-        STOCVEST_NEWS_IMPACT_WEIGHTING_ENABLED  = var.news_impact_weighting_enabled ? "1" : "0"
+        STOCVEST_DISABLE_REDIS                    = "0"
+        STOCVEST_NEWS_SENTIMENT_CACHE_ENABLED     = var.news_sentiment_cache_enabled ? "1" : "0"
+        STOCVEST_NEWS_SENTIMENT_PRIME_ENABLED     = var.news_sentiment_prime_enabled ? "1" : "0"
+        STOCVEST_NEWS_IMPACT_WEIGHTING_ENABLED    = var.news_impact_weighting_enabled ? "1" : "0"
         STOCVEST_SWING_TARGET_GEOMETRY_V2_ENABLED = var.swing_target_geometry_v2_enabled ? "1" : "0"
-        STOCVEST_NEWS_TRIAGE_QUEUE_URL          = aws_sqs_queue.news_triage.url
-        DYNAMODB_GAP_INTEL_CACHE_TABLE          = aws_dynamodb_table.gap_intel_cache.name
-        DYNAMODB_SCANNER_EVALUATION_TRACE_TABLE = aws_dynamodb_table.scanner_evaluation_trace.name
-        GAP_INTEL_TICK_SYMBOLS                  = "SPY,QQQ,IWM"
+        STOCVEST_NEWS_TRIAGE_QUEUE_URL            = aws_sqs_queue.news_triage.url
+        DYNAMODB_GAP_INTEL_CACHE_TABLE            = aws_dynamodb_table.gap_intel_cache.name
+        DYNAMODB_SCANNER_EVALUATION_TRACE_TABLE   = aws_dynamodb_table.scanner_evaluation_trace.name
+        GAP_INTEL_TICK_SYMBOLS                    = "SPY,QQQ,IWM"
       } : {},
     )
   }
