@@ -1072,6 +1072,7 @@ export function DeepDive({
       target2Provenance != null &&
       target2Provenance !== "resistance";
     const t1TooClose = rrT1 != null && rrT1.ratio < 1;
+    const provenanceDirection: "bullish" | "bearish" = isLong ? "bullish" : "bearish";
     const c = (isInsufficient ? {} : composite) as Record<string, unknown>;
     const ezQuality =
       typeof c.entry_zone_quality === "string" ? (c.entry_zone_quality as string) : null;
@@ -1103,12 +1104,13 @@ export function DeepDive({
       atr,
       displayRr: structureRr,
       target2Provenance,
+      provenanceDirection,
       gateFails,
       t1TooClose,
       gateFailReason: gateFails
         ? t1TooClose
-          ? `T1 too close to entry (${rrT1?.ratio.toFixed(1)}:1) — ${target2ProvenanceLabel(target2Provenance) ?? "extended target unanchored"}`
-          : (target2ProvenanceLabel(target2Provenance) ?? "Extended target — unanchored")
+          ? `T1 too close to entry (${rrT1?.ratio.toFixed(1)}:1) — ${target2ProvenanceLabel(target2Provenance, provenanceDirection) ?? "extended target unanchored"}`
+          : (target2ProvenanceLabel(target2Provenance, provenanceDirection) ?? "Extended target — unanchored")
         : null
     };
   }, [displayPrice, setupBias, signalOverlay, referenceLevels, composite, isInsufficient]);
@@ -1818,7 +1820,7 @@ export function DeepDive({
                         ) : null}
                         {scenario?.target2Provenance && scenario.target2 != null ? (
                           <p style={{ margin: "6px 0 0", fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-                            T2: {target2ProvenanceLabel(scenario.target2Provenance) ?? scenario.target2Provenance}
+                            T2: {target2ProvenanceLabel(scenario.target2Provenance, scenario.provenanceDirection) ?? scenario.target2Provenance}
                           </p>
                         ) : null}
                         {scenario?.entryZoneQuality === "clamped" ? (
