@@ -36,6 +36,12 @@ variable "day_profit_target_exit_enabled" {
   default     = false
 }
 
+variable "swing_target_geometry_v2_enabled" {
+  description = "B76: swing/day deep-dive target geometry v2. Caps analyst price targets (Benzinga/Perplexity ~12-month PTs) so they can't become an unrealistic swing T2, and rebuilds a session-high T1 that has collapsed onto entry (price at high of day). Sets STOCVEST_SWING_TARGET_GEOMETRY_V2_ENABLED on the signals Lambda. Default off (OFF = served geometry byte-identical to legacy)."
+  type        = bool
+  default     = false
+}
+
 # ECR repo for the news-worker image. Created unconditionally so you can build/push
 # (see scripts/build_push_news_worker.ps1) BEFORE setting news_worker_container_image
 # to its repository_url and bumping news_worker_desired_count > 0.

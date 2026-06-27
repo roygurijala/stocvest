@@ -33,6 +33,12 @@ from stocvest.signals.structure_resistance_scanner import (
     scan_nearest_resistance_above,
     scan_nearest_support_below,
 )
+from stocvest.utils.config import get_settings
+
+# Minimum reward (percent above entry) a T1 must offer to be honest. The raw session high
+# collapses onto entry when price prints at the high of day; below this floor T1 is rebuilt
+# from in-band structural resistance, then a 1R projection (target geometry v2 only).
+_MIN_T1_REWARD_PCT = 0.3
 
 
 def _float_or_none(v: Any) -> float | None:
@@ -221,7 +227,22 @@ def _long_target_provenance_label(
     last: float | None,
     reference_target_2: float | None,
     target_2_provenance: str | None = None,
+    reference_target_1: float | None = None,
 ) -> str:
+    # Honest T1 wording: only call it "Session high" when T1 actually is the session high
+    # (legacy path, or v2 when the high still cleared entry). v2 may rebuild T1 from
+    # structural resistance or a 1R projection when the session high offered no reward.
+    t1_is_session_high = (
+        reference_target_1 is None
+        or (day_hi is not None and abs(float(reference_target_1) - float(day_hi)) <= 1e-6)
+    )
+    t1_label = "Session high (T1)" if t1_is_session_high else "Structural level (T1)"
+    if reference_target_1 is not None and reference_target_1 > 0:
+        if reference_target_2 is not None:
+            if target_2_provenance == "resistance":
+                return f"{t1_label} + structural resistance (T2)"
+            return f"{t1_label} + 2R projection (T2 — unanchored)"
+        return f"{t1_label} — primary target" if not t1_is_session_high else "Session high — primary target"
     if day_hi is not None and day_hi > 0:
         if reference_target_2 is not None:
             if target_2_provenance == "resistance":
@@ -370,12 +391,18 @@ def _long_side_geometry(
     zone_hi: float | None = None,
     daily_bars: list[dict[str, float]] | None = None,
     analyst_target_levels: list[float] | None = None,
+    target_geometry_v2: bool = False,
+    analyst_max_pct: float = 40.0,
 ) -> tuple[float | None, float | None, float | None, bool, str | None]:
     """
     Bullish reference levels anchored to session structure (not fixed % off day low).
 
     Stop: structural anchor merged with entry − k×ATR floor when ATR is available.
     Targets: session high as primary resistance; second target = 2R extension from entry when possible.
+
+    When ``target_geometry_v2`` is set (B76): a session-high T1 that offers no reward over
+    entry is rebuilt from in-band structural resistance (then a 1R projection), and analyst
+    price targets feeding T2 are capped at ``analyst_max_pct`` above entry.
     """
     structural = resolve_structural_stop_anchor(
         direction="bullish",
@@ -402,21 +429,52 @@ def _long_side_geometry(
             atr_k=k,
         )
 
+    # --- T1 (primary target) ---
+    entry_ref = entry_for_stop  # entry price the reward is measured from
     reference_target_1: float | None = None
-    if day_hi is not None and day_hi > 0:
-        reference_target_1 = round(float(day_hi), 4)
-    elif last is not None and last > 0:
-        reference_target_1 = round(float(last) * 1.012, 4)
+    if (
+        target_geometry_v2
+        and entry_ref is not None
+        and entry_ref > 0
+    ):
+        min_t1 = entry_ref * (1.0 + _MIN_T1_REWARD_PCT / 100.0)
+        if day_hi is not None and day_hi > min_t1:
+            # Session high still clears entry by a meaningful margin — keep it.
+            reference_target_1 = round(float(day_hi), 4)
+        else:
+            # Session high collapsed onto entry (price at/near HOD). Rebuild T1 from the
+            # nearest in-band structural resistance, then a 1R projection, then % fallback.
+            struct_t1 = (
+                scan_nearest_resistance_above(daily_bars, last=entry_ref, floor_above=entry_ref)
+                if daily_bars
+                else None
+            )
+            if struct_t1 is not None and struct_t1 > min_t1:
+                reference_target_1 = round(float(struct_t1), 4)
+            elif reference_stop is not None and reference_stop < entry_ref:
+                reference_target_1 = round(entry_ref + (entry_ref - reference_stop), 4)  # 1R
+            elif last is not None and last > 0:
+                reference_target_1 = round(float(last) * 1.012, 4)
+    else:
+        if day_hi is not None and day_hi > 0:
+            reference_target_1 = round(float(day_hi), 4)
+        elif last is not None and last > 0:
+            reference_target_1 = round(float(last) * 1.012, 4)
 
+    # --- T2 (secondary target) ---
     reference_target_2: float | None = None
     target_2_provenance: str | None = None
     entry_guess = last if (last is not None and last > 0) else None
+    # Cap analyst price targets to a swing-realistic band so a long-horizon PT can't become
+    # the headline reward. ``None`` (legacy) leaves analyst levels uncapped beyond structure.
+    extra_proximity_pct = analyst_max_pct if target_geometry_v2 else None
     if daily_bars and entry_guess is not None and reference_target_1 is not None:
         structural_t2 = scan_nearest_resistance_above(
             daily_bars,
             last=entry_guess,
             floor_above=reference_target_1,
             extra_levels=analyst_target_levels,
+            extra_proximity_pct=extra_proximity_pct,
         )
         if structural_t2 is not None:
             reference_target_2 = structural_t2
@@ -624,6 +682,10 @@ def build_swing_composite_evidence_fields(
     trading_mode = _trading_mode_from_payload(payload)
     analyst_target_levels = analyst_targets_from_payload(payload)
 
+    _settings = get_settings()
+    target_geometry_v2 = bool(_settings.stocvest_swing_target_geometry_v2_enabled)
+    analyst_max_pct = float(_settings.stocvest_analyst_target_max_pct_from_entry)
+
     use_long = _use_long_rr_structure(composite.verdict, day_lo, day_hi, last)
     if use_long:
         reference_stop_level, reference_target_1, reference_target_2, used_atr_floor, target_2_provenance = _long_side_geometry(
@@ -641,6 +703,8 @@ def build_swing_composite_evidence_fields(
             zone_hi=zone_hi,
             daily_bars=daily_bars,
             analyst_target_levels=analyst_target_levels or None,
+            target_geometry_v2=target_geometry_v2,
+            analyst_max_pct=analyst_max_pct,
         )
         reference_stop_provenance = format_merged_stop_provenance(
             _long_stop_provenance_label(
@@ -658,6 +722,7 @@ def build_swing_composite_evidence_fields(
             last=last,
             reference_target_2=reference_target_2,
             target_2_provenance=target_2_provenance,
+            reference_target_1=reference_target_1,
         )
     else:
         reference_stop_level, reference_target_1, reference_target_2, used_atr_floor, target_2_provenance = _short_side_geometry(
