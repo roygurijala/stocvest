@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { structureRiskRewardLong } from "@/lib/risk-reward-structure";
-import { evaluateScenarioDeskGate } from "@/lib/target-provenance";
+import { evaluateScenarioDeskGate, target2ProvenanceLabel } from "@/lib/target-provenance";
 
 describe("target-provenance honesty layer", () => {
   test("UBXG-like geometry: unanchored T2 does not promote headline R/R", () => {
@@ -33,5 +33,28 @@ describe("target-provenance honesty layer", () => {
     const rr = structureRiskRewardLong(100, 115, 95, 130, "2r_extension");
     expect(rr).not.toBeNull();
     expect(rr!).toBeGreaterThan(1);
+  });
+
+  test("structural T2 label flips to support-anchored for a short", () => {
+    expect(target2ProvenanceLabel("resistance")).toBe("Resistance-anchored");
+    expect(target2ProvenanceLabel("resistance", "bullish")).toBe("Resistance-anchored");
+    // INTC-style short: the downside target is anchored to support, not resistance.
+    expect(target2ProvenanceLabel("resistance", "bearish")).toBe("Support-anchored");
+    // Unanchored labels are direction-agnostic.
+    expect(target2ProvenanceLabel("2r_extension", "bearish")).toBe("2R projection — unanchored");
+  });
+
+  test("short gate block reason uses support-anchored wording", () => {
+    const gate = evaluateScenarioDeskGate({
+      direction: "bearish",
+      entry: 127.62,
+      stop: 142.16,
+      target: 104.92,
+      target1: 125.5,
+      target2: 104.92,
+      target2Provenance: "2r_extension",
+      deskMinRr: 2
+    });
+    expect(gate.gateBlockReason).toMatch(/unanchored/i);
   });
 });

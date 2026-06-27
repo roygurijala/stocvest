@@ -15,10 +15,15 @@ export function target2EligibleForGate(provenance: Target2Provenance | null | un
   return provenance === "resistance";
 }
 
-export function target2ProvenanceLabel(provenance: Target2Provenance | null | undefined): string | null {
+export function target2ProvenanceLabel(
+  provenance: Target2Provenance | null | undefined,
+  direction: "bullish" | "bearish" = "bullish"
+): string | null {
   if (provenance === "2r_extension") return "2R projection — unanchored";
   if (provenance === "t1_bump") return "T1 bump — unanchored";
-  if (provenance === "resistance") return "Resistance-anchored";
+  // The "resistance" token means "anchored at a real structural level" regardless of
+  // side; for a short the downside T2 is anchored to *support*, so the label flips.
+  if (provenance === "resistance") return direction === "bearish" ? "Support-anchored" : "Resistance-anchored";
   return null;
 }
 
@@ -72,7 +77,7 @@ export function evaluateScenarioDeskGate(args: {
     return {
       rr: scenarioRr,
       clearsDeskRr: false,
-      gateBlockReason: target2ProvenanceLabel(args.target2Provenance) ?? "Extended target — unanchored",
+      gateBlockReason: target2ProvenanceLabel(args.target2Provenance, args.direction) ?? "Extended target — unanchored",
       t1Rr,
       usesUnanchoredT2: true
     };
