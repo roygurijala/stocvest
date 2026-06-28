@@ -42,6 +42,36 @@ variable "swing_target_geometry_v2_enabled" {
   default     = false
 }
 
+variable "day_session_phase_gate_enabled" {
+  description = "B77: day-desk midday session-phase quality gate. When on, day signals firing inside the midday dead-zone (default 12:00-14:00 ET) do NOT qualify as tradeable (still recorded as shadow; no alert). 60-day as-traded replay: midday averages ~-1.0%/trade vs ~-0.21% in the 14:00-16:00 window. Sets STOCVEST_DAY_SESSION_PHASE_GATE_ENABLED on the signals Lambda. Default off (OFF = identical qualification to legacy)."
+  type        = bool
+  default     = false
+}
+
+variable "day_deadzone_start_et" {
+  description = "B77: ET clock 'HH:MM' start of the suppressed midday window (half-open [start, end))."
+  type        = string
+  default     = "12:00"
+}
+
+variable "day_deadzone_end_et" {
+  description = "B77: ET clock 'HH:MM' end of the suppressed midday window (half-open [start, end))."
+  type        = string
+  default     = "14:00"
+}
+
+variable "day_deadzone_score_penalty" {
+  description = "B77: points subtracted from the 0-100 day decision score for a midday fire (soft penalty, not a hard block). 60-day replay: -12 drops the worst [72,84) midday band and lifts day expectancy -0.53% -> -0.38% while keeping ~2x more signals than a full block."
+  type        = number
+  default     = 12
+}
+
+variable "day_deadzone_rvol_override" {
+  description = "B77: relative-volume (volume vs ADV) at/above which a midday fire bypasses the penalty (news/momentum surges still qualify). A sector-calibrated volume_surge also bypasses."
+  type        = number
+  default     = 2.0
+}
+
 # ECR repo for the news-worker image. Created unconditionally so you can build/push
 # (see scripts/build_push_news_worker.ps1) BEFORE setting news_worker_container_image
 # to its repository_url and bumping news_worker_desired_count > 0.

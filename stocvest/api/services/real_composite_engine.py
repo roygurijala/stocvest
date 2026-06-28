@@ -33,9 +33,13 @@ from stocvest.api.services.signal_validation_eligibility import (
     gate_blob_json,
 )
 from stocvest.api.services.validation_timing import (
+    DAY_DEADZONE_END_ET,
+    DAY_DEADZONE_START_ET,
     MIN_SESSION_VOLUME_SHARES_DAY_LEDGER,
     build_regime_window_key,
+    is_day_ledger_dead_zone_et,
     is_day_ledger_entry_session_et,
+    parse_et_hhmm,
 )
 from stocvest.api.services.swing_composite_evidence import (
     build_swing_composite_evidence_fields,
@@ -69,6 +73,7 @@ from stocvest.data.symbol_universe_eligibility import UniverseEligibilityContext
 from stocvest.data.ticker_reference import TickerReference
 from stocvest.data.ticker_reference_cache import get_ticker_reference
 from stocvest.signals.confluence import ConfluenceDetector, confluence_result_to_response_fields, normalize_direction
+from stocvest.signals.intraday_rvol import session_relative_volume
 from stocvest.signals.session_price_guard import session_gap_percent
 from stocvest.signals.composite_score import (
     CompositeSignal,
@@ -288,6 +293,7 @@ class RealCompositeEnginePhase:
     sector_display: str | None = None
     sic_bucket_for_geo: str | None = None
     vix_snap: Snapshot | None = None
+    spy_snap: Snapshot | None = None
     ticker_ref: TickerReference | None = None
     market_context_dampening: dict[str, Any] | None = None
     perplexity_headwinds: tuple[str, ...] = ()
@@ -590,6 +596,7 @@ async def run_real_composite_engine_phase(
         sector_display=sector_display,
         sic_bucket_for_geo=sic_bucket_for_geo,
         vix_snap=vix_snap,
+        spy_snap=spy_snap,
         ticker_ref=ticker_ref,
         market_context_dampening=damp_meta,
         perplexity_headwinds=tuple(perplexity_headwinds),
@@ -617,6 +624,7 @@ async def build_real_composite_response(
 
     sym = phase.sym
     sym_snap = phase.sym_snap
+    spy_snap = phase.spy_snap
     bars = phase.bars
     daily_bars = phase.daily_bars
     news_rows = phase.news_rows
@@ -985,6 +993,63 @@ async def build_real_composite_response(
                         rr_f = float(rr_raw)
                     except (TypeError, ValueError):
                         rr_f = None
+                gen_at = datetime.now(timezone.utc)
+                # B77 step-1 — time-of-day-normalized participation telemetry. Always
+                # computed for day rows (shadow metric, persisted) so the midday gate /
+                # a future participation-regime gate can be validated on real data. This
+                # is a REAL relative-volume (≈1.0 = average pace for this clock time),
+                # unlike tech.volume_vs_adv (last-bar/ADV, structurally <1, time-biased).
+                _adv_rvol = (
+                    float(sym_snap.prev_day_volume)
+                    if sym_snap and sym_snap.prev_day_volume
+                    else None
+                )
+                _day_vol = (
+                    float(sym_snap.day_volume) if sym_snap and sym_snap.day_volume else None
+                )
+                intraday_rvol = session_relative_volume(_day_vol, _adv_rvol, gen_at)
+                _spy_day_vol = (
+                    float(spy_snap.day_volume) if spy_snap and spy_snap.day_volume else None
+                )
+                _spy_adv = (
+                    float(spy_snap.prev_day_volume)
+                    if spy_snap and spy_snap.prev_day_volume
+                    else None
+                )
+                market_rvol = session_relative_volume(_spy_day_vol, _spy_adv, gen_at)
+                # B77 — midday session-phase quality penalty (flag-gated, default OFF).
+                # Instead of a hard block, marginal day signals firing in the midday
+                # dead-zone get a decision-score penalty (so only low-conviction setups
+                # fall below the actionable threshold); an RVOL surge bypasses it.
+                session_phase_penalty = 0.0
+                session_phase_context: dict[str, Any] | None = None
+                _phase_settings = get_settings()
+                if _phase_settings.stocvest_day_session_phase_gate_enabled:
+                    dz_start = parse_et_hhmm(
+                        _phase_settings.stocvest_day_deadzone_start_et, DAY_DEADZONE_START_ET
+                    )
+                    dz_end = parse_et_hhmm(
+                        _phase_settings.stocvest_day_deadzone_end_et, DAY_DEADZONE_END_ET
+                    )
+                    in_dead_zone = is_day_ledger_dead_zone_et(
+                        gen_at, start_et=dz_start, end_et=dz_end
+                    )
+                    rvol_override = bool(getattr(tech, "volume_surge", False)) or (
+                        intraday_rvol is not None
+                        and intraday_rvol >= float(_phase_settings.stocvest_day_deadzone_rvol_override)
+                    )
+                    if in_dead_zone and not rvol_override:
+                        session_phase_penalty = float(
+                            _phase_settings.stocvest_day_deadzone_score_penalty
+                        )
+                    session_phase_context = {
+                        "in_dead_zone": in_dead_zone,
+                        "window_et": f"{dz_start.strftime('%H:%M')}-{dz_end.strftime('%H:%M')}",
+                        "intraday_rvol": intraday_rvol,
+                        "market_rvol": market_rvol,
+                        "rvol_override": rvol_override,
+                        "penalty": session_phase_penalty,
+                    }
                 eligible, gates = evaluate_day_ledger_entry(
                     response_status=str(response_body.get("status") or "active"),
                     verdict=composite.verdict,
@@ -996,8 +1061,9 @@ async def build_real_composite_response(
                     orb_signal=str(tech.orb_signal or "").strip() or None,
                     vwap_state=str(getattr(tech, "vwap_state", None) or "").strip() or None,
                     market_environment=_market_env,
+                    session_phase_penalty_0_100=session_phase_penalty,
+                    session_phase_context=session_phase_context,
                 )
-                gen_at = datetime.now(timezone.utc)
                 if eligible:
                     if not is_day_ledger_entry_session_et(gen_at):
                         eligible = False
@@ -1075,6 +1141,8 @@ async def build_real_composite_response(
                     regime_label_at_entry=str(macro.market_regime or "neutral"),
                     sector_label_at_entry=str(getattr(sector, "sector_signal", None) or sector.verdict or ""),
                     vwap_state_at_entry=str(getattr(tech, "vwap_state", None) or "") or None,
+                    intraday_rvol=intraday_rvol,
+                    market_rvol=market_rvol,
                     regime_window_key=rwk,
                     ledger_position_open=bool(eligible),
                 )

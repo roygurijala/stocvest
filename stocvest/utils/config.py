@@ -334,6 +334,39 @@ class Settings(BaseSettings):
         40.0,
         alias="STOCVEST_ANALYST_TARGET_MAX_PCT_FROM_ENTRY",
     )
+    # B77 — day-desk session-phase quality gate. The 60-day as-traded replay shows the
+    # midday window (default 12:00–14:00 ET) averages ≈ −1.0%/trade vs ≈ −0.21% in the
+    # 14:00–16:00 window. When ON, day signals firing inside the window do NOT qualify
+    # (still recorded as shadow for measurement; no alert). OFF by default (ships dark).
+    stocvest_day_session_phase_gate_enabled: bool = Field(
+        False,
+        alias="STOCVEST_DAY_SESSION_PHASE_GATE_ENABLED",
+    )
+    # ET clock bounds (``"HH:MM"``) of the suppressed midday window; half-open [start, end).
+    stocvest_day_deadzone_start_et: str = Field(
+        "12:00",
+        alias="STOCVEST_DAY_DEADZONE_START_ET",
+    )
+    stocvest_day_deadzone_end_et: str = Field(
+        "14:00",
+        alias="STOCVEST_DAY_DEADZONE_END_ET",
+    )
+    # Points subtracted from the 0–100 day decision score for a midday fire (soft penalty,
+    # not a hard block — only low-conviction setups fall below the actionable threshold).
+    # 60-day replay: −12 drops the [72,84) midday band (≈ −1.5%/trade) and lifts day
+    # expectancy −0.53% → −0.38% while keeping ~2× more signals than a hard block.
+    stocvest_day_deadzone_score_penalty: float = Field(
+        12.0,
+        alias="STOCVEST_DAY_DEADZONE_SCORE_PENALTY",
+    )
+    # Time-of-day-normalized intraday RVOL (``intraday_rvol`` ≈ 1.0 = average pace for this
+    # clock time; see signals/intraday_rvol.py) at/above which a midday fire BYPASSES the
+    # penalty — so genuine news/momentum surges still qualify. ``volume_surge`` also bypasses.
+    # NB: uses the real participation metric, not tech.volume_vs_adv (last-bar/ADV, ~always <1).
+    stocvest_day_deadzone_rvol_override: float = Field(
+        2.0,
+        alias="STOCVEST_DAY_DEADZONE_RVOL_OVERRIDE",
+    )
     # B71 Phase C — scheduled offline news event-study report (read-only → S3). OFF by
     # default; the scheduled Lambda no-ops until enabled + a reports bucket is set.
     stocvest_news_event_study_report_enabled: bool = Field(
