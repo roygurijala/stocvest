@@ -17,7 +17,7 @@ _LOG = get_logger(__name__)
 SYSTEM_DEFAULTS: list[str] = list(LIQUID_SYMBOLS_FALLBACK[:12])
 
 # Bounded gap-intelligence / Polygon batch path when full US snapshot times out.
-BOUNDED_SCAN_MAX_SYMBOLS = 120
+BOUNDED_SCAN_MAX_SYMBOLS = 250
 
 
 def get_scan_symbols(user_id: str | None, watchlist_store: WatchlistStore | None) -> list[str]:

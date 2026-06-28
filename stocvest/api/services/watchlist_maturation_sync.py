@@ -18,6 +18,7 @@ from stocvest.data.watchlist_maturation_transition_repository import (
 )
 from stocvest.data.watchlist_store import WatchlistStore, get_watchlist_store
 from stocvest.models.watchlist import (
+    ACTIONABLE_THRESHOLD,
     MATURATION_LAYER_KEYS,
     WatchlistEntry,
     WatchlistMode,
@@ -243,6 +244,21 @@ def _alignment_fields(
     return aligned, missing, pct, top_reason, bias
 
 
+def _composite_decision_from_body(body: dict[str, Any]) -> str:
+    """Align maturation actionable state with ledger qualification when present."""
+    if body.get("ledger_qualified") is True:
+        return "actionable"
+    ds = str(body.get("decision_state") or "").strip().lower()
+    if ds in ("actionable", "monitor", "blocked"):
+        return ds
+    summary = str(body.get("signal_summary") or "").strip().lower()
+    if summary in ("bullish", "bearish"):
+        return "actionable"
+    if summary == "neutral":
+        return "monitor"
+    return ""
+
+
 def sync_watchlist_maturation_from_composite(
     *,
     user_id: str,
@@ -292,13 +308,9 @@ def sync_watchlist_maturation_from_composite(
     prev = repo.get_entry(user_id, sym_u, wl_mode)
     prev_state = prev.state if prev else None
     was_invalidated = prev_state == WatchlistState.INVALIDATED
-    composite_decision = str(composite_body.get("decision_state") or "").strip().lower()
-    if not composite_decision:
-        summary = str(composite_body.get("signal_summary") or "").strip().lower()
-        if summary in ("bullish", "bearish"):
-            composite_decision = "actionable"
-        elif summary == "neutral":
-            composite_decision = "monitor"
+    composite_decision = _composite_decision_from_body(composite_body)
+    if composite_body.get("ledger_qualified") is True:
+        layers_aligned = max(layers_aligned, ACTIONABLE_THRESHOLD)
     new_state = derive_maturation_state(
         layers_aligned,
         prev_state,
