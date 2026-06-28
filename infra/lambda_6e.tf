@@ -356,6 +356,11 @@ resource "aws_lambda_function" "api" {
         STOCVEST_NEWS_SENTIMENT_PRIME_ENABLED     = var.news_sentiment_prime_enabled ? "1" : "0"
         STOCVEST_NEWS_IMPACT_WEIGHTING_ENABLED    = var.news_impact_weighting_enabled ? "1" : "0"
         STOCVEST_SWING_TARGET_GEOMETRY_V2_ENABLED = var.swing_target_geometry_v2_enabled ? "1" : "0"
+        STOCVEST_DAY_SESSION_PHASE_GATE_ENABLED   = var.day_session_phase_gate_enabled ? "1" : "0"
+        STOCVEST_DAY_DEADZONE_START_ET            = var.day_deadzone_start_et
+        STOCVEST_DAY_DEADZONE_END_ET              = var.day_deadzone_end_et
+        STOCVEST_DAY_DEADZONE_SCORE_PENALTY       = tostring(var.day_deadzone_score_penalty)
+        STOCVEST_DAY_DEADZONE_RVOL_OVERRIDE       = tostring(var.day_deadzone_rvol_override)
         STOCVEST_NEWS_TRIAGE_QUEUE_URL            = aws_sqs_queue.news_triage.url
         DYNAMODB_GAP_INTEL_CACHE_TABLE            = aws_dynamodb_table.gap_intel_cache.name
         DYNAMODB_SCANNER_EVALUATION_TRACE_TABLE   = aws_dynamodb_table.scanner_evaluation_trace.name

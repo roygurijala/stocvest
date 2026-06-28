@@ -21,6 +21,12 @@ SWING_LEDGER_ENTRY_END_ET: Final = time(16, 15)
 DAY_RTH_OPEN_ET: Final = time(9, 30)
 DAY_RTH_LAST_ENTRY_ET: Final = time(15, 59)
 
+# Day: midday low-quality "dead zone". 60-day as-traded replay shows day-desk
+# signals fired 12:00–14:00 ET average ≈ −1.0%/trade (vs ≈ −0.21% in the 14:00–16:00
+# window and +0.27% in the 9:30–10:00 opening). Flag-gated; window env-overridable.
+DAY_DEADZONE_START_ET: Final = time(12, 0)
+DAY_DEADZONE_END_ET: Final = time(14, 0)
+
 # Day monitor: discretionary flatten before the bell (first-hit ordering in monitor).
 DAY_FLATTEN_CUTOFF_ET: Final = time(15, 55)
 
@@ -64,6 +70,38 @@ def is_day_ledger_entry_session_et(ref_utc: datetime) -> bool:
         return False
     t = et.time()
     return DAY_RTH_OPEN_ET <= t <= DAY_RTH_LAST_ENTRY_ET
+
+
+def parse_et_hhmm(value: str | None, fallback: time) -> time:
+    """Parse an ``"HH:MM"`` ET clock string; return ``fallback`` on any bad input."""
+    if not value:
+        return fallback
+    try:
+        hh, mm = str(value).strip().split(":")
+        return time(int(hh), int(mm))
+    except (ValueError, TypeError):
+        return fallback
+
+
+def is_day_ledger_dead_zone_et(
+    ref_utc: datetime,
+    *,
+    start_et: time | None = None,
+    end_et: time | None = None,
+) -> bool:
+    """True when ``ref_utc`` falls in the configured midday low-quality window ``[start, end)``.
+
+    Half-open by design so the boundary minute (default 14:00) re-qualifies into the
+    healthier afternoon window. Weekends never match (no entries anyway).
+    """
+    et = now_et(ref_utc)
+    if not _is_weekday_et(et.date()):
+        return False
+    start = start_et or DAY_DEADZONE_START_ET
+    end = end_et or DAY_DEADZONE_END_ET
+    if start >= end:
+        return False
+    return start <= et.time() < end
 
 
 def is_swing_monitor_evaluation_window_et(ref_utc: datetime) -> bool:

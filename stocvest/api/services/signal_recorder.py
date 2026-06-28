@@ -169,6 +169,10 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
         item["sector_label_at_entry"] = rec.sector_label_at_entry
     if rec.vwap_state_at_entry:
         item["vwap_state_at_entry"] = rec.vwap_state_at_entry
+    if rec.intraday_rvol is not None:
+        item["intraday_rvol"] = Decimal(str(rec.intraday_rvol))
+    if rec.market_rvol is not None:
+        item["market_rvol"] = Decimal(str(rec.market_rvol))
     if rec.regime_window_key:
         item["regime_window_key"] = rec.regime_window_key
     if rec.ledger_position_open is not None:
@@ -1096,6 +1100,10 @@ def _public_api_shape(rec: SignalRecord) -> dict[str, Any]:
         out["sector_label_at_entry"] = rec.sector_label_at_entry
     if rec.vwap_state_at_entry:
         out["vwap_state_at_entry"] = rec.vwap_state_at_entry
+    if rec.intraday_rvol is not None:
+        out["intraday_rvol"] = float(rec.intraday_rvol)
+    if rec.market_rvol is not None:
+        out["market_rvol"] = float(rec.market_rvol)
     if rec.regime_window_key:
         out["regime_window_key"] = rec.regime_window_key
     if rec.ledger_position_open is not None:

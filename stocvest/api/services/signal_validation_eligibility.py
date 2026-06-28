@@ -222,8 +222,16 @@ def evaluate_day_ledger_entry(
     orb_signal: str | None,
     vwap_state: str | None,
     market_environment: dict[str, Any] | None = None,
+    session_phase_penalty_0_100: float = 0.0,
+    session_phase_context: dict[str, Any] | None = None,
 ) -> tuple[bool, dict[str, Any]]:
-    """Day: intraday structure plus shared gates; R/R minimum from environment when provided."""
+    """Day: intraday structure plus shared gates; R/R minimum from environment when provided.
+
+    ``session_phase_penalty_0_100`` (B77) is subtracted from the 0–100 decision score
+    before the actionable-threshold check, so a low-conviction signal firing in the
+    midday dead-zone fails while a strong one survives. ``0.0`` + ``None`` context →
+    behaviour byte-identical to legacy.
+    """
     gates: dict[str, Any] = {}
     ds = derive_decision_state(response_status=response_status, verdict=verdict)
     gates["decision_state"] = {
@@ -255,11 +263,24 @@ def evaluate_day_ledger_entry(
         ok = False
 
     s100 = _score_0_100_from_composite(composite_score)
-    if s100 < MIN_ACTIONABLE_SCORE_0_100:
+    penalty = max(0.0, float(session_phase_penalty_0_100))
+    s100_eff = s100 - penalty
+    if s100_eff < MIN_ACTIONABLE_SCORE_0_100:
         gates["decision_score"] = {"pass": False, "value": s100, "min": MIN_ACTIONABLE_SCORE_0_100}
+        if penalty > 0:
+            gates["decision_score"]["effective"] = s100_eff
+            gates["decision_score"]["penalty"] = penalty
         ok = False
     else:
         gates["decision_score"] = {"pass": True, "value": s100}
+        if penalty > 0:
+            gates["decision_score"]["effective"] = s100_eff
+            gates["decision_score"]["penalty"] = penalty
+    if session_phase_context is not None:
+        gates["session_phase"] = {
+            **session_phase_context,
+            "pass": penalty <= 0 or s100_eff >= MIN_ACTIONABLE_SCORE_0_100,
+        }
 
     ar = float(alignment_ratio)
     if ar < MIN_ALIGNMENT_RATIO:

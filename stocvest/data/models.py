@@ -449,6 +449,11 @@ class SignalRecord(BaseModel):
     regime_label_at_entry: str | None = None
     sector_label_at_entry: str | None = None
     vwap_state_at_entry: str | None = None
+    #: B77 step-1 shadow telemetry — time-of-day-normalized intraday relative volume
+    #: (≈1.0 = average pace for this clock time). ``intraday_rvol`` is the symbol's;
+    #: ``market_rvol`` is SPY's (broad-market participation). Populated for day rows.
+    intraday_rvol: float | None = None
+    market_rvol: float | None = None
     regime_window_key: str | None = None
     #: True while the position is open under rule-based monitoring; False when a rule exit fires.
     ledger_position_open: bool | None = None
@@ -584,6 +589,8 @@ class SignalRecord(BaseModel):
             regime_label_at_entry=_s("regime_label_at_entry"),
             sector_label_at_entry=_s("sector_label_at_entry"),
             vwap_state_at_entry=_s("vwap_state_at_entry"),
+            intraday_rvol=_f("intraday_rvol"),
+            market_rvol=_f("market_rvol"),
             regime_window_key=_s("regime_window_key"),
             ledger_position_open=_bool("ledger_position_open") if item.get("ledger_position_open") is not None else None,
             validation_outcome=_norm_vo(_s("validation_outcome")),
