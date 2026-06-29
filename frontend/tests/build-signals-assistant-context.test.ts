@@ -83,4 +83,52 @@ describe("buildSignalsPageAssistantContext", () => {
     expect(ctx?.analysis_status).toBe("loading");
     expect(ctx?.decision_state).toBeUndefined();
   });
+
+  test("honors a custom pageId (Trading Room deep dive) while keeping full depth", () => {
+    const ctx = buildSignalsPageAssistantContext({
+      pageId: "dashboard/trading-room",
+      tradingMode: "day",
+      symbol: "intc",
+      symbolCommitted: true,
+      hasValidSignal: true,
+      compositeLoading: false,
+      isInsufficientComposite: false,
+      pageDecision: monitorDecision,
+      signalsPresentRows: rows,
+      setupBias: "Bullish",
+      compositeAlignmentRatio: 0.55,
+      layerAgreementPercent: 55,
+      setupJudgment: null,
+      compositeResult: compositeLoaded,
+      gapIntelSnapshot: null,
+      signalEvidence: null
+    });
+    expect(ctx?.page).toBe("dashboard/trading-room");
+    expect(ctx?.trading_mode).toBe("day");
+    expect(ctx?.symbol).toBe("INTC");
+    expect(ctx?.analysis_status).toBe("loaded");
+    expect(ctx?.decision_state).toBe("monitor");
+    expect(ctx?.layer_status?.technical).toBe("Bullish");
+  });
+
+  test("defaults pageId to signals/layers when omitted", () => {
+    const ctx = buildSignalsPageAssistantContext({
+      tradingMode: "swing",
+      symbol: "AMD",
+      symbolCommitted: false,
+      hasValidSignal: false,
+      compositeLoading: false,
+      isInsufficientComposite: false,
+      pageDecision: null,
+      signalsPresentRows: [],
+      setupBias: "Neutral",
+      compositeAlignmentRatio: null,
+      layerAgreementPercent: null,
+      setupJudgment: null,
+      compositeResult: null,
+      gapIntelSnapshot: null,
+      signalEvidence: null
+    });
+    expect(ctx?.page).toBe("signals/layers");
+  });
 });
