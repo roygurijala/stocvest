@@ -731,7 +731,11 @@ async def build_swing_composite_response(
             pass
     # Entry-zone synthesis inputs: config (Secrets Manager) + swing anchors (SMA).
     payload_stub["entry_zone_config"] = asdict(params.entry_zone)
-    for _k, _v in (("sma20", getattr(tech, "sma20", None)), ("sma50", getattr(tech, "sma50", None))):
+    for _k, _v in (
+        ("sma20", getattr(tech, "sma20", None)),
+        ("sma50", getattr(tech, "sma50", None)),
+        ("sma200", getattr(tech, "sma200", None)),
+    ):
         if isinstance(_v, (int, float)) and float(_v) > 0:
             payload_stub[_k] = round(float(_v), 4)
     response_body.update(

@@ -3,11 +3,23 @@
  * Keep in sync with `stocvest/api/services/target_provenance.py`.
  */
 
-export type Target2Provenance = "2r_extension" | "t1_bump" | "resistance";
+export type Target2Provenance =
+  | "2r_extension"
+  | "t1_bump"
+  | "resistance"
+  | "atr_extension"
+  | "analyst_target";
 
 export function parseTarget2Provenance(raw: unknown): Target2Provenance | null {
   const v = typeof raw === "string" ? raw.trim() : "";
-  if (v === "2r_extension" || v === "t1_bump" || v === "resistance") return v;
+  if (
+    v === "2r_extension" ||
+    v === "t1_bump" ||
+    v === "resistance" ||
+    v === "atr_extension" ||
+    v === "analyst_target"
+  )
+    return v;
   return null;
 }
 
@@ -20,7 +32,9 @@ export function target2ProvenanceLabel(
   direction: "bullish" | "bearish" = "bullish"
 ): string | null {
   if (provenance === "2r_extension") return "2R projection — unanchored";
+  if (provenance === "atr_extension") return "ATR projection — unanchored";
   if (provenance === "t1_bump") return "T1 bump — unanchored";
+  if (provenance === "analyst_target") return "Analyst-target-implied — not structural";
   // The "resistance" token means "anchored at a real structural level" regardless of
   // side; for a short the downside T2 is anchored to *support*, so the label flips.
   if (provenance === "resistance") return direction === "bearish" ? "Support-anchored" : "Resistance-anchored";

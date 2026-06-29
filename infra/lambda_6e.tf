@@ -356,6 +356,7 @@ resource "aws_lambda_function" "api" {
         STOCVEST_NEWS_SENTIMENT_PRIME_ENABLED     = var.news_sentiment_prime_enabled ? "1" : "0"
         STOCVEST_NEWS_IMPACT_WEIGHTING_ENABLED    = var.news_impact_weighting_enabled ? "1" : "0"
         STOCVEST_SWING_TARGET_GEOMETRY_V2_ENABLED = var.swing_target_geometry_v2_enabled ? "1" : "0"
+        STOCVEST_TARGET_GEOMETRY_V3_ENABLED       = var.target_geometry_v3_enabled ? "1" : "0"
         STOCVEST_DAY_SESSION_PHASE_GATE_ENABLED   = var.day_session_phase_gate_enabled ? "1" : "0"
         STOCVEST_DAY_DEADZONE_START_ET            = var.day_deadzone_start_et
         STOCVEST_DAY_DEADZONE_END_ET              = var.day_deadzone_end_et

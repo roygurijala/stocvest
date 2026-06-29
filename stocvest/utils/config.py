@@ -334,6 +334,20 @@ class Settings(BaseSettings):
         40.0,
         alias="STOCVEST_ANALYST_TARGET_MAX_PCT_FROM_ENTRY",
     )
+    # B78 — target geometry v3 (volatility-normalized, structure-derived). Layers on top of v2:
+    #   - T1 = nearest structural resistance in an ATR band [alpha, beta]; else entry + alpha*ATR
+    #     (so T1 never glues to entry on a high-of-day breakout — the recurring "T1 too tight" bug).
+    #   - T2 = min(next structural resistance, entry + beta*ATR, entry + 2R) — R-multiple fallback kept.
+    #   - Analyst price targets are EXCLUDED from the gated T2 (they get "analyst_target" provenance and
+    #     stay informational in ``analyst_target_levels``) — fixes analyst PTs masquerading as resistance.
+    #   - Clustered/capped resistance candidates (adaptive epsilon, top-N nearest within the ATR window).
+    #   - ATR-normalized distances (t1/t2/stop ``*_distance_atr``) exposed for calibration/debugging.
+    # Requires ATR in the payload; when ATR is missing the served geometry falls back to v2 byte-identical.
+    # Enabled by default (B78 ships live); set the env var to "false" to revert to v2.
+    stocvest_target_geometry_v3_enabled: bool = Field(
+        True,
+        alias="STOCVEST_TARGET_GEOMETRY_V3_ENABLED",
+    )
     # B77 — day-desk session-phase quality gate. The 60-day as-traded replay shows the
     # midday window (default 12:00–14:00 ET) averages ≈ −1.0%/trade vs ≈ −0.21% in the
     # 14:00–16:00 window. When ON, day signals firing inside the window do NOT qualify

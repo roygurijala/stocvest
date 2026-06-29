@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { structureRiskRewardLong } from "@/lib/risk-reward-structure";
-import { evaluateScenarioDeskGate, target2ProvenanceLabel } from "@/lib/target-provenance";
+import {
+  evaluateScenarioDeskGate,
+  parseTarget2Provenance,
+  target2EligibleForGate,
+  target2ProvenanceLabel
+} from "@/lib/target-provenance";
 
 describe("target-provenance honesty layer", () => {
   test("UBXG-like geometry: unanchored T2 does not promote headline R/R", () => {
@@ -42,6 +47,17 @@ describe("target-provenance honesty layer", () => {
     expect(target2ProvenanceLabel("resistance", "bearish")).toBe("Support-anchored");
     // Unanchored labels are direction-agnostic.
     expect(target2ProvenanceLabel("2r_extension", "bearish")).toBe("2R projection — unanchored");
+  });
+
+  test("B78 provenance literals: atr_extension + analyst_target parse, label, and never gate", () => {
+    expect(parseTarget2Provenance("atr_extension")).toBe("atr_extension");
+    expect(parseTarget2Provenance("analyst_target")).toBe("analyst_target");
+    expect(parseTarget2Provenance("nonsense")).toBeNull();
+    expect(target2ProvenanceLabel("atr_extension")).toBe("ATR projection — unanchored");
+    expect(target2ProvenanceLabel("analyst_target")).toBe("Analyst-target-implied — not structural");
+    expect(target2EligibleForGate("atr_extension")).toBe(false);
+    expect(target2EligibleForGate("analyst_target")).toBe(false);
+    expect(target2EligibleForGate("resistance")).toBe(true);
   });
 
   test("short gate block reason uses support-anchored wording", () => {
