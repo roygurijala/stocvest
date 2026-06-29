@@ -116,6 +116,12 @@ function buildLoadedAssistantBase(input: {
 }
 
 export type BuildSignalsPageAssistantContextInput = {
+  /**
+   * Page identifier emitted to the assistant. Defaults to the Signals desk
+   * (`"signals/layers"`); the Trading Room deep dive passes its own id so the
+   * assistant knows which surface is open while reusing the identical context depth.
+   */
+  pageId?: string;
   tradingMode: "day" | "swing";
   symbol: string;
   symbolCommitted: boolean;
@@ -147,7 +153,7 @@ export type BuildSignalsPageAssistantContextInput = {
 export function buildSignalsPageAssistantContext(
   input: BuildSignalsPageAssistantContextInput
 ): AssistantPageContext | null {
-  const pageId = "signals/layers";
+  const pageId = input.pageId ?? "signals/layers";
   const sym = input.symbol.trim().toUpperCase();
   if (!sym) {
     return { page: pageId, trading_mode: input.tradingMode };

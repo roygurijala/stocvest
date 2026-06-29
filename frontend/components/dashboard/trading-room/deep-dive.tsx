@@ -83,6 +83,9 @@ import {
 } from "@/lib/signal-evidence/market-context-present";
 import { parseApiDecisionState } from "@/lib/signal-evidence/risk-stack-present";
 import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
+import { buildSignalsPageAssistantContext } from "@/lib/assistant/build-signals-assistant-context";
+import type { AssistantPageContext } from "@/lib/assistant/types";
 import { feedCardAllowsScenarioGeometry } from "@/lib/dashboard/trading-room/feed-setup-tier";
 import { feedCardStateLabel } from "@/lib/dashboard/trading-room/feed-state-present";
 import { SessionMoverContext } from "@/components/dashboard/trading-room/session-mover-context";
@@ -946,6 +949,56 @@ export function DeepDive({
       alignmentRatio: compositeAlignmentRatio
     });
   }, [composite, isInsufficient, activeLane, layerRows, setupBias, compositeAlignmentRatio]);
+
+  // Publish full-depth per-symbol context to the Assistant while this deep dive is open — the
+  // same context the Signals desk publishes (decision, layers, readiness, R/R, regime, causal
+  // chain), built from the same composite via the shared builder. Publishing `trading_mode`
+  // resolves the correct desk cache so the chatbot never claims it lacks the on-screen symbol.
+  // The publisher clears this automatically when the deep dive closes (component unmount).
+  const assistantContext = useMemo<AssistantPageContext | null>(
+    () =>
+      buildSignalsPageAssistantContext({
+        pageId: "dashboard/trading-room",
+        tradingMode: activeLane,
+        symbol: card.symbol,
+        symbolCommitted: true,
+        hasValidSignal: hasRenderableComposite && pageDecision != null,
+        compositeLoading: isInitialLoading,
+        isInsufficientComposite: isInsufficient,
+        pageDecision,
+        signalsPresentRows: layerRows,
+        setupBias,
+        compositeAlignmentRatio,
+        layerAgreementPercent: null,
+        setupJudgment,
+        compositeResult: hasRenderableComposite ? (composite as Record<string, unknown>) : null,
+        causalNarrativeSummary: causalNarrative?.summary ?? null,
+        causalBlockingChain: causalNarrative?.chainLabel ?? null,
+        timeframeAlignmentLabel: timeframeContext?.alignment.label ?? null,
+        marketEnvironment,
+        regularSessionOpen: null,
+        gapIntelSnapshot: null,
+        signalEvidence: null
+      }),
+    [
+      activeLane,
+      card.symbol,
+      hasRenderableComposite,
+      isInitialLoading,
+      isInsufficient,
+      pageDecision,
+      layerRows,
+      setupBias,
+      compositeAlignmentRatio,
+      setupJudgment,
+      composite,
+      causalNarrative?.summary,
+      causalNarrative?.chainLabel,
+      timeframeContext?.alignment.label,
+      marketEnvironment
+    ]
+  );
+  usePublishAssistantContext(assistantContext);
 
   const referenceLevels = useMemo(() => {
     const snap = coerceSnapshotForReferenceLevels({
