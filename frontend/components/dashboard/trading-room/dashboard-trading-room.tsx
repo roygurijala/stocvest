@@ -1874,6 +1874,35 @@ function SignalCard({
             {card.bias === "bull" ? "Bullish" : card.bias === "bear" ? "Bearish" : "Neutral"}
           </span>
           <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: sTone }}>{feedCardStateLabel(card)}</span>
+          {card.directionConfidence && card.bias !== "neutral" ? (
+            <span
+              data-testid={`signal-card-direction-confidence-${card.symbol}`}
+              title="How much to trust the bullish/bearish direction"
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                padding: "0 6px",
+                borderRadius: 999,
+                whiteSpace: "nowrap",
+                color:
+                  card.directionConfidence === "High"
+                    ? colors.bullish
+                    : card.directionConfidence === "Moderate"
+                      ? colors.caution
+                      : colors.textMuted,
+                border: `1px solid ${
+                  card.directionConfidence === "High"
+                    ? colors.bullish
+                    : card.directionConfidence === "Moderate"
+                      ? colors.caution
+                      : colors.textMuted
+                }`
+              }}
+            >
+              {card.directionConfidence === "High" ? "High" : card.directionConfidence === "Moderate" ? "Mod" : "Low"} conf
+            </span>
+          ) : null}
         </div>
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>{card.verdict}</span>
         {environmentHint ? (

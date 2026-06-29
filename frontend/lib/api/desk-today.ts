@@ -20,6 +20,8 @@ export type DeskDiscoveryLeader = {
   execution_hint?: string | null;
   execution_actionable?: boolean | null;
   decision_state?: string | null;
+  /** B79 — direction confidence (High/Moderate/Low) from the composite. */
+  direction_confidence?: "High" | "Moderate" | "Low" | null;
 };
 
 export type DeskMoverRadarRow = {

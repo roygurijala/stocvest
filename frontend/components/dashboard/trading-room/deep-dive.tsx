@@ -1384,6 +1384,10 @@ export function DeepDive({
       : displayDirection.direction === "short"
         ? colors.bearish
         : colors.textMuted;
+  // B79 — direction confidence chip (how much to trust bullish/bearish, not entries/targets).
+  const dirConfTier = insight?.direction_confidence ?? null;
+  const dirConfTone =
+    dirConfTier === "High" ? colors.bullish : dirConfTier === "Moderate" ? colors.caution : colors.textMuted;
   const loading = isInitialLoading || (isRevalidating && !hasRenderableComposite);
 
   const evalTime = useMemo(() => {
@@ -1501,6 +1505,24 @@ export function DeepDive({
             <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: sTone, letterSpacing: "0.02em" }}>
               {verdictLabel}
             </span>
+            {dirConfTier ? (
+              <span
+                data-testid="deep-dive-direction-confidence"
+                title={insight?.direction_confidence_reason || undefined}
+                style={{
+                  fontSize: typography.scale.xs,
+                  fontWeight: 700,
+                  padding: "1px 8px",
+                  borderRadius: 999,
+                  whiteSpace: "nowrap",
+                  color: dirConfTone,
+                  border: `1px solid ${dirConfTone}`,
+                  background: `color-mix(in srgb, ${dirConfTone} 12%, transparent)`
+                }}
+              >
+                {dirConfTier} confidence
+              </span>
+            ) : null}
           </div>
           <LaneToggle
             activeLane={activeLane}

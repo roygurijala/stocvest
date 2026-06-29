@@ -39,6 +39,8 @@ export interface FeedCard {
   changePct: number | null;
   /** Layer alignment when known (e.g. 5 of 6 confirmed). */
   alignment: { aligned: number; total: number } | null;
+  /** B79 — direction confidence (High/Moderate/Low) when the composite is known. */
+  directionConfidence?: "High" | "Moderate" | "Low" | null;
   /** Higher = ranked first within a state bucket. */
   rankScore: number;
   source: "desk" | "scanner" | "gap";
@@ -231,6 +233,7 @@ function cardFromLeader(
     changePct: cleanNum(leader.gap_percent) ?? snapChangePct(snap),
     alignment:
       ratio != null ? { aligned: Math.round(ratio * 6), total: 6 } : null,
+    directionConfidence: leader.direction_confidence ?? null,
     rankScore: cleanNum(leader.rank_score) ?? 0,
     source: "desk",
     setupTier: "setup",

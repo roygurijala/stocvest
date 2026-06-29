@@ -22,6 +22,7 @@ from stocvest.api.services.entry_zone import (
     resolve_entry_zone,
 )
 from stocvest.signals.composite_score import CompositeSignal, CompositeVerdict
+from stocvest.signals.direction_confidence import assess_direction_confidence
 from stocvest.api.services.reference_stop_policy import (
     format_merged_stop_provenance,
     reference_stop_atr_k,
@@ -655,6 +656,15 @@ def build_swing_composite_evidence_fields(
     else:
         trend_strength = "Weak"
 
+    # B79 — direction confidence (High/Moderate/Low) over conviction (|score|), agreement
+    # (alignment_ratio) and data quality (confidence). Presentation only; no math change.
+    dir_conf = assess_direction_confidence(
+        score=score,
+        confidence=conf,
+        alignment_ratio=float(composite.alignment_ratio),
+        is_neutral=composite.verdict == CompositeVerdict.NEUTRAL,
+    )
+
     n_conf = int(confluence.get("n_conflicting") or 0) if confluence else 0
     n_conf_yes = int(confluence.get("n_confirming") or 0) if confluence else 0
 
@@ -1114,6 +1124,10 @@ def build_swing_composite_evidence_fields(
         "signal_score": signal_score,
         "trend_strength": trend_strength,
         "trend_direction": trend_direction,
+        # B79 — direction confidence (presentation over conviction x agreement x data quality).
+        "direction_confidence": dir_conf.tier,
+        "direction_confidence_score": dir_conf.score,
+        "direction_confidence_reason": dir_conf.reason,
         "risk_reward": risk_reward,
         "rr_warning": rr_warning,
         "rr_quality": rr_quality,
