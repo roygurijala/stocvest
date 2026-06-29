@@ -194,6 +194,10 @@ export interface SignalEvidenceInsight {
   signal_score: number;
   trend_strength: string;
   trend_direction: string;
+  /** B79 — how much to trust the bullish/bearish direction (High/Moderate/Low). */
+  direction_confidence?: "High" | "Moderate" | "Low";
+  direction_confidence_score?: number;
+  direction_confidence_reason?: string;
   risk_reward: number;
   rr_warning?: boolean;
   rr_quality?: "low" | "acceptable" | "good" | "strong";

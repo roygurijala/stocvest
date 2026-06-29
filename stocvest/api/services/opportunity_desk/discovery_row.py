@@ -55,12 +55,16 @@ def discovery_row_from_mover(
 
     execution_actionable: bool | None = None
     decision_state: str | None = None
+    direction_confidence: str | None = None
     if composite and isinstance(composite, dict):
         if "execution_actionable" in composite:
             execution_actionable = bool(composite.get("execution_actionable"))
         ds = composite.get("decision_state")
         if isinstance(ds, str) and ds.strip():
             decision_state = ds.strip()
+        dc = composite.get("direction_confidence")
+        if isinstance(dc, str) and dc.strip() in ("High", "Moderate", "Low"):
+            direction_confidence = dc.strip()
 
     row: dict[str, Any] = {
         "symbol": mover.symbol,
@@ -77,6 +81,7 @@ def discovery_row_from_mover(
         "execution_hint": execution_hint_from_composite(composite, mode=mode),
         "execution_actionable": execution_actionable,
         "decision_state": decision_state,
+        "direction_confidence": direction_confidence,
     }
     return row
 

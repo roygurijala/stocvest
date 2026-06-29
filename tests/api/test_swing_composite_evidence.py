@@ -32,6 +32,31 @@ def test_evidence_fields_strong_uptrend_bull_regime() -> None:
     assert fields["trend_strength"] == "Strong"
     assert len(fields["catalysts"]) >= 1
     assert fields.get("vwap") == 499.0
+    # B79: a strong, well-aligned bullish composite surfaces High direction confidence.
+    assert fields["direction_confidence"] == "High"
+    assert isinstance(fields["direction_confidence_score"], int)
+    assert 0 <= fields["direction_confidence_score"] <= 100
+    assert fields["direction_confidence_reason"]
+
+
+def test_direction_confidence_neutral_is_low() -> None:
+    comp = _composite(
+        [
+            LayerSignal(layer="technical", score=0.05, confidence=0.8),
+            LayerSignal(layer="news", score=-0.02, confidence=0.8),
+            LayerSignal(layer="macro", score=0.0, confidence=0.8),
+        ],
+        "sideways",
+    )
+    assert comp.verdict == CompositeVerdict.NEUTRAL
+    fields = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="sideways",
+        payload={"symbol": "SPY"},
+        confluence=None,
+        snapshot={"last_trade_price": 500.0, "day_low": 495.0, "day_high": 505.0, "day_vwap": 499.0},
+    )
+    assert fields["direction_confidence"] == "Low"
 
 
 def test_evidence_fields_neutral_regime_label() -> None:

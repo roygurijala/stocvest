@@ -99,6 +99,11 @@ import type {
 // here so existing `@/lib/signal-evidence` imports keep working.
 export { VWAP_STATE, getVWAPTooltip, getVWAPDisplay } from "./signal-evidence/vwap-present";
 import { VWAP_STATE, getVWAPTooltip, getVWAPDisplay } from "./signal-evidence/vwap-present";
+import {
+  parseDirectionConfidence,
+  deriveDirectionConfidence,
+  directionConfidenceFallbackReason,
+} from "./signal-evidence/direction-confidence";
 
 /**
  * Reconciler sentence for the confluence panel when there are chips
@@ -1662,6 +1667,22 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
       ? rr_qualityRaw
       : undefined;
   const market_regime = String(body.market_regime ?? "Neutral").trim() || "Neutral";
+  const isNeutralTrend = trend_direction === "Sideways" || trend_direction === "Reversing";
+  const direction_confidence =
+    parseDirectionConfidence(body.direction_confidence) ??
+    deriveDirectionConfidence({
+      score: numOrNull(body.score),
+      signalScore0to100: signal_score,
+      alignmentRatio: numOrNull(body.alignment_ratio),
+      confidence: numOrNull(body.signal_strength),
+      isNeutral: isNeutralTrend,
+    });
+  const direction_confidence_score =
+    numOrNull(body.direction_confidence_score) ?? undefined;
+  const direction_confidence_reason =
+    typeof body.direction_confidence_reason === "string" && body.direction_confidence_reason.trim()
+      ? body.direction_confidence_reason.trim()
+      : directionConfidenceFallbackReason(direction_confidence, isNeutralTrend);
   const confirming_signals = mapConfluenceChipList(body.confirming_signals);
   const conflicting_signals = mapConfluenceChipList(body.conflicting_signals);
   const catalysts = catalystsFromCompositeBody(body);
@@ -1728,6 +1749,9 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     signal_score,
     trend_strength,
     trend_direction,
+    direction_confidence,
+    direction_confidence_score,
+    direction_confidence_reason,
     risk_reward: Math.round(risk_reward * 10) / 10,
     rr_warning,
     rr_quality,
@@ -1766,6 +1790,15 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
   const trend_strength = signal_score >= 72 ? "Strong" : signal_score >= 48 ? "Moderate" : "Weak";
   const trend_direction =
     evidence.direction === "bullish" ? "Uptrend" : evidence.direction === "bearish" ? "Downtrend" : "Sideways";
+  const direction_confidence = deriveDirectionConfidence({
+    signalScore0to100: signal_score,
+    confidence: evidence.confidencePercent / 100,
+    isNeutral: evidence.direction === "neutral",
+  });
+  const direction_confidence_reason = directionConfidenceFallbackReason(
+    direction_confidence,
+    evidence.direction === "neutral"
+  );
   const { support, resistance, vwap } = evidence.keyLevels;
   const last =
     typeof evidence.lastTradePrice === "number" && Number.isFinite(evidence.lastTradePrice) && evidence.lastTradePrice > 0
@@ -1879,6 +1912,8 @@ export function deriveEvidenceInsightFallback(evidence: SignalEvidenceData): Sig
     signal_score,
     trend_strength,
     trend_direction,
+    direction_confidence,
+    direction_confidence_reason,
     risk_reward,
     rr_warning,
     rr_quality,

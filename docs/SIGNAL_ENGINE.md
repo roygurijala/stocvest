@@ -109,6 +109,15 @@ For **contributors and product copy** (the UI may use terms like “trade readin
 - Treat the headline **0–100-style** read as **alignment and cleanliness after rules and gates**, **not** win probability, expected return, or a trade instruction.
 - **Internal mental model** (not necessarily a single literal formula in code): readiness is driven by **weighted directional alignment**, **data quality** (available layers, confidence), and **gate clearance** (e.g. insufficient-data envelope, evidence-side R/R warnings). Features should **not** quietly inflate scores without revisiting this framing.
 
+### Direction confidence (display, B79)
+
+Separate from trade readiness / `signal_strength`: **`direction_confidence`** (`High` / `Moderate` / `Low`) answers *"how much should I trust this bullish/bearish read?"* — not *"is the setup actionable?"*
+
+- **Pure module:** `stocvest/signals/direction_confidence.py::assess_direction_confidence` — gate-based tiering over three inputs already on `CompositeSignal`: conviction `|score|`, agreement `alignment_ratio`, data quality `confidence`. A tier requires **all three** dimensions to clear their bar; neutral verdicts → always `Low`.
+- **Payload fields** (both day + swing, via `build_swing_composite_evidence_fields`): `direction_confidence`, `direction_confidence_score` (0–100, tooltip only), `direction_confidence_reason`.
+- **UI:** deep-dive verdict banner chip + trading-room signal card (`High` / `Mod` / `Low conf`). Frontend mirror: `frontend/lib/signal-evidence/direction-confidence.ts`.
+- **Invariant:** presentation only — never changes composite math, verdict thresholds, or desk gates.
+
 ### Trade conviction tiers (frontend display, B50)
 
 Signals and watchlist cards may show **A+** / **B+** / **Developing** bands from `frontend/lib/trade-conviction-tier.ts`. These are **explanatory only** — they do **not** change composite verdicts, actionable counts, maturation `derive_state`, or the validation ledger.
