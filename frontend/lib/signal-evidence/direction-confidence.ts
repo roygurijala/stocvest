@@ -53,7 +53,10 @@ export function deriveDirectionConfidence(params: {
   return "Low";
 }
 
-function clears(dims: { conviction: number; agreement: number; dataQuality: number }, bars: typeof HIGH): boolean {
+function clears(
+  dims: { conviction: number; agreement: number; dataQuality: number },
+  bars: { conviction: number; agreement: number; dataQuality: number }
+): boolean {
   return dims.conviction >= bars.conviction && dims.agreement >= bars.agreement && dims.dataQuality >= bars.dataQuality;
 }
 
