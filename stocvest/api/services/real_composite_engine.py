@@ -894,6 +894,14 @@ async def build_real_composite_response(
                 payload_stub["atr"] = round(_atr_f, 4)
         except (TypeError, ValueError):
             pass
+    # SMA anchors (B78 target-geometry-v3 resistance candidates; also entry-zone fallbacks).
+    for _sk, _sv in (
+        ("sma20", getattr(tech, "sma20", None)),
+        ("sma50", getattr(tech, "sma50", None)),
+        ("sma200", getattr(tech, "sma200", None)),
+    ):
+        if isinstance(_sv, (int, float)) and float(_sv) > 0:
+            payload_stub[_sk] = round(float(_sv), 4)
     # Entry-zone synthesis config (day anchor is VWAP, already in the snapshot).
     payload_stub["entry_zone_config"] = asdict(params.entry_zone)
     response_body.update(

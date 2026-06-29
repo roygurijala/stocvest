@@ -48,6 +48,12 @@ variable "day_session_phase_gate_enabled" {
   default     = false
 }
 
+variable "target_geometry_v3_enabled" {
+  description = "B78: target geometry v3 (volatility-normalized, structure-derived). T1 = nearest structural resistance in an ATR band [alpha,beta] else entry+alpha*ATR (no more T1 glued to entry on a high-of-day breakout); T2 = min(next structural resistance, entry+beta*ATR, entry+2R) with the R-multiple fallback kept; analyst price targets are EXCLUDED from the gated T2 (informational only); clustered/capped resistance candidates; ATR-normalized distances exposed. Requires ATR (falls back to v2 when missing). Sets STOCVEST_TARGET_GEOMETRY_V3_ENABLED on the signals Lambda. Default on (B78 ships live)."
+  type        = bool
+  default     = true
+}
+
 variable "day_deadzone_start_et" {
   description = "B77: ET clock 'HH:MM' start of the suppressed midday window (half-open [start, end))."
   type        = string

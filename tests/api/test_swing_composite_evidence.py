@@ -145,3 +145,73 @@ def test_catalyst_headlines_preserve_source_and_scores() -> None:
     assert cat.get("source") == "polygon"
     assert cat.get("published_at") == "2026-01-15T14:00:00.000Z"
     assert cat.get("sentiment_score") == 0.72
+
+
+def _bull_comp():
+    return _composite(
+        [
+            LayerSignal(layer="technical", score=0.8, confidence=0.9),
+            LayerSignal(layer="news", score=0.6, confidence=0.85),
+            LayerSignal(layer="macro", score=0.5, confidence=0.8),
+        ],
+        "bull",
+    )
+
+
+def test_v3_breakout_t1_uses_atr_floor_not_glued_to_entry() -> None:
+    # Price at high of day, no daily high above entry -> v3 lifts T1 to entry + alpha*ATR
+    # (swing alpha 1.5, ATR 2 -> 103) instead of gluing T1 to the session high (the old bug).
+    comp = _bull_comp()
+    fields = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="bull",
+        payload={
+            "symbol": "BRK",
+            "atr": 2.0,
+            "daily_bars_range": [{"low": h - 2.0, "high": h} for h in (96.0, 97.0, 98.0, 99.0, 100.0)],
+        },
+        confluence={"confirming_signals": [], "conflicting_signals": [], "n_confirming": 2, "n_conflicting": 0},
+        snapshot={"last_trade_price": 100.0, "day_low": 98.0, "day_high": 100.0, "day_vwap": 99.0},
+    )
+    assert fields["reference_target_1"] == 103.0
+    assert fields["reference_target_1_distance_atr"] == 1.5
+    assert fields["reference_stop_distance_atr"] is not None
+    # T2 is an honest unanchored projection (no structural resistance above), never "resistance".
+    assert fields["reference_target_2_provenance"] in {"atr_extension", "2r_extension"}
+
+
+def test_v3_excludes_analyst_target_from_gated_t2() -> None:
+    # An analyst PT (130, inside the 40% cap) must NOT become a "resistance" T2 under v3.
+    comp = _bull_comp()
+    fields = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="bull",
+        payload={
+            "symbol": "CYTK",
+            "atr": 2.0,
+            "analyst_target_levels": [130.0],
+            "daily_bars_range": [{"low": h - 2.0, "high": h} for h in (96.0, 97.0, 98.0, 99.0, 100.0)],
+        },
+        confluence={"confirming_signals": [], "conflicting_signals": [], "n_confirming": 2, "n_conflicting": 0},
+        snapshot={"last_trade_price": 100.0, "day_low": 98.0, "day_high": 100.0, "day_vwap": 99.0},
+    )
+    assert fields["reference_target_2_provenance"] != "resistance"
+    assert fields["reference_target_2"] != 130.0
+    assert fields["reference_target_2"] < 120.0
+    # Analyst level remains visible as informational context.
+    assert fields["analyst_target_levels"] == [130.0]
+
+
+def test_v3_distance_atr_none_without_atr() -> None:
+    # No ATR in payload -> v3 inert (falls back to v2/legacy), distance fields are None, no crash.
+    comp = _bull_comp()
+    fields = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="bull",
+        payload={"symbol": "AAA"},
+        confluence={"confirming_signals": [], "conflicting_signals": [], "n_confirming": 2, "n_conflicting": 0},
+        snapshot={"last_trade_price": 100.0, "day_low": 98.0, "day_high": 102.0, "day_vwap": 99.0},
+    )
+    assert fields["reference_target_1_distance_atr"] is None
+    assert fields["reference_target_2_distance_atr"] is None
+    assert fields["reference_stop_distance_atr"] is None

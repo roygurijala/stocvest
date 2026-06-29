@@ -33,6 +33,11 @@ from stocvest.signals.structure_resistance_scanner import (
     scan_nearest_resistance_above,
     scan_nearest_support_below,
 )
+from stocvest.api.services.target_geometry import (
+    compute_long_geometry,
+    compute_short_geometry,
+    distance_in_atr,
+)
 from stocvest.utils.config import get_settings
 
 # Minimum reward (percent above entry) a T1 must offer to be honest. The raw session high
@@ -237,17 +242,22 @@ def _long_target_provenance_label(
         or (day_hi is not None and abs(float(reference_target_1) - float(day_hi)) <= 1e-6)
     )
     t1_label = "Session high (T1)" if t1_is_session_high else "Structural level (T1)"
+    t2_unanchored = (
+        "ATR projection (T2 — unanchored)"
+        if target_2_provenance == "atr_extension"
+        else "2R projection (T2 — unanchored)"
+    )
     if reference_target_1 is not None and reference_target_1 > 0:
         if reference_target_2 is not None:
             if target_2_provenance == "resistance":
                 return f"{t1_label} + structural resistance (T2)"
-            return f"{t1_label} + 2R projection (T2 — unanchored)"
+            return f"{t1_label} + {t2_unanchored}"
         return f"{t1_label} — primary target" if not t1_is_session_high else "Session high — primary target"
     if day_hi is not None and day_hi > 0:
         if reference_target_2 is not None:
             if target_2_provenance == "resistance":
                 return "Session high (T1) + structural resistance (T2)"
-            return "Session high (T1) + 2R projection (T2 — unanchored)"
+            return f"Session high (T1) + {t2_unanchored}"
         return "Session high — primary target"
     if last is not None and last > 0:
         return "Percent extension from last — fallback"
@@ -286,7 +296,12 @@ def _short_target_provenance_label(
         if reference_target_2 is not None:
             if target_2_provenance == "resistance":
                 return "Session low (T1) + structural support (T2)"
-            return "Session low (T1) + 2R projection (T2 — unanchored)"
+            t2_unanchored = (
+                "ATR projection (T2 — unanchored)"
+                if target_2_provenance == "atr_extension"
+                else "2R projection (T2 — unanchored)"
+            )
+            return f"Session low (T1) + {t2_unanchored}"
         return "Session low — primary target"
     if last is not None and last > 0:
         return "Percent extension from last — fallback"
@@ -393,6 +408,10 @@ def _long_side_geometry(
     analyst_target_levels: list[float] | None = None,
     target_geometry_v2: bool = False,
     analyst_max_pct: float = 40.0,
+    target_geometry_v3: bool = False,
+    sma20: float | None = None,
+    sma50: float | None = None,
+    sma200: float | None = None,
 ) -> tuple[float | None, float | None, float | None, bool, str | None]:
     """
     Bullish reference levels anchored to session structure (not fixed % off day low).
@@ -431,6 +450,24 @@ def _long_side_geometry(
 
     # --- T1 (primary target) ---
     entry_ref = entry_for_stop  # entry price the reward is measured from
+
+    # B78 (target geometry v3): structure-derived, ATR-bounded T1 and multi-candidate T2.
+    # Requires ATR; falls through to v2/legacy when ATR is missing so behavior stays defined.
+    if target_geometry_v3 and entry_ref is not None and entry_ref > 0 and atr is not None and atr > 0:
+        geo = compute_long_geometry(
+            entry=float(entry_ref),
+            atr=float(atr),
+            stop=reference_stop,
+            daily_bars=daily_bars,
+            trading_mode=trading_mode,
+            day_hi=day_hi,
+            sma20=sma20,
+            sma50=sma50,
+            sma200=sma200,
+        )
+        if geo.target_1 is not None:
+            return reference_stop, geo.target_1, geo.target_2, used_atr_floor, geo.target_2_provenance
+
     reference_target_1: float | None = None
     if (
         target_geometry_v2
@@ -505,6 +542,10 @@ def _short_side_geometry(
     swing_lo: float | None = None,
     swing_hi: float | None = None,
     daily_bars: list[dict[str, float]] | None = None,
+    target_geometry_v3: bool = False,
+    sma20: float | None = None,
+    sma50: float | None = None,
+    sma200: float | None = None,
 ) -> tuple[float | None, float | None, float | None, bool, str | None]:
     """Bearish reference levels: stop above session/VWAP ceiling; target at session low."""
     structural = resolve_structural_stop_anchor(
@@ -529,6 +570,22 @@ def _short_side_geometry(
             atr=atr,
             atr_k=k,
         )
+
+    # B78 (target geometry v3): structure-derived, ATR-bounded T1/T2 mirror for shorts.
+    if target_geometry_v3 and entry_for_stop is not None and entry_for_stop > 0 and atr is not None and atr > 0:
+        geo = compute_short_geometry(
+            entry=float(entry_for_stop),
+            atr=float(atr),
+            stop=reference_stop,
+            daily_bars=daily_bars,
+            trading_mode=trading_mode,
+            day_lo=day_lo,
+            sma20=sma20,
+            sma50=sma50,
+            sma200=sma200,
+        )
+        if geo.target_1 is not None:
+            return reference_stop, geo.target_1, geo.target_2, used_atr_floor, geo.target_2_provenance
 
     reference_target_1: float | None = None
     if day_lo is not None and day_lo > 0:
@@ -684,7 +741,11 @@ def build_swing_composite_evidence_fields(
 
     _settings = get_settings()
     target_geometry_v2 = bool(_settings.stocvest_swing_target_geometry_v2_enabled)
+    target_geometry_v3 = bool(_settings.stocvest_target_geometry_v3_enabled)
     analyst_max_pct = float(_settings.stocvest_analyst_target_max_pct_from_entry)
+    sma20 = _float_or_none(payload.get("sma20"))
+    sma50 = _float_or_none(payload.get("sma50"))
+    sma200 = _float_or_none(payload.get("sma200"))
 
     use_long = _use_long_rr_structure(composite.verdict, day_lo, day_hi, last)
     if use_long:
@@ -705,6 +766,10 @@ def build_swing_composite_evidence_fields(
             analyst_target_levels=analyst_target_levels or None,
             target_geometry_v2=target_geometry_v2,
             analyst_max_pct=analyst_max_pct,
+            target_geometry_v3=target_geometry_v3,
+            sma20=sma20,
+            sma50=sma50,
+            sma200=sma200,
         )
         reference_stop_provenance = format_merged_stop_provenance(
             _long_stop_provenance_label(
@@ -737,6 +802,10 @@ def build_swing_composite_evidence_fields(
             swing_lo=swing_lo,
             swing_hi=swing_hi,
             daily_bars=daily_bars,
+            target_geometry_v3=target_geometry_v3,
+            sma20=sma20,
+            sma50=sma50,
+            sma200=sma200,
         )
         reference_stop_provenance = format_merged_stop_provenance(
             _short_stop_provenance_label(
@@ -1062,6 +1131,10 @@ def build_swing_composite_evidence_fields(
         "reference_target_1": reference_target_1,
         "reference_target_2": reference_target_2,
         "reference_target_2_provenance": target_2_provenance,
+        # ATR-normalized distances (B78) — for calibration/debugging; None when ATR unavailable.
+        "reference_target_1_distance_atr": distance_in_atr(reference_target_1, entry, atr),
+        "reference_target_2_distance_atr": distance_in_atr(reference_target_2, entry, atr),
+        "reference_stop_distance_atr": distance_in_atr(reference_stop_level, entry, atr),
         "reference_stop_level": reference_stop_level,
         "reference_stop_provenance": reference_stop_provenance,
         "reference_target_provenance": reference_target_provenance,
