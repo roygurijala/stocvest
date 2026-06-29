@@ -624,6 +624,26 @@ def test_prompt_lists_real_six_layers_not_user_proposed_five() -> None:
         assert layer in ASSISTANT_SYSTEM_PROMPT, f"missing layer name: {layer}"
 
 
+def test_prompt_explains_weighted_directional_synthesis_not_a_count() -> None:
+    """Regression guard: the chatbot was caught explaining a bearish read as a tally of
+    layer leans ("1 bullish, 1 bearish, 4 neutral, so it's bearish") and claiming a split
+    "defaults" to bearish. The real engine blends weighted, confidence- and regime-scaled
+    signed leans against a decisiveness threshold (composite_score.py). The prompt must
+    describe that mechanism and explicitly ban the counting / tie-break story."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "HOW THE DIRECTIONAL READ IS DETERMINED (LAYER SYNTHESIS — DO NOT MISDESCRIBE)" in text
+    # The core mechanism: weighted, not a count.
+    assert "is NOT a head-count" in text
+    assert "Technical carries the most influence" in text
+    # The two banned stories.
+    assert 'so it\'s bearish' in text
+    assert 'does NOT default to bearish' in text
+    # Indecisive blend reads neutral, not bearish.
+    assert "reads NEUTRAL" in text
+    # Direction vs Decision must not be conflated.
+    assert "directional READ" in text and "different thing from the DECISION" in text
+
+
 def test_prompt_uses_real_decision_state_vocabulary_verbatim() -> None:
     """The Decision tri-state must be referenced with the exact on-card lines so the LLM
     cannot invent its own phrasing.
