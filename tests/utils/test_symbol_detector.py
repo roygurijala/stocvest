@@ -11,9 +11,36 @@ from stocvest.utils.symbol_detector import (
     detect_company_phrase_from_messages,
     detect_symbol,
     detect_symbol_from_messages,
+    detect_symbols,
     extract_action_symbol,
     extract_company_lookup_phrase,
 )
+
+
+@pytest.mark.unit
+def test_detect_symbols_returns_both_tickers_in_order() -> None:
+    assert detect_symbols("compare NVDA vs AMD") == ["NVDA", "AMD"]
+    assert detect_symbols("which is stronger, nvda or amd?") == ["NVDA", "AMD"]
+
+
+@pytest.mark.unit
+def test_detect_symbols_dollar_then_bare_deduped() -> None:
+    assert detect_symbols("$NVDA or AMD") == ["NVDA", "AMD"]
+    # Repeats are de-duplicated, first-seen order preserved.
+    assert detect_symbols("NVDA vs NVDA vs AMD") == ["NVDA", "AMD"]
+
+
+@pytest.mark.unit
+def test_detect_symbols_respects_limit_and_blocklist() -> None:
+    assert detect_symbols("NVDA AMD TSLA INTC", limit=3) == ["NVDA", "AMD", "TSLA"]
+    # Common words are filtered out; only the real ticker survives.
+    assert detect_symbols("which one is better for me") == []
+
+
+@pytest.mark.unit
+def test_detect_symbols_empty_input() -> None:
+    assert detect_symbols("") == []
+    assert detect_symbols("   ") == []
 
 
 def test_common_word_see_is_not_a_ticker() -> None:

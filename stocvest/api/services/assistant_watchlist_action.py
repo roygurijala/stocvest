@@ -21,15 +21,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from stocvest.api.services.watchlist_plan_limits import (
+    WATCHLIST_SYMBOL_CAP_SWING_DAY_PRO,
+)
 from stocvest.data.watchlist_store import get_watchlist_store
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
-# Per-user default watchlist symbol cap kept in sync with the plan-tier cap used
-# elsewhere (the store enforces this on write, but we can give a friendly
-# pre-flight message).
-_DEFAULT_MAX_SYMBOLS = 50
+# Fallback cap when the caller does not pass a plan-derived ``max_symbols`` (direct
+# callers / tests). The handler always threads the user's plan cap via
+# ``watchlist_symbol_cap_for_profile`` so paid tiers get their full allotment
+# (Swing + Day Pro / beta → 100); this default only guards a missing argument.
+_DEFAULT_MAX_SYMBOLS = WATCHLIST_SYMBOL_CAP_SWING_DAY_PRO
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,7 @@ def execute_watchlist_add(
     symbol: str,
     *,
     company_name: str | None = None,
+    max_symbols: int | None = None,
 ) -> WatchlistActionResult:
     """Add *symbol* to the user's default watchlist.
 
@@ -59,7 +64,13 @@ def execute_watchlist_add(
     result suitable for inclusion in the assistant response. *company_name*, when
     provided by the caller's symbol resolution, is echoed in the confirmation and
     on the result for display next to the ticker.
+
+    *max_symbols* is the user's plan-derived cap
+    (``watchlist_symbol_cap_for_profile``); the handler passes it so paid tiers
+    (Swing + Day Pro / beta → 100) get their full allotment instead of a flat 50.
+    Falls back to :data:`_DEFAULT_MAX_SYMBOLS` when omitted.
     """
+    cap = int(max_symbols) if max_symbols else _DEFAULT_MAX_SYMBOLS
     sym = symbol.strip().upper()
     if not sym:
         return WatchlistActionResult(
@@ -100,14 +111,14 @@ def execute_watchlist_add(
             symbol=sym,
             track_swing=True,
             track_day=True,
-            max_symbols=_DEFAULT_MAX_SYMBOLS,
+            max_symbols=cap,
         )
         if updated is None:
             return WatchlistActionResult(
                 success=False,
                 action_type="watchlist_add",
                 symbol=sym,
-                message=f"Couldn't add {label} — your watchlist may be full (max {_DEFAULT_MAX_SYMBOLS} symbols).",
+                message=f"Couldn't add {label} — your watchlist may be full (max {cap} symbols).",
                 company_name=company_name,
             )
 

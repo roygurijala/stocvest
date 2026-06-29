@@ -120,6 +120,75 @@ def test_fetch_stocvest_read_marks_stale_from_cache_source() -> None:
     assert read["stale"] is True
 
 
+def test_fetch_stocvest_read_limitations_split_partial_neutral() -> None:
+    """A 5-of-6, split, neutral cached read enumerates what it cannot confirm."""
+    with patch(
+        "stocvest.api.services.assistant_symbol_context.read_dashboard_cache",
+        return_value=_EVIDENCE_ENVELOPE,
+    ):
+        read = fetch_stocvest_composite_read("AVGO", "swing")
+    assert read is not None
+    limitations = read.get("limitations")
+    assert isinstance(limitations, list)
+    assert any("5 of 6" in x for x in limitations)
+    assert any("split" in x for x in limitations)
+    assert any("inconclusive" in x for x in limitations)
+    # Fresh (source not cache) → no staleness caveat.
+    assert not any("cached evaluation" in x for x in limitations)
+
+
+def test_fetch_stocvest_read_limitations_include_staleness() -> None:
+    envelope = {
+        "computed_at": "2026-06-03T20:00:00Z",
+        "data": {
+            "symbol": "AVGO",
+            "signal_summary": "bullish",
+            "source": "cache_stale",
+            "layers": [{"layer": "technical", "status": "available", "verdict": "bullish"}],
+        },
+    }
+    with patch(
+        "stocvest.api.services.assistant_symbol_context.read_dashboard_cache",
+        return_value=envelope,
+    ):
+        read = fetch_stocvest_composite_read("AVGO", "day")
+    assert read is not None
+    limitations = read.get("limitations")
+    assert isinstance(limitations, list)
+    assert any("cached evaluation" in x for x in limitations)
+    assert any("1 of 6" in x for x in limitations)
+
+
+def test_fetch_stocvest_read_no_limitations_when_complete_and_decisive() -> None:
+    """A full, fresh, one-directional read carries no limitations key — the
+    assistant should present it without manufacturing doubt."""
+    envelope = {
+        "computed_at": "2026-06-03T20:00:00Z",
+        "data": {
+            "symbol": "AVGO",
+            "signal_summary": "bullish",
+            "source": "live",
+            "alignment": {"label": "High"},
+            "layers": [
+                {"layer": "technical", "status": "available", "verdict": "bullish"},
+                {"layer": "macro", "status": "available", "verdict": "bullish"},
+                {"layer": "sector", "status": "available", "verdict": "bullish"},
+                {"layer": "internals", "status": "available", "verdict": "bullish"},
+                {"layer": "news", "status": "available", "verdict": "bullish"},
+                {"layer": "geopolitical", "status": "available", "verdict": "neutral"},
+            ],
+        },
+    }
+    with patch(
+        "stocvest.api.services.assistant_symbol_context.read_dashboard_cache",
+        return_value=envelope,
+    ):
+        read = fetch_stocvest_composite_read("AVGO", "swing")
+    assert read is not None
+    assert read["verdict"] == "bullish"
+    assert "limitations" not in read
+
+
 def _bar(close: float, minute: int) -> Bar:
     return Bar(
         symbol="NVDA",

@@ -154,6 +154,43 @@ def test_stocvest_read_block_leads_symbol_context() -> None:
     assert block.index("STOCVEST'S CURRENT READ") < block.index("BROADER COVERAGE")
 
 
+def test_stocvest_read_block_serializes_limitations() -> None:
+    """The not_yet_confirmed caveats are rendered so the model can voice them."""
+    ctx = AssistantSymbolContext(
+        symbol="AVGO",
+        benzinga_news=[_article("AVGO news", ["Tech"])],
+        stocvest_read={
+            "verdict": "neutral",
+            "mode": "swing",
+            "leans": {"bullish": 1, "bearish": 3, "neutral": 1, "available": 5},
+            "alignment_label": "Balanced",
+            "stale": False,
+            "limitations": [
+                "only 5 of 6 evidence layers have reported",
+                "the layers are split — 1 lean bullish and 3 lean bearish",
+                "no single direction dominates, so the read is inconclusive",
+            ],
+        },
+    )
+    block = serialize_symbol_context(ctx)
+    assert "not_yet_confirmed" in block
+    assert "only 5 of 6 evidence layers have reported" in block
+    assert "no single direction dominates" in block
+
+
+def test_stocvest_read_block_omits_limitations_when_absent() -> None:
+    lines = _stocvest_read_lines(
+        {
+            "verdict": "bullish",
+            "mode": "swing",
+            "leans": {"bullish": 5, "bearish": 0, "neutral": 1, "available": 6},
+            "alignment_label": "High",
+            "stale": False,
+        }
+    )
+    assert not any("not_yet_confirmed" in ln for ln in lines)
+
+
 def test_broader_coverage_dedupes_against_polygon_news() -> None:
     shared = "NVDA jumps on strong demand"
     ctx = AssistantSymbolContext(

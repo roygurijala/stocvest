@@ -330,7 +330,51 @@ def fetch_stocvest_composite_read(symbol: str, mode: str) -> dict | None:
     src = str(body.get("source") or "").strip().lower()
     read["stale"] = src.startswith("cache")
 
+    limitations = _read_limitations(
+        verdict=verdict,
+        bullish=bullish,
+        bearish=bearish,
+        available=available,
+        stale=bool(read["stale"]),
+    )
+    if limitations:
+        read["limitations"] = limitations
+
     return read
+
+
+def _read_limitations(
+    *,
+    verdict: str,
+    bullish: int,
+    bearish: int,
+    available: int,
+    stale: bool,
+) -> list[str]:
+    """Plain-English caveats describing what STOCVEST's read does NOT yet confirm.
+
+    This is the "we tell you what we don't know" surface: rather than presenting a
+    cached verdict as if it were settled, we enumerate the concrete reasons the read
+    is incomplete or contested (missing layers, split layers, an inconclusive
+    verdict, a stale evaluation). It is deliberately qualitative — no scores,
+    thresholds, or a separate "confidence" construct (confidence is already carried
+    by the shipped alignment bucket). The assistant prompt instructs the model to
+    surface these caveats in plain English alongside the verdict.
+    """
+    out: list[str] = []
+    if available and available < 6:
+        out.append(f"only {available} of 6 evidence layers have reported")
+    if bullish and bearish:
+        out.append(
+            f"the layers are split — {bullish} lean bullish and {bearish} lean bearish"
+        )
+    if verdict == "neutral":
+        out.append("no single direction dominates, so the read is inconclusive")
+    if stale:
+        out.append(
+            "this reflects STOCVEST's last cached evaluation, not a fresh recompute"
+        )
+    return out
 
 
 # Most intraday points we forward to the client for a sparkline. A 5-min session
