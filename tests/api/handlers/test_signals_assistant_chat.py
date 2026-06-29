@@ -304,8 +304,9 @@ def test_assistant_chat_validates_symbol_before_watchlist_add(monkeypatch: pytes
 
     seen: dict = {}
 
-    def _add(user_id: str, symbol: str, *, company_name=None):  # type: ignore[no-untyped-def]
+    def _add(user_id: str, symbol: str, *, company_name=None, max_symbols=None):  # type: ignore[no-untyped-def]
         seen["company_name"] = company_name
+        seen["max_symbols"] = max_symbols
         return WatchlistActionResult(
             success=True,
             action_type="watchlist_add",
@@ -328,6 +329,8 @@ def test_assistant_chat_validates_symbol_before_watchlist_add(monkeypatch: pytes
     assert body["action"]["company_name"] == "NVIDIA Corporation"
     assert "NVIDIA Corporation" in body["action"]["message"]
     assert seen["company_name"] == "NVIDIA Corporation"
+    # The handler threads the user's plan cap (swing_pro → 50) to the add path.
+    assert seen["max_symbols"] == 50
 
 
 def test_assistant_chat_rejects_unknown_symbol_for_watchlist_add(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -631,6 +634,95 @@ def test_assistant_chat_includes_citations(monkeypatch: pytest.MonkeyPatch) -> N
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert body["citations"] == citations_sentinel
+
+
+def _stub_no_symbol(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep detected_sym None for web-search tests (no network symbol resolution)."""
+
+    async def _no_company(_phrase):  # type: ignore[no-untyped-def]
+        return None
+
+    async def _no_ctx(_symbol):  # type: ignore[no-untyped-def]
+        return None
+
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.detect_symbol", lambda _t: None)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.resolve_company_to_symbol", _no_company)
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", _no_ctx)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_stocvest_composite_read", lambda *a, **k: None
+    )
+
+
+def test_assistant_chat_web_search_fallback_fires_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Flag ON + out-of-envelope question + no symbol → web context flows to the
+    reply and the sources land on the response payload."""
+    from types import SimpleNamespace
+
+    from stocvest.api.services.assistant_web_context import AssistantWebContext
+
+    _patch_paid_store(monkeypatch)
+    _stub_no_symbol(monkeypatch)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.get_settings",
+        lambda: SimpleNamespace(stocvest_assistant_web_search_enabled=True),
+    )
+
+    async def _fetch_web(query):  # type: ignore[no-untyped-def]
+        return AssistantWebContext(
+            query=query,
+            answer="The Fed held rates steady.",
+            key_points=["No change"],
+            sources=[{"title": "Reuters", "url": "https://reuters.com/fed"}],
+        )
+
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_web_context", _fetch_web)
+
+    captured: dict = {}
+
+    async def _cap_reply(self, *, messages, page_context, user_profile, web_context="", **_kw):  # type: ignore[no-untyped-def]
+        captured["web_context"] = web_context
+        return AssistantChatResult(text="ok.", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", _cap_reply)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "what's the latest on the fed?"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert "WEB CONTEXT" in captured["web_context"]
+    assert "Fed held rates steady" in captured["web_context"]
+    assert body["web_sources"] == [{"title": "Reuters", "url": "https://reuters.com/fed"}]
+
+
+def test_assistant_chat_web_search_skipped_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Flag OFF → the assistant never makes a web call and no sources are attached."""
+    from types import SimpleNamespace
+
+    _patch_paid_store(monkeypatch)
+    _stub_no_symbol(monkeypatch)
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.get_settings",
+        lambda: SimpleNamespace(stocvest_assistant_web_search_enabled=False),
+    )
+
+    called = {"n": 0}
+
+    async def _fetch_web(_query):  # type: ignore[no-untyped-def]
+        called["n"] += 1
+        return None
+
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_web_context", _fetch_web)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "what's the latest on the fed?"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert called["n"] == 0
+    assert body["web_sources"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -1254,3 +1346,52 @@ def test_assistant_chat_drops_client_system_role(monkeypatch: pytest.MonkeyPatch
     fwd_messages = captured.get("messages")
     assert isinstance(fwd_messages, list)
     assert any(m.get("role") == "system" for m in fwd_messages) is True
+
+
+def test_assistant_chat_multi_symbol_comparison(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 'compare NVDA vs AMD' question with ≥2 tickers fires the multi-symbol
+    path: a comparison block reaches the service and compared_symbols is returned,
+    while the single-symbol fetch is skipped."""
+    _patch_paid_store(monkeypatch)
+
+    summaries = [
+        {"symbol": "NVDA", "has_data": True, "price": 100.0, "change_percent": 1.0,
+         "verdict": "bullish", "alignment": "High"},
+        {"symbol": "AMD", "has_data": True, "price": 50.0, "change_percent": -0.5,
+         "verdict": "neutral"},
+    ]
+
+    async def _fake_multi(symbols, mode):  # type: ignore[no-untyped-def]
+        return summaries
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_multi_symbol_context", _fake_multi
+    )
+
+    # If the single-symbol path were (wrongly) reached, this would explode the test.
+    def _boom(*_a, **_k):  # type: ignore[no-untyped-def]
+        raise AssertionError("single-symbol fetch must be skipped on comparison")
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", _boom
+    )
+
+    captured: dict[str, object] = {}
+
+    async def fake_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        captured["multi"] = kwargs.get("multi_symbol_context")
+        return AssistantChatResult(text="Side by side.", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", fake_reply)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "compare NVDA vs AMD"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert [c["symbol"] for c in body["compared_symbols"]] == ["NVDA", "AMD"]
+    block = captured.get("multi")
+    assert isinstance(block, str)
+    assert "MULTI-SYMBOL COMPARISON" in block
+    assert "NVDA:" in block and "AMD:" in block

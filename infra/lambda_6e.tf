@@ -361,6 +361,7 @@ resource "aws_lambda_function" "api" {
         STOCVEST_DAY_DEADZONE_END_ET              = var.day_deadzone_end_et
         STOCVEST_DAY_DEADZONE_SCORE_PENALTY       = tostring(var.day_deadzone_score_penalty)
         STOCVEST_DAY_DEADZONE_RVOL_OVERRIDE       = tostring(var.day_deadzone_rvol_override)
+        STOCVEST_ASSISTANT_WEB_SEARCH_ENABLED     = var.assistant_web_search_enabled ? "1" : "0"
         STOCVEST_NEWS_TRIAGE_QUEUE_URL            = aws_sqs_queue.news_triage.url
         DYNAMODB_GAP_INTEL_CACHE_TABLE            = aws_dynamodb_table.gap_intel_cache.name
         DYNAMODB_SCANNER_EVALUATION_TRACE_TABLE   = aws_dynamodb_table.scanner_evaluation_trace.name

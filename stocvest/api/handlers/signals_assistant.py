@@ -43,6 +43,18 @@ from stocvest.api.services.assistant_watchlist_action import (
     execute_watchlist_add,
     execute_watchlist_remove,
 )
+from stocvest.api.services.assistant_multi_symbol_context import (
+    fetch_multi_symbol_context,
+    multi_symbol_payload,
+    serialize_multi_symbol_context,
+)
+from stocvest.api.services.assistant_web_context import (
+    fetch_web_context,
+    serialize_web_context,
+    web_sources_payload,
+)
+from stocvest.api.services.watchlist_plan_limits import watchlist_symbol_cap_for_profile
+from stocvest.utils.config import get_settings
 from stocvest.api.services.symbol_resolver import resolve_company_to_symbol, resolve_symbol
 from stocvest.api.services.assistant_watchlist_context import (
     fetch_watchlist_context,
@@ -51,6 +63,7 @@ from stocvest.api.services.assistant_watchlist_context import (
 from stocvest.signals.assistant_chat import AssistantChatService
 from stocvest.utils.intent_detector import (
     detect_explicit_desk,
+    is_comparison_query,
     is_discovery_query,
     is_forecast_query,
     is_market_overview_query,
@@ -60,11 +73,13 @@ from stocvest.utils.intent_detector import (
     is_watchlist_add_intent,
     is_watchlist_intelligence_query,
     is_watchlist_remove_intent,
+    is_web_search_query,
 )
 from stocvest.utils.symbol_detector import (
     detect_company_phrase_from_messages,
     detect_symbol,
     detect_symbol_from_messages,
+    detect_symbols,
     extract_action_symbol,
     extract_company_lookup_phrase,
 )
@@ -158,7 +173,10 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                         },
                     })
                 wl_result = execute_watchlist_add(
-                    rc.user_id, action_sym, company_name=resolution.name
+                    rc.user_id,
+                    action_sym,
+                    company_name=resolution.name,
+                    max_symbols=watchlist_symbol_cap_for_profile(profile),
                 )
                 return ok({
                     "text": wl_result.message,
@@ -308,12 +326,35 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         except Exception:  # noqa: BLE001
             watchlist_block = ""
 
+    # ── Multi-symbol comparison intent ───────────────────────────────────────
+    # "Compare NVDA vs AMD", "which is stronger, NVDA or AMD?" — fetch each
+    # ticker's live snapshot + STOCVEST read in parallel and inject a factual
+    # side-by-side. Requires ≥2 distinct detected tickers so single-symbol
+    # questions never trip this path. When it fires we skip the single-symbol
+    # fetch below (detected_sym stays None ⇒ no chart/citations/navigate/web).
+    multi_symbol_block = ""
+    compared_symbols_out: list[dict] | None = None
+    if profile.has_ai_explanations and is_comparison_query(last_user_text_for_intent):
+        comparison_syms = detect_symbols(last_user_text_for_intent, limit=3)
+        if len(comparison_syms) >= 2:
+            try:
+                multi_summaries = asyncio.run(
+                    fetch_multi_symbol_context(comparison_syms, resolved_desk)
+                )
+                multi_symbol_block = serialize_multi_symbol_context(multi_summaries)
+                compared_symbols_out = multi_symbol_payload(multi_summaries)
+            except Exception:  # noqa: BLE001 — comparison must never break the reply
+                _LOG.warning(
+                    "assistant_chat: multi-symbol context fetch failed — continuing without it"
+                )
+                multi_symbol_block = ""
+
     # Detect a ticker symbol from the conversation and pre-fetch live market
     # data so the assistant can answer factual questions (e.g. "why is MRVL
     # up?") with real data rather than generic explanations.
     symbol_context = None
     detected_sym: str | None = None
-    if profile.has_ai_explanations:
+    if profile.has_ai_explanations and not multi_symbol_block:
         try:
             messages_list = raw_messages if isinstance(raw_messages, list) else []
             # The CURRENT message is authoritative. Resolve the symbol from it
@@ -407,6 +448,32 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     except Exception:  # noqa: BLE001
         citations_out = None
 
+    # ── Web search fallback (out-of-envelope breadth) ────────────────────────
+    # When the question isn't about a specific symbol and none of the structured
+    # context paths fired (discovery / market overview / watchlist), and it looks
+    # like it needs fresh external knowledge (macro / policy / sector / "latest
+    # on…"), consult Perplexity. Flag-gated (default OFF) and citation-backed; the
+    # locked prompt's WEB CONTEXT rules keep it factual (no verdicts/predictions).
+    web_block = ""
+    web_sources_out: list[dict] | None = None
+    if (
+        profile.has_ai_explanations
+        and get_settings().stocvest_assistant_web_search_enabled
+        and detected_sym is None
+        and not discovery_block
+        and not market_block
+        and not watchlist_block
+        and is_web_search_query(last_user_text_for_intent)
+    ):
+        try:
+            web_ctx = asyncio.run(fetch_web_context(last_user_text_for_intent))
+            web_block = serialize_web_context(web_ctx)
+            web_sources_out = web_sources_payload(web_ctx)
+        except Exception:  # noqa: BLE001 — web context must never break the reply
+            _LOG.warning("assistant_chat: web context fetch failed — continuing without it")
+            web_block = ""
+            web_sources_out = None
+
     # Clarifying-question chips — when a desk-ambiguous discovery/opportunity/
     # trade-planning question arrives with no screen mode, no explicit desk
     # language, and no stored preference, offer quick swing/day refinements.
@@ -467,6 +534,8 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 market_context=market_block,
                 watchlist_context=watchlist_block,
                 preference_context=preference_block,
+                web_context=web_block,
+                multi_symbol_context=multi_symbol_block,
             )
         )
     except (TypeError, ValueError) as exc:
@@ -493,6 +562,8 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             "discovery": discovery_payload_out,
             "citations": citations_out,
             "clarify": clarify_out,
+            "web_sources": web_sources_out,
+            "compared_symbols": compared_symbols_out,
         }
     )
 

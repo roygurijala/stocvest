@@ -7,9 +7,41 @@ from stocvest.utils.intent_detector import (
     is_mode_sensitive_query,
     is_price_chart_query,
     is_watchlist_intelligence_query,
+    is_comparison_query,
     is_watchlist_opportunity_query,
     is_watchlist_status_query,
+    is_web_search_query,
 )
+
+
+def test_comparison_query_matches_head_to_head_phrasing() -> None:
+    assert is_comparison_query("compare NVDA vs AMD")
+    assert is_comparison_query("which is stronger, NVDA or AMD?")
+    assert is_comparison_query("NVDA versus AMD")
+    assert is_comparison_query("which one looks better between NVDA and AMD")
+    assert is_comparison_query("is NVDA or AMD a better setup")
+
+
+def test_comparison_query_ignores_non_comparison_and_empty() -> None:
+    assert not is_comparison_query("")
+    assert not is_comparison_query("how is NVDA doing today")
+    assert not is_comparison_query("explain what VWAP means")
+
+
+def test_web_search_query_matches_out_of_envelope_questions() -> None:
+    assert is_web_search_query("what's the latest on the fed?")
+    assert is_web_search_query("any news about the new tariffs")
+    assert is_web_search_query("what's happening with the economy")
+    assert is_web_search_query("tell me about the CPI report")
+    assert is_web_search_query("how is the semiconductor sector doing this week")
+    assert is_web_search_query("recent developments in the rate cut debate")
+    assert is_web_search_query("what do you know about the OPEC decision")
+
+
+def test_web_search_query_ignores_plain_symbol_and_empty() -> None:
+    assert not is_web_search_query("")
+    assert not is_web_search_query("explain RSI")
+    assert not is_web_search_query("what does stocvest think of AVGO")
 
 
 def test_price_chart_vs_forecast_query_split() -> None:

@@ -367,6 +367,17 @@ class Settings(BaseSettings):
         2.0,
         alias="STOCVEST_DAY_DEADZONE_RVOL_OVERRIDE",
     )
+    # Assistant web search (Perplexity Sonar) for out-of-envelope questions — macro,
+    # sector/thematic, "what's the latest on …" — that STOCVEST's Polygon/Benzinga
+    # symbol data cannot answer. Fires only as a fallback (no symbol/discovery/market/
+    # watchlist context this turn), is citation-backed, and is routed through the same
+    # restraint framing (facts only; never a verdict or price prediction). The
+    # PERPLEXITY_API_KEY is already provisioned for the signal engine. OFF by default
+    # (ships dark): when OFF the assistant never makes a web call.
+    stocvest_assistant_web_search_enabled: bool = Field(
+        False,
+        alias="STOCVEST_ASSISTANT_WEB_SEARCH_ENABLED",
+    )
     # B71 Phase C — scheduled offline news event-study report (read-only → S3). OFF by
     # default; the scheduled Lambda no-ops until enabled + a reports bucket is set.
     stocvest_news_event_study_report_enabled: bool = Field(

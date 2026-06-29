@@ -72,6 +72,12 @@ variable "day_deadzone_rvol_override" {
   default     = 2.0
 }
 
+variable "assistant_web_search_enabled" {
+  description = "Assistant web search (Perplexity Sonar) for out-of-envelope questions (macro/policy/sector/'latest on…') that STOCVEST's structured Polygon/Benzinga symbol data can't answer. Fallback-only (no symbol/discovery/market/watchlist context this turn), citation-backed, and factual-no-verdict. Sets STOCVEST_ASSISTANT_WEB_SEARCH_ENABLED on the signals Lambda. Default off (OFF = the assistant never makes a web call)."
+  type        = bool
+  default     = false
+}
+
 # ECR repo for the news-worker image. Created unconditionally so you can build/push
 # (see scripts/build_push_news_worker.ps1) BEFORE setting news_worker_container_image
 # to its repository_url and bumping news_worker_desired_count > 0.

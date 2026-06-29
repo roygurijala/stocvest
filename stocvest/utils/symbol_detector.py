@@ -25,7 +25,7 @@ _BLOCKLIST: frozenset[str] = frozenset({
     # ── Articles / pronouns / prepositions ──────────────────────────────────
     "A", "I", "AM", "AN", "AS", "AT", "BE", "BY", "DO", "GO", "HE",
     "IF", "IN", "IS", "IT", "ME", "MY", "NO", "OF", "OK", "ON", "OR",
-    "SO", "TO", "UP", "US", "WE", "HI",
+    "SO", "TO", "UP", "US", "WE", "HI", "VS",
 
     # ── Common 3-letter English words ───────────────────────────────────────
     "ACT", "AGO", "AID", "AIM", "AIR", "ARC", "ARE", "ARK",
@@ -468,6 +468,44 @@ def extract_company_lookup_phrase(text: str) -> str | None:
         return None
     phrase = " ".join(candidate).strip()
     return phrase if len(phrase) >= 3 else None
+
+
+def detect_symbols(text: str, *, limit: int = 3) -> list[str]:
+    """Return up to *limit* distinct tickers from *text*, in first-seen order.
+
+    Used for multi-symbol comparison questions ("compare NVDA vs AMD"). Same
+    detection rules as :func:`detect_symbol` (dollar-sign tickers are highest
+    confidence; bare 2–5 letter words are filtered by the blocklist), but returns
+    ALL distinct matches rather than only the last one. Dollar-sign hits come
+    first; bare hits follow. De-duplicated across both passes.
+
+    >>> detect_symbols("compare NVDA vs AMD")
+    ['NVDA', 'AMD']
+    >>> detect_symbols("$nvda or $amd which is stronger")
+    ['NVDA', 'AMD']
+    """
+    if not text or not text.strip():
+        return []
+    upper = text.upper()
+    out: list[str] = []
+    seen: set[str] = set()
+
+    for sym in _DOLLAR_PATTERN.findall(upper):
+        if sym not in seen:
+            seen.add(sym)
+            out.append(sym)
+            if len(out) >= limit:
+                return out
+
+    for sym in _BARE_PATTERN.findall(upper):
+        if sym in _BLOCKLIST or sym in seen:
+            continue
+        seen.add(sym)
+        out.append(sym)
+        if len(out) >= limit:
+            break
+
+    return out
 
 
 def detect_symbol_from_messages(messages: list[dict]) -> str | None:

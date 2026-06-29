@@ -223,6 +223,84 @@ def is_mode_sensitive_query(text: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Web-search intent — "out-of-envelope" questions STOCVEST's structured
+# Polygon/Benzinga symbol data can't answer (macro, policy, sector/thematic,
+# "what's the latest on …"). Only consulted as a FALLBACK by the handler, after
+# symbol / discovery / market-overview / watchlist intents have been ruled out,
+# so overlap with those phrasings is harmless.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_WEB_SEARCH_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\blatest\b", re.IGNORECASE),
+    re.compile(r"\brecent(ly)?\b", re.IGNORECASE),
+    re.compile(r"\bnews\s+(on|about|for|regarding|around)\b", re.IGNORECASE),
+    re.compile(
+        r"\bwhat('?s| is| are| has| have)\b.{0,40}\b(happening|going\s+on|the\s+latest|new\s+(with|on|in|about))\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bwhat('?s| is)\s+going\s+on\s+(with|in|at)\b", re.IGNORECASE),
+    # Macro / policy / rates / geopolitical topics.
+    re.compile(
+        r"\b(fed|federal\s+reserve|fomc|interest\s+rate|rate\s+(cut|hike)s?|inflation|cpi|ppi|"
+        r"jobs\s+report|payrolls?|unemployment|gdp|recession|tariffs?|trade\s+war|election|"
+        r"geopolitic\w*|opec|oil\s+price|treasury\s+yield|bond\s+yield)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(macro|economy|economic)\b.{0,25}\b(outlook|news|update|today|this\s+week|latest|environment|backdrop)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bwhat\s+do\s+you\s+know\s+about\b", re.IGNORECASE),
+    re.compile(r"\btell\s+me\s+about\b", re.IGNORECASE),
+    re.compile(
+        r"\bsector\b.{0,30}\b(doing|performing|news|latest|this\s+week|rotation|outlook)\b",
+        re.IGNORECASE,
+    ),
+)
+
+
+def is_web_search_query(text: str) -> bool:
+    """Return True when the question likely needs a fresh web lookup beyond
+    STOCVEST's structured symbol data (macro / policy / sector / thematic / "latest").
+
+    The handler only consults this AFTER symbol, discovery, market-overview, and
+    watchlist intents are ruled out, so this is the catch-all breadth path."""
+    if not text or not text.strip():
+        return False
+    return any(p.search(text) for p in _WEB_SEARCH_PATTERNS)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-symbol comparison intent ("compare NVDA vs AMD", "which is stronger?")
+# ─────────────────────────────────────────────────────────────────────────────
+# Precision comes from the handler ANDing this with "≥2 distinct tickers
+# detected", so broad cues like "or" are safe — a one-symbol question never trips
+# the comparison path.
+
+_COMPARISON_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bcompare\b", re.IGNORECASE),
+    re.compile(r"\bcomparison\b", re.IGNORECASE),
+    re.compile(r"\bvs\.?\b", re.IGNORECASE),
+    re.compile(r"\bversus\b", re.IGNORECASE),
+    re.compile(r"\bbetween\b", re.IGNORECASE),
+    re.compile(r"\bwhich\s+(is|one|stock|of|has|looks)\b", re.IGNORECASE),
+    re.compile(r"\b(stronger|weaker|better|worse)\b", re.IGNORECASE),
+    re.compile(r"\bor\b", re.IGNORECASE),
+)
+
+
+def is_comparison_query(text: str) -> bool:
+    """Return True when the message reads like a head-to-head comparison.
+
+    The handler additionally requires ≥2 distinct tickers before activating the
+    multi-symbol path, so this can be permissive without false positives on
+    single-symbol questions."""
+    if not text or not text.strip():
+        return False
+    return any(p.search(text) for p in _COMPARISON_PATTERNS)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Price-chart relevance — should a symbol's price mini-chart accompany the answer?
 # ─────────────────────────────────────────────────────────────────────────────
 # A price/levels mini-chart only adds value when the question is actually about

@@ -350,6 +350,15 @@ def _stocvest_read_lines(read: dict | None) -> list[str]:
     if read.get("stale"):
         out.append("  freshness=last cached evaluation (may be from a prior session)")
 
+    # "What STOCVEST can't yet confirm" — the explicit uncertainty surface. The
+    # prompt's STOCVEST READ rule tells the model to voice these in plain English
+    # so the answer states the verdict AND its limitations, not a false certainty.
+    limitations = read.get("limitations")
+    if isinstance(limitations, list) and limitations:
+        out.append("  not_yet_confirmed (state these as caveats, in plain English):")
+        for lim in [str(x).strip() for x in limitations if str(x).strip()][:4]:
+            out.append(f"    - {lim}")
+
     out.append("")  # separate from the snapshot section that follows
     return out
 
@@ -585,6 +594,8 @@ class AssistantChatService:
         market_context: str = "",
         watchlist_context: str = "",
         preference_context: str = "",
+        web_context: str = "",
+        multi_symbol_context: str = "",
     ) -> AssistantChatResult:
         """Authenticated chat turn.
 
@@ -632,6 +643,8 @@ class AssistantChatService:
         symbol_block = serialize_symbol_context(symbol_context) if symbol_context else ""
         if symbol_block:
             system_text += "\n" + symbol_block
+        if multi_symbol_context:
+            system_text += "\n" + multi_symbol_context
         if market_context:
             system_text += "\n" + market_context
         if discovery_context:
@@ -640,12 +653,23 @@ class AssistantChatService:
             system_text += "\n" + watchlist_context
         if preference_context:
             system_text += "\n" + preference_context
+        if web_context:
+            system_text += "\n" + web_context
         # Increase token budget when live symbol or discovery data is present.
-        max_tokens = (
-            900
-            if (symbol_block or discovery_context or market_context or watchlist_context)
-            else 380
-        )
+        # A multi-symbol comparison needs the most room (2-3 tickers narrated
+        # side by side), so it gets its own, larger budget.
+        if multi_symbol_context:
+            max_tokens = 1100
+        elif (
+            symbol_block
+            or discovery_context
+            or market_context
+            or watchlist_context
+            or web_context
+        ):
+            max_tokens = 900
+        else:
+            max_tokens = 380
         ai_text = await self._claude_chat_or_none(
             system=system_text,
             messages=clean,
