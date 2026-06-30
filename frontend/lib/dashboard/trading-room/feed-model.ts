@@ -135,6 +135,14 @@ function leaderBias(leader: DeskDiscoveryLeader): FeedBias {
   return biasFromSignalVerdict(leader.verdict) ?? "neutral";
 }
 
+function leaderFeedEligible(leader: DeskDiscoveryLeader): boolean {
+  return leader.desk_surface_eligible !== false;
+}
+
+function setupFeedEligible(setup: IntradaySetupPayload): boolean {
+  return setup.desk_surface_eligible !== false;
+}
+
 /** Map a desk leader's composite status / alignment into a single verdict state. */
 function leaderState(leader: DeskDiscoveryLeader): FeedState {
   const hint = (leader.execution_hint || "").trim().toLowerCase();
@@ -331,10 +339,12 @@ export function buildFeedCards(input: BuildFeedInput): FeedCard[] {
   };
 
   for (const leader of input.swingDesk?.discovery ?? []) {
+    if (!leaderFeedEligible(leader)) continue;
     ingest(cardFromLeader(leader, "swing", snapshotsBySymbol, companyBySymbol), false);
   }
   if (dayTradingSurfaces) {
     for (const leader of input.dayDesk?.discovery ?? []) {
+      if (!leaderFeedEligible(leader)) continue;
       ingest(cardFromLeader(leader, "day", snapshotsBySymbol, companyBySymbol), false);
     }
     const dayDiscoveryCount = input.dayDesk?.discovery?.length ?? 0;
@@ -349,10 +359,12 @@ export function buildFeedCards(input: BuildFeedInput): FeedCard[] {
     }
   }
   for (const setup of input.swingSetups) {
+    if (!setupFeedEligible(setup)) continue;
     ingest(cardFromSetup(setup, "swing", snapshotsBySymbol, companyBySymbol), true);
   }
   if (dayTradingSurfaces) {
     for (const setup of input.daySetups) {
+      if (!setupFeedEligible(setup)) continue;
       ingest(cardFromSetup(setup, "day", snapshotsBySymbol, companyBySymbol), true);
     }
   }

@@ -22,6 +22,9 @@ export type DeskDiscoveryLeader = {
   decision_state?: string | null;
   /** B79 — direction confidence (High/Moderate/Low) from the composite. */
   direction_confidence?: "High" | "Moderate" | "Low" | null;
+  /** False when stop/target geometry cannot clear desk R/R — hide from feed surfaces. */
+  desk_surface_eligible?: boolean | null;
+  geometry_block_reason?: string | null;
 };
 
 export type DeskMoverRadarRow = {

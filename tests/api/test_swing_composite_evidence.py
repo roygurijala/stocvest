@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from stocvest.api.services.swing_composite_evidence import build_swing_composite_evidence_fields
 from stocvest.signals.composite_score import CompositeScoreEngine, CompositeVerdict, LayerSignal
 
@@ -240,3 +242,27 @@ def test_v3_distance_atr_none_without_atr() -> None:
     assert fields["reference_target_1_distance_atr"] is None
     assert fields["reference_target_2_distance_atr"] is None
     assert fields["reference_stop_distance_atr"] is None
+
+
+def test_degenerate_hod_geometry_not_tradeable_and_no_synthetic_rr() -> None:
+    """Price at HOD: micro T1/T2, no synthetic headline R/R, desk surface blocked."""
+    comp = _bull_comp()
+    fields = build_swing_composite_evidence_fields(
+        composite=comp,
+        regime="bull",
+        payload={
+            "symbol": "CGNX",
+            "atr": 0.25,
+            "daily_bars_range": [{"low": 70.0, "high": 72.0}] * 20,
+        },
+        confluence={"confirming_signals": [], "conflicting_signals": [], "n_confirming": 2, "n_conflicting": 0},
+        snapshot={"last_trade_price": 72.76, "day_low": 62.44, "day_high": 82.57, "day_vwap": 71.0},
+    )
+    assert fields["reference_target_2_provenance"] == "atr_extension"
+    assert fields["reference_target_2"] == pytest.approx(73.76, abs=0.01)
+    assert fields["structure_risk_reward"] is None
+    assert fields["risk_reward"] == 0.0
+    assert fields["rr_warning"] is True
+    assert fields["entry_zone_quality"] == "no_clean_entry"
+    assert fields["geometry_tradeable"] is False
+    assert fields["desk_surface_eligible"] is False

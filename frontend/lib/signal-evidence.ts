@@ -1615,31 +1615,6 @@ export function referenceLevelsFromSessionStructure(
   // structure-derived T2 look ineligible, so headline R/R never benefited from a
   // valid resistance-anchored extension.
   let reference_target_2_provenance = g.target2Provenance;
-  if (
-    reference_stop_level != null &&
-    g.target1 != null &&
-    entry != null &&
-    useLong &&
-    entry > reference_stop_level
-  ) {
-    const t2R = roundPrice4(entry + 2.0 * (entry - reference_stop_level));
-    if (t2R > g.target1 + 1e-6) {
-      reference_target_2 = t2R;
-      reference_target_2_provenance = "2r_extension";
-    }
-  } else if (
-    reference_stop_level != null &&
-    g.target1 != null &&
-    entry != null &&
-    !useLong &&
-    reference_stop_level > entry
-  ) {
-    const t2R = roundPrice4(entry - 2.0 * (reference_stop_level - entry));
-    if (t2R < g.target1 - 1e-6) {
-      reference_target_2 = t2R;
-      reference_target_2_provenance = "2r_extension";
-    }
-  }
 
   return {
     reference_stop_level,
