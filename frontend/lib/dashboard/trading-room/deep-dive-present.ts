@@ -108,6 +108,40 @@ export function scenarioTrackBounds(levels: number[]): { trackMin: number; track
   return { trackMin: Math.min(...finite), trackMax: Math.max(...finite) };
 }
 
+/** Price-axis bounds for the scenario geometry bar (stop → farthest target). */
+export function scenarioGeometryTrackBounds(input: {
+  stopPrice: number;
+  target1?: number | null;
+  target2?: number | null;
+  entryLow: number;
+  entryHigh: number;
+  currentPrice: number;
+}): { trackMin: number; trackMax: number } {
+  const levels = [
+    input.stopPrice,
+    input.entryLow,
+    input.entryHigh,
+    input.currentPrice,
+    input.target1,
+    input.target2
+  ].filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+  return scenarioTrackBounds(levels);
+}
+
+/** Outermost profit target on the low→high price axis (both T1 and T2 when present). */
+export function scenarioFarthestTargetPrice(input: {
+  isShort: boolean;
+  target1?: number | null;
+  target2?: number | null;
+  fallbackTarget: number;
+}): number {
+  const levels = [input.target1, input.target2, input.fallbackTarget].filter(
+    (n): n is number => typeof n === "number" && Number.isFinite(n)
+  );
+  if (levels.length === 0) return input.fallbackTarget;
+  return input.isShort ? Math.min(...levels) : Math.max(...levels);
+}
+
 /**
  * Orientation for the scenario geometry bar. The entry-zone band and current marker are
  * positioned on a value-based low→high axis, so the Stop/Target corner labels (and the

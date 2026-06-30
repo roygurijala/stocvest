@@ -31,7 +31,7 @@ describe("structure-resistance-scanner", () => {
     expect(level).toBe(112);
   });
 
-  test("analyst target fills gap when chart resistance missing (legacy path)", () => {
+  test("optional extraLevels can fill gap when chart resistance missing (legacy scanner path)", () => {
     const level = scanNearestResistanceAbove(bars([3, 4.5, 6, 8, 9, 10.5, 11.4], 2), {
       last: 9.44,
       floorAbove: 11.4,

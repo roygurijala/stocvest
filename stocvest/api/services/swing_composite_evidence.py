@@ -408,9 +408,7 @@ def _long_side_geometry(
     zone_lo: float | None = None,
     zone_hi: float | None = None,
     daily_bars: list[dict[str, float]] | None = None,
-    analyst_target_levels: list[float] | None = None,
     target_geometry_v2: bool = False,
-    analyst_max_pct: float = 40.0,
     target_geometry_v3: bool = False,
     sma20: float | None = None,
     sma50: float | None = None,
@@ -423,8 +421,7 @@ def _long_side_geometry(
     Targets: session high as primary resistance; second target = 2R extension from entry when possible.
 
     When ``target_geometry_v2`` is set (B76): a session-high T1 that offers no reward over
-    entry is rebuilt from in-band structural resistance (then a 1R projection), and analyst
-    price targets feeding T2 are capped at ``analyst_max_pct`` above entry.
+    entry is rebuilt from in-band structural resistance (then a 1R projection).
     """
     structural = resolve_structural_stop_anchor(
         direction="bullish",
@@ -791,7 +788,6 @@ def build_swing_composite_evidence_fields(
     _settings = get_settings()
     target_geometry_v2 = bool(_settings.stocvest_swing_target_geometry_v2_enabled)
     target_geometry_v3 = bool(_settings.stocvest_target_geometry_v3_enabled)
-    analyst_max_pct = float(_settings.stocvest_analyst_target_max_pct_from_entry)
     sma20 = _float_or_none(payload.get("sma20"))
     sma50 = _float_or_none(payload.get("sma50"))
     sma200 = _float_or_none(payload.get("sma200"))
@@ -811,9 +807,7 @@ def build_swing_composite_evidence_fields(
             zone_lo=structure_stop_lo,
             zone_hi=None,
             daily_bars=daily_bars,
-            analyst_target_levels=analyst_target_levels or None,
             target_geometry_v2=target_geometry_v2,
-            analyst_max_pct=analyst_max_pct,
             target_geometry_v3=target_geometry_v3,
             sma20=sma20,
             sma50=sma50,
