@@ -279,6 +279,9 @@ class EntryZoneModeParameters:
     min_width_pct: float = 0.002
     preferred_anchor: str = "vwap"  # vwap | sma20 | sma50 | prev_close | last
     atr_k: float = 0.5  # natural half-width = atr_k × ATR, clamped by the % rails
+    max_extension_gamma: float = 1.5  # pullback: max distance below/above last in ATR units
+    breakout_band_atr_k: float = 0.4  # breakout band δ = k × ATR above/below anchor
+    structure_band_atr_k: float = 0.4  # ideal pullback display band ± k × ATR
 
 
 @dataclass
@@ -292,12 +295,24 @@ class EntryZoneParameters:
 
     day: EntryZoneModeParameters = field(
         default_factory=lambda: EntryZoneModeParameters(
-            max_width_pct=0.005, min_width_pct=0.002, preferred_anchor="vwap", atr_k=0.5
+            max_width_pct=0.005,
+            min_width_pct=0.002,
+            preferred_anchor="vwap",
+            atr_k=0.5,
+            max_extension_gamma=1.5,
+            breakout_band_atr_k=0.4,
+            structure_band_atr_k=0.4,
         )
     )
     swing: EntryZoneModeParameters = field(
         default_factory=lambda: EntryZoneModeParameters(
-            max_width_pct=0.020, min_width_pct=0.005, preferred_anchor="sma20", atr_k=1.0
+            max_width_pct=0.020,
+            min_width_pct=0.005,
+            preferred_anchor="sma20",
+            atr_k=1.0,
+            max_extension_gamma=2.5,
+            breakout_band_atr_k=0.6,
+            structure_band_atr_k=0.6,
         )
     )
     min_rr_from_zone_high: float = 1.5

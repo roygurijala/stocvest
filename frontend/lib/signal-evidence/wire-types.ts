@@ -210,6 +210,18 @@ export interface SignalEvidenceInsight {
   signal_parameters: string;
   historical_entry_zone: { low: number; high: number } | null;
   session_entry_zone?: { low: number; high: number } | null;
+  /** Validation state: clean | clamped | no_clean_entry */
+  entry_zone_quality?: string | null;
+  entry_zone_worst_case_rr?: number | null;
+  /** Pullback vs breakout geometry */
+  entry_style?: "pullback" | "breakout" | null;
+  entry_anchor?: number | null;
+  entry_distance_atr?: number | null;
+  zone_width_atr?: number | null;
+  entry_distance_tier?: "ideal" | "acceptable" | "chasing" | null;
+  entry_quality_tier?: "high" | "medium" | "low" | null;
+  /** Symmetric band around anchor — display as ideal pullback, not primary entry */
+  ideal_pullback_zone?: { low: number; high: number } | null;
   swing_range_zone?: { low: number; high: number; sessions?: number } | null;
   reference_target_1: number | null;
   reference_target_2: number | null;

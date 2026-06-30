@@ -240,3 +240,49 @@ def nearest_support_below(
     if not eligible:
         return None
     return max(eligible, key=lambda z: z.level)
+
+
+def nearest_broken_resistance_at_or_below(
+    *,
+    last: float,
+    atr: float,
+    daily_bars: list[dict[str, float]] | None,
+    trading_mode: str = "swing",
+    extra_levels: list[float | None] | None = None,
+    window_atr: float = 1.5,
+) -> LevelZone | None:
+    """Breakout long anchor: highest resistance cluster at or just below ``last``."""
+    if last <= 0 or atr <= 0:
+        return None
+    lo = last - window_atr * atr
+    points = bar_extremes_with_recency(daily_bars, "high")
+    points.extend(_positive_levels(extra_levels or []))
+    epsilon = adaptive_epsilon(atr, last)
+    zones = cluster_level_points(points, epsilon=epsilon, edge="low")
+    eligible = [z for z in zones if lo - _TINY <= z.level <= last + _TINY]
+    if not eligible:
+        return None
+    return max(eligible, key=lambda z: z.level)
+
+
+def nearest_broken_support_at_or_above(
+    *,
+    last: float,
+    atr: float,
+    daily_bars: list[dict[str, float]] | None,
+    trading_mode: str = "swing",
+    extra_levels: list[float | None] | None = None,
+    window_atr: float = 1.5,
+) -> LevelZone | None:
+    """Breakdown short anchor: lowest support cluster at or just above ``last``."""
+    if last <= 0 or atr <= 0:
+        return None
+    hi = last + window_atr * atr
+    points = bar_extremes_with_recency(daily_bars, "low")
+    points.extend(_positive_levels(extra_levels or []))
+    epsilon = adaptive_epsilon(atr, last)
+    zones = cluster_level_points(points, epsilon=epsilon, edge="high")
+    eligible = [z for z in zones if last - _TINY <= z.level <= hi + _TINY]
+    if not eligible:
+        return None
+    return min(eligible, key=lambda z: z.level)

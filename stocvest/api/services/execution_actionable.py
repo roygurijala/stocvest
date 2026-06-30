@@ -211,6 +211,13 @@ def evaluate_execution_actionable(
     ledger_ok, gates = evaluate_ledger_gates(body, mode=mode, verdict=verdict)
     zone_ok, zone_gate = evaluate_entry_zone_gate(body)
     gates["entry_zone"] = zone_gate
+    dist_tier = str(body.get("entry_distance_tier") or "").strip().lower() or None
+    dist_atr = _float_or_none(body.get("entry_distance_atr"))
+    gates["entry_distance"] = {
+        "tier": dist_tier,
+        "distance_atr": round(dist_atr, 2) if dist_atr is not None else None,
+        "soft_warn": dist_tier == "chasing",
+    }
     execution_ok = ledger_ok and zone_ok
     gates["execution_actionable"] = {"pass": execution_ok, "ledger_qualified": ledger_ok, "in_entry_zone": zone_ok}
     return ledger_ok, execution_ok, gates

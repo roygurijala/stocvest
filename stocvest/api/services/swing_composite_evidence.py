@@ -17,6 +17,7 @@ from stocvest.api.services.market_environment import (
     target_policy_from_environment,
 )
 from stocvest.api.services.entry_zone import (
+    classify_entry_style,
     config_for_mode as entry_zone_config_for_mode,
     resolve_entry_zone,
     resolve_structure_entry_anchor,
@@ -946,7 +947,16 @@ def build_swing_composite_evidence_fields(
     ez_cfg["min_rr_from_zone_high"] = min(float(ez_cfg["min_rr_from_zone_high"]), max(1.0, float(min_rr)))
     entry_zone_quality: str | None = None
     entry_zone_worst_case_rr: float | None = None
+    entry_style: str | None = None
+    entry_anchor: float | None = None
+    entry_distance_atr: float | None = None
+    zone_width_atr: float | None = None
+    entry_distance_tier: str | None = None
+    entry_quality_tier: str | None = None
+    ideal_pullback_zone: dict[str, float] | None = None
     if last is not None and last > 0 and reference_stop_level is not None and reference_target_1 is not None:
+        setup_type = str(payload.get("setup_type") or payload.get("orb_signal") or "").strip() or None
+        entry_style_val = classify_entry_style(setup_type)
         ez_anchor = resolve_structure_entry_anchor(
             direction="long" if use_long else "short",
             last=last,
@@ -960,6 +970,7 @@ def build_swing_composite_evidence_fields(
             sma50=_float_or_none(payload.get("sma50")),
             day_lo=day_lo,
             day_hi=day_hi,
+            entry_style=entry_style_val,
         )
         # Validate against the target the engine actually trades to (the same T1/T2
         # selection the headline R/R uses), not T1 unconditionally — otherwise a
@@ -981,6 +992,7 @@ def build_swing_composite_evidence_fields(
             anchor=ez_anchor,
             atr=atr,
             config=ez_cfg,
+            entry_style=entry_style_val,
         )
         if ez is not None:
             # Keep the band for display even when flagged "no_clean_entry"; the flag
@@ -988,6 +1000,13 @@ def build_swing_composite_evidence_fields(
             historical_entry_zone = {"low": ez.low, "high": ez.high}
             entry_zone_quality = ez.quality
             entry_zone_worst_case_rr = ez.worst_case_rr
+            entry_style = ez.entry_style
+            entry_anchor = ez.anchor
+            entry_distance_atr = ez.entry_distance_atr
+            zone_width_atr = ez.zone_width_atr
+            entry_distance_tier = ez.distance_tier
+            entry_quality_tier = ez.entry_quality_tier
+            ideal_pullback_zone = ez.ideal_pullback_zone
 
     signal_score = int(round(max(0.0, min(100.0, (score + 1.0) / 2.0 * 100.0))))
     if rr_warning:
@@ -1098,6 +1117,25 @@ def build_swing_composite_evidence_fields(
                 ),
             }
         )
+    if entry_distance_tier == "chasing" and entry_distance_atr is not None:
+        risk_factors_detailed.append(
+            {
+                "label": "Extended Entry",
+                "severity": "medium",
+                "detail": (
+                    f"Price is {entry_distance_atr:.1f}× ATR from the structure anchor — "
+                    "entering now is chasing; prefer a pullback toward ideal structure."
+                ),
+            }
+        )
+    if entry_quality_tier == "low" and entry_zone_quality != "no_clean_entry":
+        risk_factors_detailed.append(
+            {
+                "label": "Low Entry Quality",
+                "severity": "low",
+                "detail": "Entry band quality is low — distance, width, or worst-case R/R is suboptimal.",
+            }
+        )
     alignment_ratio = float(composite.alignment_ratio)
     total_layers = int(round(float(composite.aligned_weight + composite.conflicted_weight)))
     conflicted_count = int(round(float(composite.conflicted_weight)))
@@ -1185,6 +1223,13 @@ def build_swing_composite_evidence_fields(
         "session_entry_zone": session_entry_zone,
         "entry_zone_quality": entry_zone_quality,
         "entry_zone_worst_case_rr": entry_zone_worst_case_rr,
+        "entry_style": entry_style,
+        "entry_anchor": entry_anchor,
+        "entry_distance_atr": entry_distance_atr,
+        "zone_width_atr": zone_width_atr,
+        "entry_distance_tier": entry_distance_tier,
+        "entry_quality_tier": entry_quality_tier,
+        "ideal_pullback_zone": ideal_pullback_zone,
         "swing_range_zone": swing_range_zone,
         "reference_target_1": reference_target_1,
         "reference_target_2": reference_target_2,

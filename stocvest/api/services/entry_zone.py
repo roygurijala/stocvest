@@ -23,16 +23,53 @@ module only shapes the served zone and reports a secondary worst-case R/R.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 _EPS = 1e-6
 
+EntryStyle = Literal["pullback", "breakout"]
+DistanceTier = Literal["ideal", "acceptable", "chasing"]
+QualityTier = Literal["high", "medium", "low"]
+ValidationQuality = Literal["clean", "clamped", "no_clean_entry"]
 
 # --- Config (defaults mirror stocvest.config.signal_parameters.EntryZoneParameters) ---
 DEFAULTS: dict[str, dict[str, float | str]] = {
-    "day": {"max_width_pct": 0.005, "min_width_pct": 0.002, "preferred_anchor": "vwap", "atr_k": 0.5},
-    "swing": {"max_width_pct": 0.020, "min_width_pct": 0.005, "preferred_anchor": "sma20", "atr_k": 1.0},
+    "day": {
+        "max_width_pct": 0.005,
+        "min_width_pct": 0.002,
+        "preferred_anchor": "vwap",
+        "atr_k": 0.5,
+        "max_extension_gamma": 1.5,
+        "breakout_band_atr_k": 0.4,
+        "structure_band_atr_k": 0.4,
+    },
+    "swing": {
+        "max_width_pct": 0.020,
+        "min_width_pct": 0.005,
+        "preferred_anchor": "sma20",
+        "atr_k": 1.0,
+        "max_extension_gamma": 2.5,
+        "breakout_band_atr_k": 0.6,
+        "structure_band_atr_k": 0.6,
+    },
 }
 DEFAULT_MIN_RR_FROM_ZONE_HIGH: float = 1.5
+
+_BREAKOUT_TOKENS = (
+    "breakout",
+    "orb",
+    "momentum",
+    "breakdown",
+    "hod",
+    "lod",
+)
+_PULLBACK_TOKENS = (
+    "pullback",
+    "dip",
+    "reclaim",
+    "mean_reversion",
+    "bounce",
+)
 
 
 def config_for_mode(payload_cfg: dict | None, trading_mode: str) -> dict:
@@ -49,7 +86,14 @@ def config_for_mode(payload_cfg: dict | None, trading_mode: str) -> dict:
     if isinstance(payload_cfg, dict):
         block = payload_cfg.get(mode)
         if isinstance(block, dict):
-            for k in ("max_width_pct", "min_width_pct", "atr_k"):
+            for k in (
+                "max_width_pct",
+                "min_width_pct",
+                "atr_k",
+                "max_extension_gamma",
+                "breakout_band_atr_k",
+                "structure_band_atr_k",
+            ):
                 v = block.get(k)
                 if isinstance(v, (int, float)) and float(v) > 0:
                     out[k] = float(v)
@@ -60,6 +104,18 @@ def config_for_mode(payload_cfg: dict | None, trading_mode: str) -> dict:
         if isinstance(mrr, (int, float)) and float(mrr) > 0:
             out["min_rr_from_zone_high"] = float(mrr)
     return out
+
+
+def classify_entry_style(setup_type: str | None) -> EntryStyle:
+    """Map ``setup_type`` / ORB tag to pullback vs breakout entry geometry."""
+    s = (setup_type or "").strip().lower()
+    if not s:
+        return "pullback"
+    if any(t in s for t in _PULLBACK_TOKENS) and not any(t in s for t in ("breakout", "orb", "breakdown")):
+        return "pullback"
+    if any(t in s for t in _BREAKOUT_TOKENS):
+        return "breakout"
+    return "pullback"
 
 
 def resolve_anchor(
@@ -105,12 +161,14 @@ def resolve_structure_entry_anchor(
     sma50: float | None,
     day_lo: float | None = None,
     day_hi: float | None = None,
+    entry_style: EntryStyle = "pullback",
 ) -> float | None:
     """Entry-zone anchor from ranked structure zones (B80), with VWAP/SMA fallback.
 
-    Long: nearest support zone below ``last`` (pullback entry).
-    Short: nearest resistance zone above ``last`` (bounce entry).
-    Falls back to :func:`resolve_anchor` when ATR or bars are unavailable.
+    Pullback long: nearest support below ``last``.
+    Pullback short: nearest resistance above ``last``.
+    Breakout long: broken resistance at or just below ``last``.
+    Breakout short: broken support at or just above ``last``.
     """
     legacy = resolve_anchor(
         preferred=preferred,
@@ -124,11 +182,34 @@ def resolve_structure_entry_anchor(
         return legacy
 
     from stocvest.api.services.structure_engine import (
+        nearest_broken_resistance_at_or_below,
+        nearest_broken_support_at_or_above,
         nearest_resistance_above,
         nearest_support_below,
     )
 
     mode = str(trading_mode).strip().lower() or "swing"
+    if entry_style == "breakout":
+        if direction == "short":
+            zone = nearest_broken_support_at_or_above(
+                last=float(last),
+                atr=float(atr),
+                daily_bars=daily_bars,
+                trading_mode=mode,
+                extra_levels=[day_lo, vwap, sma20, sma50],
+            )
+        else:
+            zone = nearest_broken_resistance_at_or_below(
+                last=float(last),
+                atr=float(atr),
+                daily_bars=daily_bars,
+                trading_mode=mode,
+                extra_levels=[day_hi, vwap, sma20, sma50],
+            )
+        if zone is not None:
+            return zone.level
+        return legacy
+
     if direction == "short":
         zone = nearest_resistance_above(
             last=float(last),
@@ -203,10 +284,94 @@ class EntryZoneResult:
     high: float
     quality: str  # "clean" | "clamped" | "no_clean_entry"
     worst_case_rr: float | None  # R/R measured from the worst-case edge of the zone
+    entry_style: EntryStyle
+    anchor: float | None
+    entry_distance_atr: float | None
+    zone_width_atr: float | None
+    distance_tier: DistanceTier | None
+    entry_quality_tier: QualityTier
+    ideal_pullback_zone: dict[str, float] | None
 
 
 def _clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
+
+
+def compute_ideal_pullback_band(
+    *,
+    anchor: float | None,
+    atr: float | None,
+    structure_band_atr_k: float,
+) -> tuple[float, float] | None:
+    """Symmetric structure band ``[anchor − δ, anchor + δ]`` for ideal pullback display."""
+    if anchor is None or anchor <= 0 or atr is None or atr <= 0:
+        return None
+    delta = max(_EPS, float(structure_band_atr_k) * float(atr))
+    return (round(anchor - delta, 4), round(anchor + delta, 4))
+
+
+def compute_entry_distance_atr(
+    *,
+    last: float | None,
+    anchor: float | None,
+    atr: float | None,
+) -> float | None:
+    if last is None or last <= 0 or anchor is None or anchor <= 0 or atr is None or atr <= 0:
+        return None
+    return round(abs(float(last) - float(anchor)) / float(atr), 2)
+
+
+def distance_tier_from_atr(distance_atr: float | None) -> DistanceTier | None:
+    if distance_atr is None:
+        return None
+    if distance_atr < 0.5:
+        return "ideal"
+    if distance_atr <= 1.5:
+        return "acceptable"
+    return "chasing"
+
+
+def zone_width_atr(*, low: float, high: float, atr: float | None) -> float | None:
+    if atr is None or atr <= 0 or high <= low:
+        return None
+    return round((high - low) / float(atr), 2)
+
+
+def score_entry_quality_tier(
+    *,
+    validation_quality: str,
+    distance_tier: DistanceTier | None,
+    worst_case_rr: float | None,
+    zone_width_atr_val: float | None,
+    min_rr: float,
+) -> QualityTier:
+    """High / medium / low desk read from worst-case R/R, distance, and band width."""
+    if validation_quality == "no_clean_entry":
+        return "low"
+    score = 0
+    if distance_tier == "ideal":
+        score += 2
+    elif distance_tier == "acceptable":
+        score += 1
+    elif distance_tier == "chasing":
+        score -= 2
+    if worst_case_rr is not None:
+        if worst_case_rr >= min_rr + 1.0:
+            score += 1
+        elif worst_case_rr < min_rr:
+            score -= 2
+    if zone_width_atr_val is not None:
+        if zone_width_atr_val <= 0.8:
+            score += 1
+        elif zone_width_atr_val > 2.0:
+            score -= 1
+    if validation_quality == "clamped":
+        score -= 1
+    if score >= 3:
+        return "high"
+    if score >= 1:
+        return "medium"
+    return "low"
 
 
 def compute_entry_zone(
@@ -218,35 +383,57 @@ def compute_entry_zone(
     max_width_pct: float,
     min_width_pct: float,
     atr_k: float = 1.0,
+    max_extension_gamma: float = 2.5,
+    breakout_band_atr_k: float = 0.6,
+    entry_style: EntryStyle = "pullback",
 ) -> tuple[float, float] | None:
     """A tight band around the actionable entry (pre-validation).
 
-    Long: enter on a pullback between the anchor (support) and current price →
-    ``[lower, last]`` with ``lower`` clamped between ``last − max_width`` and
-    ``last − min_width``. If the anchor is too far below (price extended) we fall
-    back to a ``max_width`` band just under price.
+    Pullback long: ``[lower, last]`` with ``lower`` toward anchor, capped by
+    ``max_extension_gamma × ATR`` below ``last`` and pct rails.
 
-    Short: enter on a bounce between current price and the anchor (resistance) →
-    ``[last, upper]`` (mirrored).
+    Breakout long: ``[anchor, anchor + δ]`` with δ = ``breakout_band_atr_k × ATR``
+    (tight above the broken level — does not stretch to ``last``).
+
+    Short: mirrored.
     """
     if last is None or last <= 0:
         return None
     max_w = max(_EPS, float(max_width_pct) * last)
     min_w = max(_EPS, min(float(min_width_pct) * last, max_w))
     natural = _clamp((atr_k * atr) if (atr and atr > 0) else min_w, min_w, max_w)
+    gamma_ext = (max_extension_gamma * atr) if (atr and atr > 0) else max_w
+    breakout_delta = _clamp(
+        (breakout_band_atr_k * atr) if (atr and atr > 0) else natural,
+        min_w,
+        max_w,
+    )
+
+    if entry_style == "breakout" and anchor is not None and anchor > 0:
+        if direction == "short":
+            upper = anchor
+            lower = anchor - breakout_delta
+            return (round(lower, 4), round(upper, 4))
+        lower = anchor
+        upper = anchor + breakout_delta
+        return (round(lower, 4), round(upper, 4))
 
     if direction == "short":
+        upper_cap = last + min(gamma_ext, max_w)
         if anchor is not None and anchor > last:
             upper = _clamp(anchor, last + min_w, last + max_w)
+            upper = min(upper, upper_cap)
         else:
-            upper = last + natural
+            upper = min(last + natural, upper_cap)
         return (round(last, 4), round(upper, 4))
 
-    # long (default)
+    # pullback long
+    lower_cap = last - min(gamma_ext, max_w)
     if anchor is not None and anchor < last:
         lower = _clamp(anchor, last - max_w, last - min_w)
+        lower = max(lower, lower_cap)
     else:
-        lower = last - natural
+        lower = max(last - natural, lower_cap)
     return (round(lower, 4), round(last, 4))
 
 
@@ -260,18 +447,49 @@ def validate_entry_zone(
     min_rr_from_zone_high: float,
 ) -> EntryZoneResult:
     """Enforce stop / T1 / worst-case-R/R invariants, clamping the far edge inward."""
-    quality = "clean"
+    lo, hi, quality, worst = _validate_entry_zone_bounds(
+        low=low,
+        high=high,
+        stop=stop,
+        target_1=target_1,
+        direction=direction,
+        min_rr_from_zone_high=min_rr_from_zone_high,
+    )
+    return EntryZoneResult(
+        low=lo,
+        high=hi,
+        quality=quality,
+        worst_case_rr=worst,
+        entry_style="pullback",
+        anchor=None,
+        entry_distance_atr=None,
+        zone_width_atr=None,
+        distance_tier=None,
+        entry_quality_tier="medium",
+        ideal_pullback_zone=None,
+    )
+
+
+def _validate_entry_zone_bounds(
+    *,
+    low: float,
+    high: float,
+    stop: float | None,
+    target_1: float | None,
+    direction: str,
+    min_rr_from_zone_high: float,
+) -> tuple[float, float, str, float | None]:
+    """Enforce stop / T1 / worst-case-R/R invariants, clamping the far edge inward."""
+    quality: ValidationQuality = "clean"
     orig_lo, orig_hi = float(low), float(high)
     lo, hi = orig_lo, orig_hi
     floor = float(min_rr_from_zone_high)
 
     if direction == "short":
-        # Worst-case entry for a short is the zone LOW (you sell cheapest); target is below.
         if stop is not None and hi >= stop:
             hi = stop - _EPS
             quality = "clamped"
         if target_1 is not None and stop is not None and stop > target_1:
-            # low_min s.t. (low − t1) / (stop − low) == floor
             need = (target_1 + floor * stop) / (1.0 + floor)
             if lo < need:
                 lo = need
@@ -288,14 +506,17 @@ def validate_entry_zone(
                 worst = (
                     (reward / risk) if (risk and risk > _EPS and reward is not None and reward > 0) else None
                 )
-        return EntryZoneResult(round(min(lo, hi), 4), round(max(lo, hi), 4), quality, round(worst, 2) if worst else None)
+        return (
+            round(min(lo, hi), 4),
+            round(max(lo, hi), 4),
+            quality,
+            round(worst, 2) if worst else None,
+        )
 
-    # long (default): worst-case entry is the zone HIGH (you pay the most).
     if stop is not None and lo <= stop:
         lo = stop + _EPS
         quality = "clamped"
     if target_1 is not None and stop is not None and target_1 > stop:
-        # high_max s.t. (t1 − high) / (high − stop) == floor
         high_max = (target_1 + floor * stop) / (1.0 + floor)
         if hi > high_max:
             hi = high_max
@@ -313,7 +534,12 @@ def validate_entry_zone(
             risk = (hi - stop) if stop is not None else None
             reward = (target_1 - hi) if target_1 is not None else None
             worst = (reward / risk) if (risk and risk > _EPS and reward is not None and reward > 0) else None
-    return EntryZoneResult(round(min(lo, hi), 4), round(max(lo, hi), 4), quality, round(worst, 2) if worst else None)
+    return (
+        round(min(lo, hi), 4),
+        round(max(lo, hi), 4),
+        quality,
+        round(worst, 2) if worst else None,
+    )
 
 
 def resolve_entry_zone(
@@ -325,6 +551,7 @@ def resolve_entry_zone(
     anchor: float | None,
     atr: float | None,
     config: dict,
+    entry_style: EntryStyle = "pullback",
 ) -> EntryZoneResult | None:
     """Convenience: compute the band then validate/clamp it. ``config`` is the dict
     returned by :func:`config_for_mode`."""
@@ -336,14 +563,46 @@ def resolve_entry_zone(
         max_width_pct=float(config["max_width_pct"]),
         min_width_pct=float(config["min_width_pct"]),
         atr_k=float(config.get("atr_k", 1.0)),
+        max_extension_gamma=float(config.get("max_extension_gamma", 2.5)),
+        breakout_band_atr_k=float(config.get("breakout_band_atr_k", 0.6)),
+        entry_style=entry_style,
     )
     if raw is None:
         return None
-    return validate_entry_zone(
+    lo, hi, quality, worst = _validate_entry_zone_bounds(
         low=raw[0],
         high=raw[1],
         stop=stop,
         target_1=target_1,
         direction=direction,
         min_rr_from_zone_high=float(config["min_rr_from_zone_high"]),
+    )
+    dist_atr = compute_entry_distance_atr(last=last, anchor=anchor, atr=atr)
+    width_atr = zone_width_atr(low=lo, high=hi, atr=atr)
+    dist_tier = distance_tier_from_atr(dist_atr)
+    ideal = compute_ideal_pullback_band(
+        anchor=anchor,
+        atr=atr,
+        structure_band_atr_k=float(config.get("structure_band_atr_k", config.get("atr_k", 1.0))),
+    )
+    ideal_dict = {"low": ideal[0], "high": ideal[1]} if ideal else None
+    eq_tier = score_entry_quality_tier(
+        validation_quality=quality,
+        distance_tier=dist_tier,
+        worst_case_rr=worst,
+        zone_width_atr_val=width_atr,
+        min_rr=float(config["min_rr_from_zone_high"]),
+    )
+    return EntryZoneResult(
+        low=lo,
+        high=hi,
+        quality=quality,
+        worst_case_rr=worst,
+        entry_style=entry_style,
+        anchor=round(anchor, 4) if anchor is not None else None,
+        entry_distance_atr=dist_atr,
+        zone_width_atr=width_atr,
+        distance_tier=dist_tier,
+        entry_quality_tier=eq_tier,
+        ideal_pullback_zone=ideal_dict,
     )

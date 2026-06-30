@@ -78,6 +78,15 @@ import { minRrForDeskMode, parseMarketEnvironment } from "@/lib/signal-evidence/
 import { structureRiskRewardLong, structureRiskRewardShort } from "@/lib/risk-reward-structure";
 import { parseTarget2Provenance, target2ProvenanceLabel } from "@/lib/target-provenance";
 import {
+  buildEntryDistanceWarning,
+  entryQualityTierLabel,
+  entryStyleLabel,
+  formatIdealPullbackZone,
+  parseEntryDistanceTier,
+  parseEntryQualityTier,
+  parseEntryStyle
+} from "@/lib/entry-zone";
+import {
   parseMarketContextDampening,
   parseMarketContextFlags
 } from "@/lib/signal-evidence/market-context-present";
@@ -1137,6 +1146,24 @@ export function DeepDive({
       typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
     const vwap = posNum(c.vwap ?? c.day_vwap);
     const atr = posNum(c.atr);
+    const entryStyle = parseEntryStyle(c.entry_style);
+    const entryAnchor = posNum(c.entry_anchor);
+    const entryDistanceAtr = posNum(c.entry_distance_atr);
+    const zoneWidthAtr = posNum(c.zone_width_atr);
+    const entryDistanceTier = parseEntryDistanceTier(c.entry_distance_tier);
+    const entryQualityTier = parseEntryQualityTier(c.entry_quality_tier);
+    const idealPullbackRaw = c.ideal_pullback_zone;
+    const idealPullbackZone =
+      idealPullbackRaw &&
+      typeof idealPullbackRaw === "object" &&
+      !Array.isArray(idealPullbackRaw) &&
+      posNum((idealPullbackRaw as { low?: unknown }).low) != null &&
+      posNum((idealPullbackRaw as { high?: unknown }).high) != null
+        ? {
+            low: posNum((idealPullbackRaw as { low?: unknown }).low)!,
+            high: posNum((idealPullbackRaw as { high?: unknown }).high)!
+          }
+        : null;
 
     return {
       currentPrice: price,
@@ -1155,6 +1182,13 @@ export function DeepDive({
       worstCaseRr,
       vwap,
       atr,
+      entryStyle,
+      entryAnchor,
+      entryDistanceAtr,
+      zoneWidthAtr,
+      entryDistanceTier,
+      entryQualityTier,
+      idealPullbackZone,
       displayRr: structureRr,
       target2Provenance,
       provenanceDirection,
@@ -1196,6 +1230,12 @@ export function DeepDive({
       chosenLabel: scenario.chosenLabel,
       minRr: deskMinRr
     });
+    const chase = buildEntryDistanceWarning({
+      distanceTier: scenario.entryDistanceTier ?? null,
+      distanceAtr: scenario.entryDistanceAtr ?? null,
+      anchor: scenario.entryAnchor ?? null
+    });
+    if (chase) lines.push(chase);
     return lines.length > 0 ? lines : null;
   }, [scenario, currentRr, deskMinRr]);
 
@@ -1918,6 +1958,46 @@ export function DeepDive({
                         ) : scenario?.entryZoneQuality === "no_clean_entry" ? (
                           <p style={{ margin: "8px 0 0", fontSize: 10.5, lineHeight: 1.5, color: colors.caution, fontWeight: 600 }}>
                             No clean entry: stop and target are too close to carve a band with acceptable reward-to-risk — wait for a better structure.
+                          </p>
+                        ) : null}
+                        {scenario?.entryStyle ? (
+                          <p style={{ margin: "8px 0 0", fontSize: 10.5, lineHeight: 1.5, color: colors.textMuted }}>
+                            {entryStyleLabel(scenario.entryStyle)}
+                            {scenario.entryAnchor != null
+                              ? ` · anchor $${scenario.entryAnchor.toFixed(2)}`
+                              : ""}
+                            {scenario.entryDistanceAtr != null
+                              ? ` · ${scenario.entryDistanceAtr.toFixed(1)}× ATR from anchor`
+                              : ""}
+                          </p>
+                        ) : null}
+                        {scenario?.entryQualityTier ? (
+                          <p
+                            data-testid="entry-quality-tier"
+                            style={{
+                              margin: "6px 0 0",
+                              fontSize: 10.5,
+                              lineHeight: 1.5,
+                              color:
+                                scenario.entryQualityTier === "high"
+                                  ? colors.success
+                                  : scenario.entryQualityTier === "low"
+                                    ? colors.caution
+                                    : colors.textMuted
+                            }}
+                          >
+                            Entry quality: {entryQualityTierLabel(scenario.entryQualityTier)}
+                            {scenario.zoneWidthAtr != null
+                              ? ` · band ${scenario.zoneWidthAtr.toFixed(1)}× ATR wide`
+                              : ""}
+                          </p>
+                        ) : null}
+                        {scenario?.idealPullbackZone ? (
+                          <p
+                            data-testid="ideal-pullback-zone"
+                            style={{ margin: "6px 0 0", fontSize: 10.5, lineHeight: 1.5, color: colors.textMuted }}
+                          >
+                            Ideal pullback zone: {formatIdealPullbackZone(scenario.idealPullbackZone)}
                           </p>
                         ) : null}
                         {entryZoneWarning ? (
