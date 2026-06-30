@@ -166,6 +166,7 @@ function ScenarioGeometry({
   targetPrice,
   target1,
   target2,
+  chosenLabel,
   entryLow,
   entryHigh,
   isShort,
@@ -176,6 +177,7 @@ function ScenarioGeometry({
   targetPrice: number;
   target1?: number | null;
   target2?: number | null;
+  chosenLabel: "T1" | "T2";
   entryLow: number;
   entryHigh: number;
   isShort: boolean;
@@ -194,20 +196,20 @@ function ScenarioGeometry({
   const entryLowPct = pct(entryLow);
   const entryHighPct = pct(entryHigh);
   const currentPct = pct(currentPrice);
-  const showT1 =
-    target1 != null &&
-    Math.abs(target1 - targetPrice) > 0.01 &&
-    Math.abs(target1 - trackMax) > 0.01 &&
-    Math.abs(target1 - trackMin) > 0.01;
-  const t1Pct = showT1 ? pct(target1 as number) : null;
+  const t1Distinct =
+    target1 != null && Math.abs((target1 as number) - targetPrice) > 0.01;
+  const t2Distinct =
+    target2 != null &&
+    (target1 == null || Math.abs((target2 as number) - (target1 as number)) > 0.01);
+  // When the desk plans to T2, mark T1 on the bar only if it sits at a different level.
+  const showT1Marker = chosenLabel === "T2" && t1Distinct;
+  const t1Pct = showT1Marker ? pct(target1 as number) : null;
   const currentLabelPct = Math.min(92, Math.max(8, currentPct));
   const inZone = currentPrice >= entryLow && currentPrice <= entryHigh;
-  // Orient by the ACTUAL level geometry, not the headline bias alone, so the Stop/Target
-  // corner labels (and profit/loss copy + gradient) follow the same value-based low→high
-  // axis the entry-zone band and current marker are placed on.
   const short = scenarioGeometryIsShort(stopPrice, targetPrice, isShort);
-  const leftLabel = short ? (showT1 ? "Target T2" : "Target") : "Stop";
-  const rightLabel = short ? "Stop" : showT1 ? "Target T2" : "Target";
+  const profitLabel = `Target · ${chosenLabel}`;
+  const leftLabel = short ? profitLabel : "Stop";
+  const rightLabel = short ? "Stop" : profitLabel;
   const leftPrice = short ? targetPrice : stopPrice;
   const rightPrice = short ? stopPrice : targetPrice;
   const leftColor = short ? colors.bullish : colors.bearish;
@@ -338,12 +340,20 @@ function ScenarioGeometry({
           `$${currentPrice.toFixed(2)}${inZone ? " · in zone" : ""}`,
           colors.text
         )}
-        {showT1
+        {target1 != null
           ? legendItem(
-              <span style={{ width: 3, height: 12, borderRadius: 2, background: colors.bullish, opacity: 0.7 }} />,
-              "T1",
+              <span style={{ width: 3, height: 12, borderRadius: 2, background: colors.bullish, opacity: chosenLabel === "T1" ? 1 : 0.7 }} />,
+              chosenLabel === "T1" ? "T1 · planned" : "T1",
               `$${(target1 as number).toFixed(2)}`,
-              colors.bullish
+              chosenLabel === "T1" ? colors.bullish : colors.textMuted
+            )
+          : null}
+        {t2Distinct && target2 != null
+          ? legendItem(
+              <span style={{ width: 3, height: 12, borderRadius: 2, background: colors.bullish, opacity: chosenLabel === "T2" ? 1 : 0.7 }} />,
+              chosenLabel === "T2" ? "T2 · planned" : "T2",
+              `$${(target2 as number).toFixed(2)}`,
+              chosenLabel === "T2" ? colors.bullish : colors.textMuted
             )
           : null}
       </div>
@@ -1925,6 +1935,7 @@ export function DeepDive({
                             targetPrice={scenario.targetPrice}
                             target1={scenario.target1}
                             target2={scenario.target2}
+                            chosenLabel={scenario.chosenLabel}
                             entryLow={scenario.entryLow}
                             entryHigh={scenario.entryHigh}
                             isShort={setupBias === "Bearish"}
