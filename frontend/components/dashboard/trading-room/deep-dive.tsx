@@ -1254,6 +1254,9 @@ export function DeepDive({
     };
   }, [displayPrice, setupBias, signalOverlay, referenceLevels, composite, isInsufficient]);
 
+  /** Side-by-side geometry bar + gauge only when the price ladder is shown. */
+  const scenarioSideBySide = Boolean(scenario && geometryTradeable);
+
   const currentRr = scenario?.displayRr ?? null;
 
   const entryZoneWarning = useMemo(() => {
@@ -1987,17 +1990,17 @@ export function DeepDive({
                       padding: `${spacing[3]} ${spacing[4]}`
                     }}
                   >
-                    {/* One row: Scenario geometry (left) | R/R gauge (right) */}
+                    {/* One row: Scenario geometry (left) | R/R gauge (right) when ladder shown; stack when not tradable. */}
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: scenario != null ? "1fr auto" : "1fr",
+                        gridTemplateColumns: scenarioSideBySide ? "minmax(0, 1fr) minmax(240px, 320px)" : "1fr",
                         gap: spacing[4],
                         alignItems: "start"
                       }}
                     >
                       {/* Left: Scenario geometry */}
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <p
                           style={{
                             margin: 0,
@@ -2141,8 +2144,11 @@ export function DeepDive({
                       {scenario ? (
                         <div
                           style={{
-                            borderLeft: `1px solid ${colors.border}`,
-                            paddingLeft: spacing[4]
+                            minWidth: 0,
+                            borderLeft: scenarioSideBySide ? `1px solid ${colors.border}` : undefined,
+                            borderTop: scenarioSideBySide ? undefined : `1px solid ${colors.border}`,
+                            paddingLeft: scenarioSideBySide ? spacing[4] : undefined,
+                            paddingTop: scenarioSideBySide ? undefined : spacing[4]
                           }}
                         >
                           <p
