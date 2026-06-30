@@ -1540,7 +1540,6 @@ export interface SessionReferenceLevelsInput {
   swingLow?: number | null;
   swingHigh?: number | null;
   dailyBars?: OhlcBar[];
-  analystTargetLevels?: number[];
 }
 
 /**
@@ -1582,7 +1581,6 @@ export function referenceLevelsFromSessionStructure(
         prevClose,
         last,
         dailyBars: input.dailyBars,
-        analystTargetLevels: input.analystTargetLevels,
         atr,
         tradingMode
       })
