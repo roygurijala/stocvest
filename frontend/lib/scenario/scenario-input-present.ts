@@ -1,7 +1,7 @@
 import type { GapIntelSnapshot } from "@/lib/api/gap-intel";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { deriveSessionReferenceLevels, effectiveSnapshotPrice } from "@/lib/snapshot-reference-levels";
-import { analystLevelsFromComposite, parseSwingCompositeInsight, referenceLevelsFromSessionStructure } from "@/lib/signal-evidence";
+import { parseSwingCompositeInsight, referenceLevelsFromSessionStructure } from "@/lib/signal-evidence";
 import type { SignalsSetupBias } from "@/lib/signals-page-present";
 import type { ScenarioInput, ScenarioMode, VolatilityRegime } from "@/lib/scenario/types";
 
@@ -153,8 +153,7 @@ function resolveCompositeScenarioReference(args: {
       resistance: session.resistance ?? zone?.high ?? null,
       vwap: session.vwap,
       lastTradePrice: last,
-      prevClose,
-      analystTargetLevels: args.insight?.analyst_target_levels ?? analystLevelsFromComposite(comp)
+      prevClose
     });
     if (stop == null) stop = derived.reference_stop_level;
     if (target_1 == null) target_1 = derived.reference_target_1;
