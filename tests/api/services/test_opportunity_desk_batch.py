@@ -19,9 +19,19 @@ from stocvest.data.models import Snapshot
 
 
 def test_execution_hint_blocks_low_rr_swing() -> None:
-    hint = execution_hint_from_composite({"risk_reward": 0.5}, mode="swing")
+    hint = execution_hint_from_composite(
+        {
+            "verdict": "bullish",
+            "entry_zone_quality": "clean",
+            "last_trade_price": 100.0,
+            "reference_stop_level": 95.0,
+            "reference_target_1": 106.0,
+            "risk_reward": 0.5,
+        },
+        mode="swing",
+    )
     assert hint is not None
-    assert "risk/reward" in hint.lower()
+    assert "below desk minimum" in hint.lower()
 
 
 def test_build_recently_hot_tracks_dropped_symbols() -> None:
