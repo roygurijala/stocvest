@@ -1980,7 +1980,7 @@ export function DeepDive({
                               lineHeight: 1.5,
                               color:
                                 scenario.entryQualityTier === "high"
-                                  ? colors.success
+                                  ? colors.bullish
                                   : scenario.entryQualityTier === "low"
                                     ? colors.caution
                                     : colors.textMuted
