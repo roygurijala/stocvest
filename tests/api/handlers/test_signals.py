@@ -207,7 +207,7 @@ def test_swing_synthesis_parse_handler_parses_json_signal_payload() -> None:
     assert body["disclaimer"]
 
 
-def test_day_setups_handler_geo_preview_with_market_headlines() -> None:
+def test_day_setups_handler_geo_preview_with_market_headlines(tradeable_geometry_cache: None) -> None:
     from stocvest.signals.geo_analyzer import clear_geo_cache
 
     clear_geo_cache()
@@ -250,7 +250,7 @@ def test_day_setups_handler_geo_preview_with_market_headlines() -> None:
     assert preview.get("exposure_band") in ("low", "moderate", "high")
 
 
-def test_day_setups_handler_geo_preview_without_headlines() -> None:
+def test_day_setups_handler_geo_preview_without_headlines(tradeable_geometry_cache: None) -> None:
     from stocvest.signals.geo_analyzer import clear_geo_cache
 
     clear_geo_cache()
@@ -287,7 +287,7 @@ def test_day_setups_handler_geo_preview_without_headlines() -> None:
     assert isinstance(tags, list) and tags
 
 
-def test_day_setups_handler_returns_ranked_candidates() -> None:
+def test_day_setups_handler_returns_ranked_candidates(tradeable_geometry_cache: None) -> None:
     et = ZoneInfo("America/New_York")
     start = datetime(2026, 4, 28, 9, 30, tzinfo=et)
     bars = []
@@ -379,7 +379,10 @@ def test_day_setups_handler_validates_body() -> None:
     assert response["statusCode"] == 400
 
 
-def test_swing_setups_handler_returns_swing_daily_dto_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_swing_setups_handler_returns_swing_daily_dto_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    tradeable_geometry_cache: None,
+) -> None:
     from stocvest.signals.daily_bar_scanner import DailyBarSetupCandidate
 
     fake = DailyBarSetupCandidate(

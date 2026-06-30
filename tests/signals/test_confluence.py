@@ -446,7 +446,7 @@ def test_safe_defaults_when_snapshot_empty() -> None:
     assert isinstance(r.confluence_score, int)
 
 
-def test_confluence_in_intraday_setup_response() -> None:
+def test_confluence_in_intraday_setup_response(tradeable_geometry_cache: None) -> None:
     et = ZoneInfo("America/New_York")
     start = datetime(2026, 4, 28, 9, 30, tzinfo=et)
     bars = []
