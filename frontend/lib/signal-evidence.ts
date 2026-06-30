@@ -1,5 +1,6 @@
 import type { NewsPayload, SnapshotPayload } from "@/lib/api/market";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
+import { parsePositiveRiskReward } from "@/lib/structure-risk-reward-present";
 import { parseLaggardSignal, parseUnlockForecast, type LaggardSignal, type UnlockHint } from "@/lib/laggard";
 import { parseCausalNarrativeFromApi } from "@/lib/signal-evidence/causal-narrative";
 import {
@@ -1641,8 +1642,14 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
   if (signal_score == null) return null;
   const trend_strength = String(body.trend_strength ?? "").trim() || "Moderate";
   const trend_direction = String(body.trend_direction ?? "").trim() || "Sideways";
-  const risk_reward = numOrNull(body.risk_reward) ?? 1.5;
-  const rr_warning = Boolean(body.rr_warning) || risk_reward < 2.0;
+  const structure_risk_reward = parsePositiveRiskReward(body.structure_risk_reward);
+  const headline_rr = parsePositiveRiskReward(body.risk_reward);
+  const risk_reward = structure_risk_reward ?? headline_rr ?? 0;
+  const rr_warning =
+    Boolean(body.rr_warning) ||
+    structure_risk_reward == null ||
+    risk_reward <= 0 ||
+    risk_reward < 2.0;
   const rr_qualityRaw = String(body.rr_quality ?? "").trim().toLowerCase();
   const rr_quality =
     rr_qualityRaw === "low" || rr_qualityRaw === "acceptable" || rr_qualityRaw === "good" || rr_qualityRaw === "strong"
@@ -1752,6 +1759,7 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     direction_confidence_score,
     direction_confidence_reason,
     risk_reward: Math.round(risk_reward * 10) / 10,
+    structure_risk_reward: structure_risk_reward ?? null,
     rr_warning,
     rr_quality,
     market_regime,

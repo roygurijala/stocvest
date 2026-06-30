@@ -412,7 +412,7 @@ export function buildBuildingStructureRowModels(input: {
       const leader = row.quietLeader;
       const aligned = alignedLayersFromAlignmentRatio(leader.alignment_ratio, LAYER_TOTAL);
       const layerDots = Array.from({ length: LAYER_TOTAL }, (_, i) => (aligned != null ? i < aligned : false));
-      const riskReward = resolveRiskReward(leader.risk_reward, leader.execution_hint);
+      const riskReward = resolveRiskReward(leader.risk_reward, leader.execution_hint, leader.structure_risk_reward);
       const hint = leader.execution_hint?.trim().toLowerCase() ?? "";
       const setupBadge = hint.includes("risk/reward")
         ? ("blocked" as const)
@@ -492,7 +492,7 @@ export function buildBuildingStructureRowModels(input: {
         aligned,
         layerDots,
         setupBadge,
-        riskReward: resolveRiskReward(leader.risk_reward, leader.execution_hint),
+        riskReward: resolveRiskReward(leader.risk_reward, leader.execution_hint, leader.structure_risk_reward),
         executionHint: leader.execution_hint ?? null,
         gapLine,
         gapTone,

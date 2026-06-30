@@ -17,6 +17,10 @@ import {
 import type { BuildingStructureRow } from "@/lib/dashboard/building-structure-present";
 import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
 import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
+import {
+  formatEntryZoneRrLine,
+  formatRiskRewardLine
+} from "@/lib/structure-risk-reward-present";
 
 const LAYER_TOTAL = 6;
 
@@ -133,7 +137,11 @@ export function buildingStructureListHeadline(rows: BuildingStructureRow[]): str
 export function sortBuildingStructureRows(rows: BuildingStructureRow[]): BuildingStructureRow[] {
   const score = (row: BuildingStructureRow): number => {
     if (row.source === "quiet_leader" && row.quietLeader) {
-      const rr = resolveRiskReward(row.quietLeader.risk_reward, row.quietLeader.execution_hint);
+      const rr = resolveRiskReward(
+        row.quietLeader.risk_reward,
+        row.quietLeader.execution_hint,
+        row.quietLeader.structure_risk_reward
+      );
       return rr ?? -1;
     }
     if (row.source === "near_qualification" && row.nearQual) {
@@ -201,8 +209,11 @@ export function buildBuildingStructureRowModel(
       nearStructure: near,
       quietLeader: quiet
     }),
-    rrLine: input.riskReward != null ? `R/R ${input.riskReward.toFixed(1)}:1` : null,
-    detailLine: rrProximityNote(input.riskReward, minRr) ?? input.detailFallback,
+    rrLine: formatRiskRewardLine(input.riskReward, { minGate: minRr }),
+    detailLine:
+      formatEntryZoneRrLine(row.quietLeader?.entry_zone_worst_case_rr) ??
+      rrProximityNote(input.riskReward, minRr) ??
+      input.detailFallback,
     gapLine: input.gapLine,
     gapTone: input.gapTone,
     badgeLabel: setupBadgeLabelForSession(input.setupBadge, input.sessionMode),
@@ -242,7 +253,11 @@ export function buildSessionActivityRowModel(
   const setupBadge = resolveSetupBadge(leader, input.mode, input.source);
   const aligned = alignedLayersFromAlignmentRatio(leader.alignment_ratio, LAYER_TOTAL);
   const layerDots = layerDotsFromAligned(aligned);
-  const riskReward = resolveRiskReward(leader.risk_reward, leader.execution_hint);
+  const riskReward = resolveRiskReward(
+    leader.risk_reward,
+    leader.execution_hint,
+    leader.structure_risk_reward
+  );
   const minRr = minDeskRiskReward(input.mode);
   const gapLine = formatDeskGapLine(leader.gap_percent, leader.direction);
   const gapTone: OpportunityRowModel["gapTone"] =
@@ -262,8 +277,10 @@ export function buildSessionActivityRowModel(
     layerDots,
     layerTotal: LAYER_TOTAL,
     primaryLine,
-    rrLine: riskReward != null ? `R/R ${riskReward.toFixed(1)}:1` : null,
-    detailLine: setupBadge === "blocked" ? rrProximityNote(riskReward, minRr) : null,
+    rrLine: formatRiskRewardLine(riskReward, { minGate: minRr }),
+    detailLine:
+      formatEntryZoneRrLine(leader.entry_zone_worst_case_rr) ??
+      (setupBadge === "blocked" ? rrProximityNote(riskReward, minRr) : null),
     gapLine,
     gapTone,
     badgeLabel: setupBadgeLabelForSession(setupBadge, input.sessionMode),

@@ -32,7 +32,7 @@ describe("opportunity-row-present", () => {
     });
     expect(row.primaryLine).toMatch(/strong alignment/i);
     expect(row.primaryLine).not.toContain("Strong setup quality");
-    expect(row.rrLine).toBe("R/R 0.8:1");
+    expect(row.rrLine).toBe("R/R at current price 0.8:1 — below 2.0:1 gate");
   });
 
   test("post-close session row uses retrospective copy", () => {

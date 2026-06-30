@@ -98,6 +98,7 @@ import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { buildSignalsPageAssistantContext } from "@/lib/assistant/build-signals-assistant-context";
 import type { AssistantPageContext } from "@/lib/assistant/types";
+import { parsePositiveRiskReward, resolveCompositeRiskRewardForDecision } from "@/lib/structure-risk-reward-present";
 import { feedCardAllowsScenarioGeometry } from "@/lib/dashboard/trading-room/feed-setup-tier";
 import { feedCardStateLabel } from "@/lib/dashboard/trading-room/feed-state-present";
 import { SessionMoverContext } from "@/components/dashboard/trading-room/session-mover-context";
@@ -931,8 +932,7 @@ export function DeepDive({
   const pageDecision = useMemo(() => {
     if (isInsufficient) return null;
     const c = composite as Record<string, unknown>;
-    const rr = typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? c.risk_reward : 1.5;
-    const rrWarning = Boolean(c.rr_warning) || (Number.isFinite(rr) && rr < deskMinRr);
+    const { riskReward: rr, rrWarning } = resolveCompositeRiskRewardForDecision(c, deskMinRr);
     const ar = typeof c.alignment_ratio === "number" ? c.alignment_ratio : null;
     const tfCtx = resolveTimeframeContext(c, activeLane);
     return buildSignalsPageDecision({
@@ -1095,18 +1095,13 @@ export function DeepDive({
     return null;
   }, [card.price, signalOverlay, dayState, swingState]);
 
-  // Honest structure R/R from composite (never the retired confidence synthetic fallback).
   const riskReward = useMemo(() => {
     if (isInsufficient) return null;
     const c = composite as Record<string, unknown>;
-    const structure =
-      typeof c.structure_risk_reward === "number" && Number.isFinite(c.structure_risk_reward)
-        ? (c.structure_risk_reward as number)
-        : null;
-    if (structure != null) return structure;
-    const headline =
-      typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? (c.risk_reward as number) : null;
-    return headline != null && headline > 0 ? headline : null;
+    return (
+      parsePositiveRiskReward(c.structure_risk_reward) ??
+      parsePositiveRiskReward(c.risk_reward)
+    );
   }, [composite, isInsufficient]);
 
   const geometryTradeable = useMemo(() => {
