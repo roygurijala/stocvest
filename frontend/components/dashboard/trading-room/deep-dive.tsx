@@ -43,10 +43,13 @@ import {
   resolveDeepDiveVerdictLabel,
   resolveDeepDiveVerdictTone,
   resolveEntryZonePosition,
+  scenarioFarthestTargetPrice,
   scenarioGeometryIsShort,
-  scenarioPriceAxisPercent,
-  scenarioTrackBounds
+  scenarioGeometryTrackBounds,
+  scenarioPriceAxisPercent
 } from "@/lib/dashboard/trading-room/deep-dive-present";
+import { buildScenarioRrFixGuidance } from "@/lib/scenario/scenario-rr-fix-guidance";
+import { ScenarioRrFixPanel } from "@/components/dashboard/trading-room/scenario-rr-fix-panel";
 import { isNonRenderableCompositeResponse } from "@/lib/api/swing-composite";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { resolveSnapshotDisplayPrice } from "@/lib/api/snapshot-price";
@@ -183,35 +186,40 @@ function ScenarioGeometry({
   isShort: boolean;
   colors: Colors;
 }) {
-  const { trackMin, trackMax } = scenarioTrackBounds([
+  const short = scenarioGeometryIsShort(stopPrice, targetPrice, isShort);
+  const farthestTarget = scenarioFarthestTargetPrice({
+    isShort: short,
+    target1,
+    target2,
+    fallbackTarget: targetPrice
+  });
+  const { trackMin, trackMax } = scenarioGeometryTrackBounds({
     stopPrice,
-    targetPrice,
-    target1 ?? targetPrice,
-    target2 ?? targetPrice,
+    target1,
+    target2,
     entryLow,
     entryHigh,
     currentPrice
-  ]);
+  });
   const pct = (p: number) => scenarioPriceAxisPercent(p, trackMin, trackMax);
   const entryLowPct = pct(entryLow);
   const entryHighPct = pct(entryHigh);
   const currentPct = pct(currentPrice);
-  const t1Distinct =
-    target1 != null && Math.abs((target1 as number) - targetPrice) > 0.01;
+  const t1Val = target1 != null && Number.isFinite(target1) ? (target1 as number) : null;
+  const t2Val = target2 != null && Number.isFinite(target2) ? (target2 as number) : null;
+  const t1Distinct = t1Val != null && Math.abs(t1Val - farthestTarget) > 0.01;
   const t2Distinct =
-    target2 != null &&
-    (target1 == null || Math.abs((target2 as number) - (target1 as number)) > 0.01);
-  // When the desk plans to T2, mark T1 on the bar only if it sits at a different level.
-  const showT1Marker = chosenLabel === "T2" && t1Distinct;
-  const t1Pct = showT1Marker ? pct(target1 as number) : null;
+    t2Val != null && (t1Val == null || Math.abs(t2Val - t1Val) > 0.01);
+  const showT1Marker = t1Val != null && (t1Distinct || t2Val == null);
+  const showT2Marker = t2Distinct && t2Val != null;
+  const t1Pct = showT1Marker ? pct(t1Val as number) : null;
+  const t2Pct = showT2Marker ? pct(t2Val as number) : null;
   const currentLabelPct = Math.min(92, Math.max(8, currentPct));
   const inZone = currentPrice >= entryLow && currentPrice <= entryHigh;
-  const short = scenarioGeometryIsShort(stopPrice, targetPrice, isShort);
-  const profitLabel = `Target · ${chosenLabel}`;
-  const leftLabel = short ? profitLabel : "Stop";
-  const rightLabel = short ? "Stop" : profitLabel;
-  const leftPrice = short ? targetPrice : stopPrice;
-  const rightPrice = short ? stopPrice : targetPrice;
+  const leftLabel = short ? "Target" : "Stop";
+  const rightLabel = short ? "Stop" : "Target";
+  const leftPrice = short ? farthestTarget : stopPrice;
+  const rightPrice = short ? stopPrice : farthestTarget;
   const leftColor = short ? colors.bullish : colors.bearish;
   const rightColor = short ? colors.bearish : colors.bullish;
   const trackGradient = short
@@ -266,7 +274,6 @@ function ScenarioGeometry({
             boxShadow: `0 0 0 2px ${colors.surface}`
           }}
         />
-        {/* T1 tick (only when the headline target is T2, so T1 sits inside the track) */}
         {t1Pct != null ? (
           <div
             style={{
@@ -275,12 +282,28 @@ function ScenarioGeometry({
               top: -3,
               bottom: -3,
               transform: "translateX(-50%)",
-              width: 2,
+              width: chosenLabel === "T1" ? 3 : 2,
               background: colors.bullish,
-              opacity: 0.7,
+              opacity: chosenLabel === "T1" ? 1 : 0.65,
               borderRadius: 2
             }}
-            title={`T1 $${(target1 as number).toFixed(2)}`}
+            title={`T1 $${(t1Val as number).toFixed(2)}${chosenLabel === "T1" ? " · planned" : ""}`}
+          />
+        ) : null}
+        {t2Pct != null ? (
+          <div
+            style={{
+              position: "absolute",
+              left: `${t2Pct}%`,
+              top: -3,
+              bottom: -3,
+              transform: "translateX(-50%)",
+              width: chosenLabel === "T2" ? 3 : 2,
+              background: colors.bullish,
+              opacity: chosenLabel === "T2" ? 1 : 0.65,
+              borderRadius: 2
+            }}
+            title={`T2 $${(t2Val as number).toFixed(2)}${chosenLabel === "T2" ? " · planned" : ""}`}
           />
         ) : null}
         {/* Floating current value tied to the marker */}
@@ -1249,6 +1272,46 @@ export function DeepDive({
     return lines.length > 0 ? lines : null;
   }, [scenario, currentRr, deskMinRr]);
 
+  const scenarioRrFixGuidance = useMemo(() => {
+    if (!scenario || setupBias === "Neutral") return null;
+    const direction = setupBias === "Bearish" ? "bearish" : "bullish";
+    const rr =
+      currentRr ??
+      (direction === "bullish"
+        ? structureRiskRewardLong(
+            scenario.currentPrice,
+            scenario.targetPrice,
+            scenario.stopPrice,
+            scenario.target2,
+            scenario.target2Provenance
+          )
+        : structureRiskRewardShort(
+            scenario.currentPrice,
+            scenario.targetPrice,
+            scenario.stopPrice,
+            scenario.target2,
+            scenario.target2Provenance
+          ));
+    if (rr == null || rr >= deskMinRr) return null;
+    return buildScenarioRrFixGuidance(
+      {
+        entry: scenario.currentPrice,
+        stop: scenario.stopPrice,
+        target: scenario.targetPrice,
+        riskReward: rr
+      },
+      direction,
+      {
+        target1: scenario.target1,
+        target2: scenario.target2,
+        structuralStop: scenario.stopPrice,
+        entryZoneLow: scenario.entryLow,
+        entryZoneHigh: scenario.entryHigh
+      },
+      deskMinRr
+    );
+  }, [scenario, setupBias, currentRr, deskMinRr]);
+
   const executionActionable = useMemo(() => {
     if (!composite || isInsufficient) return null;
     const raw = (composite as Record<string, unknown>).execution_actionable;
@@ -2126,6 +2189,9 @@ export function DeepDive({
                             <p style={{ margin: "4px 0 0", fontSize: typography.scale.xs, color: colors.textMuted }}>
                               Eval-time composite R/R: {riskReward.toFixed(1)}:1 (may differ if price moved since evaluation)
                             </p>
+                          ) : null}
+                          {scenarioRrFixGuidance ? (
+                            <ScenarioRrFixPanel guidance={scenarioRrFixGuidance} colors={colors} />
                           ) : null}
                         </div>
                       ) : null}

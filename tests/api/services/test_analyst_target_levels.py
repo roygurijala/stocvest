@@ -63,7 +63,6 @@ def test_long_geometry_never_promotes_analyst_pt_to_t2() -> None:
         entry=11.0,
         atr=0.4,
         daily_bars=bars,
-        analyst_target_levels=[12.0],
     )
     assert t1 == 11.4
     assert t2 != 12.0
@@ -90,7 +89,6 @@ def test_long_geometry_v2_off_no_longer_promotes_analyst_pt_when_atr_present() -
         entry=5.31,
         atr=0.5,
         daily_bars=_ATAI_BARS,
-        analyst_target_levels=[14.0],
         target_geometry_v2=False,
     )
     assert t1 == 5.31  # degenerate: T1 == entry == session high
@@ -98,8 +96,8 @@ def test_long_geometry_v2_off_no_longer_promotes_analyst_pt_when_atr_present() -
     assert prov != "resistance" or t2 is None
 
 
-def test_long_geometry_v2_caps_distant_analyst_target() -> None:
-    """Flag ON: a +163% analyst PT is dropped as a swing T2 (beyond the 40% band)."""
+def test_long_geometry_v2_never_uses_distant_fantasy_t2() -> None:
+    """Flag ON: T2 stays structural / 2R — distant levels are not adopted as resistance T2."""
     from stocvest.api.services.swing_composite_evidence import _long_side_geometry
 
     stop, t1, t2, _, prov = _long_side_geometry(
@@ -111,12 +109,9 @@ def test_long_geometry_v2_caps_distant_analyst_target() -> None:
         entry=5.31,
         atr=0.5,
         daily_bars=_ATAI_BARS,
-        analyst_target_levels=[14.0],
         target_geometry_v2=True,
-        analyst_max_pct=40.0,
     )
     assert t2 != 14.0
-    assert prov != "resistance"  # the only resistance candidate (analyst $14) was capped out
     if t2 is not None:
         assert t2 < 14.0
 
@@ -134,9 +129,7 @@ def test_long_geometry_v2_rebuilds_degenerate_session_high_t1() -> None:
         entry=5.31,
         atr=0.5,
         daily_bars=_ATAI_BARS,
-        analyst_target_levels=[14.0],
         target_geometry_v2=True,
-        analyst_max_pct=40.0,
     )
     assert t1 is not None
     assert t1 > 5.31  # T1 must clear entry, not sit on it

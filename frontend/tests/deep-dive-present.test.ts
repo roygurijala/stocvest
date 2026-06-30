@@ -9,7 +9,9 @@ import {
   resolveDeepDiveVerdictLabel,
   resolveDeepDiveVerdictTone,
   resolveEntryZonePosition,
+  scenarioFarthestTargetPrice,
   scenarioGeometryIsShort,
+  scenarioGeometryTrackBounds,
   scenarioPriceAxisPercent,
   scenarioTrackBounds
 } from "@/lib/dashboard/trading-room/deep-dive-present";
@@ -244,6 +246,27 @@ describe("deep-dive-present", () => {
     expect(lines.some((l) => l.includes("0.2:1"))).toBe(true);
     expect(lines.some((l) => l.includes("2.0:1"))).toBe(true);
     expect(lines.at(-1)).toContain("Do not enter at current price");
+  });
+
+  test("scenarioGeometryTrackBounds centers current between stop and planned T1 when T2 extends range", () => {
+    const bounds = scenarioGeometryTrackBounds({
+      stopPrice: 62.44,
+      target1: 82.57,
+      target2: 92.63,
+      entryLow: 71.05,
+      entryHigh: 72.5,
+      currentPrice: 72.51
+    });
+    expect(bounds.trackMin).toBeCloseTo(62.44, 2);
+    expect(bounds.trackMax).toBeCloseTo(92.63, 2);
+    const currentPct = scenarioPriceAxisPercent(72.51, bounds.trackMin, bounds.trackMax);
+    const stopToT1Pct = scenarioPriceAxisPercent(72.51, 62.44, 82.57);
+    expect(stopToT1Pct).toBeCloseTo(50, 0);
+    expect(currentPct).toBeLessThan(stopToT1Pct);
+    expect(scenarioFarthestTargetPrice({ isShort: false, target1: 82.57, target2: 92.63, fallbackTarget: 82.57 })).toBeCloseTo(
+      92.63,
+      2
+    );
   });
 
   test("scenarioTrackBounds and price axis percent handle short geometry", () => {

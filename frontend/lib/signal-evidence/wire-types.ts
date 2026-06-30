@@ -240,7 +240,7 @@ export interface SignalEvidenceInsight {
   missing_fields?: string[];
   alignment_ratio?: number;
   conflicted_layers?: string[];
-  /** Standing analyst price targets used for structural T2 resistance (Benzinga or Perplexity). */
+  /** Standing analyst price targets — informational (assistant / fundamental context), not used for T2 geometry. */
   analyst_target_levels?: number[];
   analyst_target_source?: "benzinga" | "perplexity" | "none";
 }

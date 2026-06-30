@@ -1360,7 +1360,6 @@ function longSideGeometry(opts: {
   prevClose: number | null;
   last: number | null;
   dailyBars?: OhlcBar[];
-  analystTargetLevels?: number[];
   atr?: number | null;
   tradingMode?: string;
 }): {
@@ -1369,7 +1368,7 @@ function longSideGeometry(opts: {
   target2: number | null;
   target2Provenance: "2r_extension" | "t1_bump" | "resistance" | null;
 } {
-  const { dayLo, dayHi, vwap, prevClose, last, dailyBars = [], analystTargetLevels = [], atr, tradingMode = "swing" } = opts;
+  const { dayLo, dayHi, vwap, prevClose, last, dailyBars = [], atr, tradingMode = "swing" } = opts;
   let reference_stop: number | null = null;
   if (dayLo != null && dayLo > 0 && vwap != null && vwap > 0) {
     reference_stop = roundPrice4(Math.min(dayLo, vwap) * 0.998);
@@ -1397,7 +1396,6 @@ function longSideGeometry(opts: {
     const structuralT2 = scanNearestResistanceAbove(dailyBars, {
       last: entryGuess,
       floorAbove: reference_target_1,
-      extraLevels: atr != null && atr > 0 ? undefined : analystTargetLevels,
       atr,
       tradingMode
     });
