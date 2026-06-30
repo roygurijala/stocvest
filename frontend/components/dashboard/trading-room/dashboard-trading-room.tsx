@@ -70,7 +70,7 @@ import {
 } from "@/lib/dashboard/trading-room/trading-room-card-refresh";
 import { feedBiasColor } from "@/lib/signal-direction-colors";
 import { overlayFeedCardTimestamps } from "@/lib/dashboard/trading-room/feed-card-timestamps";
-import { useSymbolNames } from "@/lib/hooks/use-symbol-names";
+import { useSymbolNames, useSymbolName } from "@/lib/hooks/use-symbol-names";
 import { WatchlistRail } from "@/components/dashboard/trading-room/watchlist-rail";
 import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
 import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
@@ -396,7 +396,7 @@ function TradingRoomBody({
     const map = new Map(companyBySymbol);
     for (const sym of sidebarRefreshSymbols) {
       const nm = feedSymbolNames[sym]?.trim();
-      if (nm && !map.has(sym)) map.set(sym, nm);
+      if (nm && (!map.has(sym) || !map.get(sym)?.trim())) map.set(sym, nm);
     }
     return map;
   }, [companyBySymbol, feedSymbolNames, sidebarRefreshSymbols]);
@@ -1804,6 +1804,8 @@ function SignalCard({
   refreshing?: boolean;
   hasTrackedPlan?: boolean;
 }) {
+  const symbolName = useSymbolName(card.symbol);
+  const companyLabel = card.company?.trim() || symbolName?.trim() || null;
   const biasAccent = feedBiasColor(card.bias, colors);
   const sTone = stateTone(card.state, colors);
   const pct = card.changePct;
@@ -1866,8 +1868,8 @@ function SignalCard({
             ) : null}
           </span>
         </div>
-        {card.company ? (
-          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{card.company}</span>
+        {companyLabel ? (
+          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{companyLabel}</span>
         ) : null}
         <div style={{ display: "flex", alignItems: "center", gap: spacing[2], marginTop: 2 }}>
           <span style={biasPillStyle(card.bias, colors)}>
