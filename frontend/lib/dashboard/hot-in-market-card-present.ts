@@ -4,6 +4,10 @@
  */
 
 import type { DeskDiscoveryLeader } from "@/lib/api/desk-today";
+import {
+  parseRiskRewardFromHint,
+  resolveStructureRiskReward
+} from "@/lib/structure-risk-reward-present";
 import { ACTIONABLE_ALIGNED_MIN } from "@/lib/alignment-display-tier";
 import {
   dashboardDirectionCardChrome,
@@ -16,21 +20,18 @@ import type { SessionActivityUiMode } from "@/lib/market/session-activity-mode";
 import { alignedLayersFromAlignmentRatio } from "@/lib/signals-page-present";
 import { dashboardTradingRoomHref, tradingRoomLaneFromMode } from "@/lib/nav/dashboard-trading-room-deeplink";
 
-export function parseRiskRewardFromHint(hint: string | null | undefined): number | null {
-  const t = hint?.trim();
-  if (!t) return null;
-  const m = t.match(/\((\d+(?:\.\d+)?)\s*:\s*1\)/i) ?? t.match(/(\d+(?:\.\d+)?)\s*:\s*1/i);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isFinite(n) ? n : null;
-}
+export { parseRiskRewardFromHint };
 
 export function resolveRiskReward(
   explicit: number | null | undefined,
-  executionHint: string | null | undefined
+  executionHint: string | null | undefined,
+  structureExplicit?: number | null
 ): number | null {
-  if (typeof explicit === "number" && Number.isFinite(explicit)) return explicit;
-  return parseRiskRewardFromHint(executionHint);
+  return resolveStructureRiskReward({
+    risk_reward: explicit,
+    structure_risk_reward: structureExplicit,
+    execution_hint: executionHint
+  });
 }
 
 /** @deprecated Use MARKET_ACTIVITY_TITLE — kept for imports/tests */
@@ -394,7 +395,7 @@ export function buildHotInMarketCardModel(
 
   const verdictLine = truncateVerdict(leader.verdict);
   const volumeLine = formatDayVolume(leader.day_volume);
-  const riskReward = resolveRiskReward(leader.risk_reward, leader.execution_hint);
+  const riskReward = resolveRiskReward(leader.risk_reward, leader.execution_hint, leader.structure_risk_reward);
   const statusHeadline = resolveStatusHeadline({
     setupBadge,
     setupBadgeLabel,

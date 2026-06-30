@@ -16,6 +16,10 @@ export type DeskDiscoveryLeader = {
   verdict?: string | null;
   alignment_ratio?: number | null;
   risk_reward?: number | null;
+  /** Honest structure R/R from reference levels; null when geometry fails. */
+  structure_risk_reward?: number | null;
+  /** Worst-case R/R from the top of the entry zone band. */
+  entry_zone_worst_case_rr?: number | null;
   composite_status?: string | null;
   execution_hint?: string | null;
   execution_actionable?: boolean | null;

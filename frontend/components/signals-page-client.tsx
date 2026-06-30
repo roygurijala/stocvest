@@ -80,7 +80,8 @@ import {
 } from "@/lib/signals-page-present";
 import { sectorLayerStatusLabelFromEntry } from "@/lib/signals/composite-layer-rows";
 import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
-import { isRrBelowVerdictThreshold } from "@/lib/trade-conviction-tier";
+import { isRrBelowVerdictThreshold, minRiskRewardForVerdict } from "@/lib/trade-conviction-tier";
+import { resolveCompositeRiskRewardForDecision } from "@/lib/structure-risk-reward-present";
 import { resolveSetupJudgmentFromComposite } from "@/lib/signal-evidence/setup-judgment";
 import {
   resolveScenarioBuilderCapability,
@@ -953,8 +954,8 @@ export function SignalsPageClient({
   const pageDecision = useMemo(() => {
     if (!compositeResult || isInsufficientCompositeResponse(compositeResult)) return null;
     const c = compositeResult as Record<string, unknown>;
-    const rr = typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? c.risk_reward : 1.5;
-    const rrWarning = Boolean(c.rr_warning) || isRrBelowVerdictThreshold(rr, tradingMode);
+    const minRr = minRiskRewardForVerdict(tradingMode);
+    const { riskReward: rr, rrWarning } = resolveCompositeRiskRewardForDecision(c, minRr);
     const ar = typeof c.alignment_ratio === "number" ? c.alignment_ratio : null;
     const tfCtx =
       compositeResult && !isInsufficientCompositeResponse(compositeResult)

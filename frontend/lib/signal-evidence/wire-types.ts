@@ -199,6 +199,8 @@ export interface SignalEvidenceInsight {
   direction_confidence_score?: number;
   direction_confidence_reason?: string;
   risk_reward: number;
+  /** Honest structure R/R; null when stop/target geometry cannot be scored. */
+  structure_risk_reward?: number | null;
   rr_warning?: boolean;
   rr_quality?: "low" | "acceptable" | "good" | "strong";
   market_regime: string;

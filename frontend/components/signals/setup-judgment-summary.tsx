@@ -241,9 +241,9 @@ export function SetupJudgmentSummary({
               Execution: {executionLabel}
             </p>
           ) : null}
-          {riskReward != null && tradeability.band !== "strong" ? (
+          {riskReward != null && riskReward > 0 && tradeability.band !== "strong" ? (
             <p className="m-0 mt-1 text-xs leading-snug" style={{ color: colors.textMuted }} data-testid="setup-judgment-rr-context">
-              R/R {riskReward.toFixed(1)}:1 at reference levels
+              R/R {riskReward.toFixed(1)}:1 at current price
               {minRiskReward != null
                 ? riskReward >= minRiskReward
                   ? ` — clears ${minRiskReward.toFixed(1)}:1 desk gate, but entry timing is still ${tradeability.band}`

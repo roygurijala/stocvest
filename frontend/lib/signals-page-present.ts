@@ -758,9 +758,15 @@ export function buildSignalsPageDecision(input: {
   const reinforcements: string[] = [];
   if (rrFail) {
     const minRr = minRiskRewardForVerdict(mode);
-    reinforcements.push(
-      `Risk/reward too low (${riskReward.toFixed(1)}:1) — below ${mode} desk threshold (${minRr.toFixed(1)}:1).`
-    );
+    if (riskReward > 0) {
+      reinforcements.push(
+        `Risk/reward too low (${riskReward.toFixed(1)}:1) — below ${mode} desk threshold (${minRr.toFixed(1)}:1).`
+      );
+    } else {
+      reinforcements.push(
+        `Risk/reward insufficient at current price — stop/target geometry does not clear the ${minRr.toFixed(1)}:1 desk gate.`
+      );
+    }
   }
   if (weakAgreement) reinforcements.push("Layers don't agree enough across the desk.");
   if (timeframeCounterTrend) {

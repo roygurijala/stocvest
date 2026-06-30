@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from stocvest.api.services.geometry_tradeability import geometry_tradeability
 from stocvest.api.services.opportunity_desk.funnel import FunnelMover
+from stocvest.api.services.risk_reward_display import positive_risk_reward
 
 DeskMode = Literal["swing", "day"]
 
@@ -20,18 +21,19 @@ def execution_hint_from_composite(body: dict[str, Any] | None, *, mode: DeskMode
         if reason == "geometry_insufficient":
             return "Not tradable — stop/target geometry insufficient for desk R/R."
         if reason == "rr_below_desk_min":
-            rr_raw = body.get("structure_risk_reward")
-            if rr_raw is None:
-                rr_raw = body.get("risk_reward")
-            if isinstance(rr_raw, (int, float)):
-                return f"Not tradable — structure R/R {float(rr_raw):.1f}:1 below desk minimum."
+            rr_raw = positive_risk_reward(
+                body.get("structure_risk_reward"),
+                body.get("risk_reward"),
+            )
+            if rr_raw is not None:
+                return f"Not tradable — structure R/R {rr_raw:.1f}:1 below desk minimum."
             return "Not tradable — structure R/R below desk minimum."
         if reason:
             return f"Not tradable — {str(reason).replace('_', ' ')}."
     rr_raw = body.get("structure_risk_reward")
     if rr_raw is None:
         rr_raw = body.get("risk_reward")
-    rr: float | None = float(rr_raw) if isinstance(rr_raw, (int, float)) else None
+    rr: float | None = positive_risk_reward(rr_raw)
     if mode == "swing" and rr is not None and rr < 2.0:
         return f"Strong setup quality — execution blocked by risk/reward ({rr:.1f}:1)."
     eq = body.get("execution_quality")
@@ -51,6 +53,8 @@ def discovery_row_from_mover(
     alignment_ratio: float | None = None
     verdict: str | None = None
     rr: float | None = None
+    structure_rr: float | None = None
+    entry_zone_rr: float | None = None
     status: str | None = None
     if composite and isinstance(composite, dict):
         status = str(composite.get("status") or "").strip() or None
@@ -65,9 +69,12 @@ def discovery_row_from_mover(
             score = alignment.get("score")
             if isinstance(score, (int, float)):
                 alignment_ratio = float(score)
-        rr_raw = composite.get("risk_reward")
-        if isinstance(rr_raw, (int, float)):
-            rr = float(rr_raw)
+        structure_rr = positive_risk_reward(composite.get("structure_risk_reward"))
+        rr = positive_risk_reward(
+            composite.get("structure_risk_reward"),
+            composite.get("risk_reward"),
+        )
+        entry_zone_rr = positive_risk_reward(composite.get("entry_zone_worst_case_rr"))
 
     execution_actionable: bool | None = None
     decision_state: str | None = None
@@ -106,6 +113,8 @@ def discovery_row_from_mover(
         "verdict": verdict,
         "alignment_ratio": alignment_ratio,
         "risk_reward": rr,
+        "structure_risk_reward": structure_rr,
+        "entry_zone_worst_case_rr": entry_zone_rr,
         "composite_status": status,
         "execution_hint": execution_hint_from_composite(composite, mode=mode),
         "execution_actionable": execution_actionable,

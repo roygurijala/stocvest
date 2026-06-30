@@ -66,7 +66,7 @@ export function buildQuietLeaderCardModel(
     typeof leader.daily_rsi === "number" && Number.isFinite(leader.daily_rsi) ? leader.daily_rsi : null;
   const why = leader.why_line?.trim() || (rsi != null ? `RSI ${rsi.toFixed(0)} · low velocity` : "Low velocity · structure");
   const alignmentLine = aligned != null ? `${aligned}/${LAYER_TOTAL} layers aligned` : null;
-  const riskReward = resolveRiskReward(leader.risk_reward, leader.execution_hint);
+  const riskReward = resolveRiskReward(leader.risk_reward, leader.execution_hint, leader.structure_risk_reward);
   const hint = leader.execution_hint?.trim().toLowerCase() ?? "";
   const setupBadge = hint.includes("risk/reward") ? ("blocked" as const) : ("review" as const);
   const setupBadgeLabel = setupBadge === "blocked" ? "R/R blocks entry" : "Quiet leader";
