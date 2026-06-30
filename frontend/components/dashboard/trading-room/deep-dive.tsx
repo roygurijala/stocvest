@@ -1095,12 +1095,31 @@ export function DeepDive({
     return null;
   }, [card.price, signalOverlay, dayState, swingState]);
 
-  // R/R ratio from composite payload
+  // Honest structure R/R from composite (never the retired confidence synthetic fallback).
   const riskReward = useMemo(() => {
     if (isInsufficient) return null;
     const c = composite as Record<string, unknown>;
-    const rr = typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? c.risk_reward : null;
-    return rr;
+    const structure =
+      typeof c.structure_risk_reward === "number" && Number.isFinite(c.structure_risk_reward)
+        ? (c.structure_risk_reward as number)
+        : null;
+    if (structure != null) return structure;
+    const headline =
+      typeof c.risk_reward === "number" && Number.isFinite(c.risk_reward) ? (c.risk_reward as number) : null;
+    return headline != null && headline > 0 ? headline : null;
+  }, [composite, isInsufficient]);
+
+  const geometryTradeable = useMemo(() => {
+    if (isInsufficient) return false;
+    const c = composite as Record<string, unknown>;
+    if (c.geometry_tradeable === false || c.desk_surface_eligible === false) return false;
+    return true;
+  }, [composite, isInsufficient]);
+
+  const geometryBlockReason = useMemo(() => {
+    if (isInsufficient) return null;
+    const raw = (composite as Record<string, unknown>).geometry_block_reason;
+    return typeof raw === "string" && raw.trim() ? raw.trim() : null;
   }, [composite, isInsufficient]);
 
   // Single source of truth for the scenario panel: stop / entry zone / target,
@@ -1991,7 +2010,7 @@ export function DeepDive({
                         >
                           Scenario geometry
                         </p>
-                        {scenario ? (
+                        {scenario && geometryTradeable ? (
                           <ScenarioGeometry
                             currentPrice={scenario.currentPrice}
                             stopPrice={scenario.stopPrice}
@@ -2004,6 +2023,22 @@ export function DeepDive({
                             isShort={setupBias === "Bearish"}
                             colors={colors}
                           />
+                        ) : scenario && !geometryTradeable ? (
+                          <p
+                            data-testid="geometry-not-tradeable"
+                            style={{
+                              margin: "8px 0 0",
+                              fontSize: typography.scale.sm,
+                              lineHeight: 1.5,
+                              color: colors.caution,
+                              fontWeight: 600
+                            }}
+                          >
+                            Not tradable at current structure
+                            {geometryBlockReason ? ` (${geometryBlockReason.replace(/_/g, " ")})` : ""} — no
+                            validated stop/target plan. Search this symbol for layer context only, or wait for a
+                            pullback that clears desk geometry.
+                          </p>
                         ) : null}
                         {scenario?.t1TooClose ? (
                           <p

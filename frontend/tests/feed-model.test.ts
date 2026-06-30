@@ -29,6 +29,24 @@ describe("buildFeedCards", () => {
     expect(dayCards.every((c) => c.setupTier === "mover")).toBe(true);
   });
 
+  test("excludes desk leaders marked not surface eligible", () => {
+    const cards = buildFeedCards({
+      mode: "swing",
+      swingDesk: {
+        discovery: [
+          { symbol: "GOOD", gap_percent: 1, direction: "up", rank_score: 90, desk: "swing", desk_surface_eligible: true },
+          { symbol: "BAD", gap_percent: 2, direction: "up", rank_score: 88, desk: "swing", desk_surface_eligible: false }
+        ]
+      },
+      dayDesk: null,
+      swingSetups: [],
+      daySetups: [],
+      snapshotsBySymbol: new Map(),
+      dayTradingSurfaces: true
+    });
+    expect(cards.map((c) => c.symbol)).toEqual(["GOOD"]);
+  });
+
   test("leader card bias follows the composite signal, not the gap move direction", () => {
     const cards = buildFeedCards({
       mode: "day",

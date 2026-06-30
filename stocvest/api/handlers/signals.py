@@ -26,6 +26,7 @@ from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.day_setups_geo_preview import attach_geo_preview_to_intraday_rows
 from stocvest.api.services.intraday_listing_age_filter import filter_bars_by_listing_age
+from stocvest.api.services.geometry_tradeability import filter_setups_bundle_by_geometry
 from stocvest.api.services.scanner_setups_bundle import (
     bundle_setups_response,
     ensure_setups_v2_bundle,
@@ -802,6 +803,17 @@ def day_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, 
                 attach_geo_preview_to_intraday_rows(rows.get("near_qualification") or [], payload)
         except Exception as exc:
             _LOG.warning("day setups geo preview failed: %s", exc)
+        if isinstance(rows, dict):
+            rows = filter_setups_bundle_by_geometry(rows, mode="day")
+        elif isinstance(rows, list):
+            from stocvest.api.services.geometry_tradeability import (
+                annotate_setup_rows_surface_eligibility,
+                filter_surface_eligible_setup_rows,
+            )
+
+            rows = filter_surface_eligible_setup_rows(
+                annotate_setup_rows_surface_eligibility(rows, mode="day")
+            )
         if include_trace:
             bundle = ensure_setups_v2_bundle(rows)
             excluded = excluded_symbols_from_bundle(bundle)
@@ -927,6 +939,17 @@ def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str
                 attach_geo_preview_to_intraday_rows(rows.get("near_qualification") or [], payload)
         except Exception as exc:
             _LOG.warning("swing setups geo preview failed: %s", exc)
+        if isinstance(rows, dict):
+            rows = filter_setups_bundle_by_geometry(rows, mode="swing")
+        elif isinstance(rows, list):
+            from stocvest.api.services.geometry_tradeability import (
+                annotate_setup_rows_surface_eligibility,
+                filter_surface_eligible_setup_rows,
+            )
+
+            rows = filter_surface_eligible_setup_rows(
+                annotate_setup_rows_surface_eligibility(rows, mode="swing")
+            )
         if include_trace:
             bundle = ensure_setups_v2_bundle(rows)
             excluded = excluded_symbols_from_bundle(bundle)

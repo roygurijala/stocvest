@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from stocvest.api.services.geometry_tradeability import geometry_tradeability
 from stocvest.api.services.opportunity_desk.funnel import FunnelMover
 
 DeskMode = Literal["swing", "day"]
@@ -12,10 +13,25 @@ DeskMode = Literal["swing", "day"]
 def execution_hint_from_composite(body: dict[str, Any] | None, *, mode: DeskMode) -> str | None:
     if not body or not isinstance(body, dict):
         return None
-    rr_raw = body.get("risk_reward")
-    rr: float | None = None
-    if isinstance(rr_raw, (int, float)):
-        rr = float(rr_raw)
+    eligible, reason = geometry_tradeability(body, mode=mode)
+    if not eligible:
+        if reason == "no_clean_entry":
+            return "Not tradable — no clean entry band at current structure."
+        if reason == "geometry_insufficient":
+            return "Not tradable — stop/target geometry insufficient for desk R/R."
+        if reason == "rr_below_desk_min":
+            rr_raw = body.get("structure_risk_reward")
+            if rr_raw is None:
+                rr_raw = body.get("risk_reward")
+            if isinstance(rr_raw, (int, float)):
+                return f"Not tradable — structure R/R {float(rr_raw):.1f}:1 below desk minimum."
+            return "Not tradable — structure R/R below desk minimum."
+        if reason:
+            return f"Not tradable — {str(reason).replace('_', ' ')}."
+    rr_raw = body.get("structure_risk_reward")
+    if rr_raw is None:
+        rr_raw = body.get("risk_reward")
+    rr: float | None = float(rr_raw) if isinstance(rr_raw, (int, float)) else None
     if mode == "swing" and rr is not None and rr < 2.0:
         return f"Strong setup quality — execution blocked by risk/reward ({rr:.1f}:1)."
     eq = body.get("execution_quality")
@@ -56,6 +72,8 @@ def discovery_row_from_mover(
     execution_actionable: bool | None = None
     decision_state: str | None = None
     direction_confidence: str | None = None
+    desk_surface_eligible: bool | None = None
+    geometry_block_reason: str | None = None
     if composite and isinstance(composite, dict):
         if "execution_actionable" in composite:
             execution_actionable = bool(composite.get("execution_actionable"))
@@ -65,6 +83,17 @@ def discovery_row_from_mover(
         dc = composite.get("direction_confidence")
         if isinstance(dc, str) and dc.strip() in ("High", "Moderate", "Low"):
             direction_confidence = dc.strip()
+        if "desk_surface_eligible" in composite:
+            desk_surface_eligible = bool(composite.get("desk_surface_eligible"))
+        else:
+            eligible, block = geometry_tradeability(composite, mode=mode)
+            desk_surface_eligible = eligible
+            geometry_block_reason = block
+        raw_reason = composite.get("geometry_block_reason")
+        if isinstance(raw_reason, str) and raw_reason.strip():
+            geometry_block_reason = raw_reason.strip()
+        elif desk_surface_eligible is False and geometry_block_reason is None:
+            _, geometry_block_reason = geometry_tradeability(composite, mode=mode)
 
     row: dict[str, Any] = {
         "symbol": mover.symbol,
@@ -82,6 +111,8 @@ def discovery_row_from_mover(
         "execution_actionable": execution_actionable,
         "decision_state": decision_state,
         "direction_confidence": direction_confidence,
+        "desk_surface_eligible": desk_surface_eligible,
+        "geometry_block_reason": geometry_block_reason,
     }
     return row
 

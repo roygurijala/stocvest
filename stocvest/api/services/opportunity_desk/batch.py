@@ -470,19 +470,14 @@ async def run_opportunity_desk_batch(
                 concurrency=cfg.composite_concurrency,
             )
             composite_failures_total += composite_failures
-            # Pad with funnel-only rows up to discovery_display_limit if composite batch was smaller
-            disc_syms = {r["symbol"] for r in discovery}
-            for mover in funnel.movers:
-                if len(discovery) >= cfg.funnel.discovery_display_limit:
-                    break
-                if mover.symbol in disc_syms:
-                    continue
-                discovery.append(discovery_row_from_mover(mover, mode=mode_lit, composite=None))
+            discovery = [r for r in discovery if r.get("desk_surface_eligible") is True]
+            # Do not pad discovery with funnel-only rows lacking validated geometry —
+            # those symbols remain on movers_radar / retained_pool as context only.
             discovery = discovery[: cfg.funnel.discovery_display_limit]
             retained_tracked = await _track_retained_pool_symbols(
                 funnel.movers,
                 mode=mode_lit,
-                skip_symbols=disc_syms,
+                skip_symbols={r["symbol"] for r in discovery},
                 limit=cfg.retained_pool_track_limit,
                 concurrency=cfg.composite_concurrency,
             )
@@ -495,7 +490,9 @@ async def run_opportunity_desk_batch(
                 now=now,
             )
             if mode_lit == "swing":
-                payload["quiet_leaders"] = quiet_leaders_swing
+                payload["quiet_leaders"] = [
+                    row for row in quiet_leaders_swing if row.get("desk_surface_eligible") is True
+                ]
             else:
                 payload["quiet_leaders"] = []
         else:

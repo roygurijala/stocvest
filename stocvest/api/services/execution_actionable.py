@@ -119,6 +119,14 @@ def evaluate_entry_zone_gate(body: dict[str, Any]) -> tuple[bool, dict[str, Any]
     }
 
 
+def evaluate_geometry_gate(body: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+    """Block execution when reference-level geometry cannot support desk R/R."""
+    if body.get("desk_surface_eligible") is False or body.get("geometry_tradeable") is False:
+        reason = str(body.get("geometry_block_reason") or "geometry_insufficient").strip()
+        return False, {"pass": False, "reason": reason or "geometry_insufficient"}
+    return True, {"pass": True}
+
+
 def evaluate_ledger_gates(
     body: dict[str, Any],
     *,
@@ -206,9 +214,11 @@ def evaluate_execution_actionable(
     """
     Returns ``(ledger_qualified, execution_actionable, gates)``.
 
-    ``execution_actionable`` requires ledger gates **and** price inside entry zone.
+    ``execution_actionable`` requires ledger gates **and** price inside entry zone **and** tradable geometry.
     """
+    geom_ok, geom_gate = evaluate_geometry_gate(body)
     ledger_ok, gates = evaluate_ledger_gates(body, mode=mode, verdict=verdict)
+    gates["geometry_tradeable"] = geom_gate
     zone_ok, zone_gate = evaluate_entry_zone_gate(body)
     gates["entry_zone"] = zone_gate
     dist_tier = str(body.get("entry_distance_tier") or "").strip().lower() or None
@@ -218,7 +228,7 @@ def evaluate_execution_actionable(
         "distance_atr": round(dist_atr, 2) if dist_atr is not None else None,
         "soft_warn": dist_tier == "chasing",
     }
-    execution_ok = ledger_ok and zone_ok
+    execution_ok = ledger_ok and zone_ok and geom_ok
     gates["execution_actionable"] = {"pass": execution_ok, "ledger_qualified": ledger_ok, "in_entry_zone": zone_ok}
     return ledger_ok, execution_ok, gates
 

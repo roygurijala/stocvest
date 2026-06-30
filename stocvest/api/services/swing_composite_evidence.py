@@ -6,6 +6,7 @@ import math
 from typing import Any
 
 from stocvest.api.services.analyst_target_levels import analyst_targets_from_payload
+from stocvest.api.services.geometry_tradeability import geometry_tradeability
 from stocvest.api.services.risk_reward_structure import (
     round_risk_reward_display,
     structure_risk_reward_long,
@@ -913,16 +914,22 @@ def build_swing_composite_evidence_fields(
                 target_2_provenance,
             )
 
-    if rr_from_structure is not None:
-        risk_reward = round_risk_reward_display(rr_from_structure)
-    else:
-        risk_reward = _synthetic_rr_from_composite(composite)
-
     mode = str(payload.get("mode") or "swing").strip().lower()
     mode_for_env: str = "day" if mode == "day" else "swing"
     min_rr = min_risk_reward_from_environment(env_dict, mode=mode_for_env)  # type: ignore[arg-type]
-    rr_warning = risk_reward < min_rr
-    if risk_reward < min_rr:
+
+    structure_risk_reward: float | None = (
+        round_risk_reward_display(rr_from_structure) if rr_from_structure is not None else None
+    )
+    # Never substitute layer-confidence synthetic R/R when stop/target geometry is degenerate —
+    # that masked sub-1:1 setups (e.g. price at HOD with T1 = entry + 1.5×ATR).
+    if rr_from_structure is not None:
+        risk_reward = structure_risk_reward  # type: ignore[assignment]
+    else:
+        risk_reward = 0.0
+
+    rr_warning = rr_from_structure is None or float(risk_reward) < min_rr
+    if rr_from_structure is None or risk_reward < min_rr:
         rr_quality = "low"
     elif risk_reward < 3.0:
         rr_quality = "acceptable"
@@ -1205,6 +1212,7 @@ def build_swing_composite_evidence_fields(
         "direction_confidence_score": dir_conf.score,
         "direction_confidence_reason": dir_conf.reason,
         "risk_reward": risk_reward,
+        "structure_risk_reward": structure_risk_reward,
         "rr_warning": rr_warning,
         "rr_quality": rr_quality,
         "market_regime": market_regime,
@@ -1253,4 +1261,14 @@ def build_swing_composite_evidence_fields(
     out["status"] = "active" if is_complete else "incomplete"
     if env_dict:
         out["market_environment"] = env_dict
+    out["signal_summary"] = composite.verdict.value
+    if last is not None and last > 0:
+        out["last_trade_price"] = round(float(last), 4)
+    geometry_eligible, geometry_block_reason = geometry_tradeability(
+        out,
+        mode="day" if mode_for_env == "day" else "swing",  # type: ignore[arg-type]
+    )
+    out["geometry_tradeable"] = geometry_eligible
+    out["geometry_block_reason"] = geometry_block_reason
+    out["desk_surface_eligible"] = geometry_eligible
     return out

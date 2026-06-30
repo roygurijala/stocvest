@@ -133,6 +133,8 @@ export interface IntradaySetupPayload {
   scanner_mode?: "swing_daily";
   /** Present on near-qualification rows from setups v2 bundle. */
   qualification_tier?: "near" | "qualifying";
+  /** When false, hide from trading-room feed and scanner actionable rows. */
+  desk_surface_eligible?: boolean | null;
   alignment?: { aligned: number; total: number; label: string };
   ema_daily_crossovers?: string[];
   weekly_rsi_recovery?: boolean;
