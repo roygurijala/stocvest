@@ -91,6 +91,112 @@ def resolve_anchor(
     return None
 
 
+def resolve_structure_entry_anchor(
+    *,
+    direction: str,
+    last: float | None,
+    atr: float | None,
+    daily_bars: list[dict[str, float]] | None,
+    trading_mode: str,
+    preferred: str,
+    vwap: float | None,
+    prev_close: float | None,
+    sma20: float | None,
+    sma50: float | None,
+    day_lo: float | None = None,
+    day_hi: float | None = None,
+) -> float | None:
+    """Entry-zone anchor from ranked structure zones (B80), with VWAP/SMA fallback.
+
+    Long: nearest support zone below ``last`` (pullback entry).
+    Short: nearest resistance zone above ``last`` (bounce entry).
+    Falls back to :func:`resolve_anchor` when ATR or bars are unavailable.
+    """
+    legacy = resolve_anchor(
+        preferred=preferred,
+        vwap=vwap,
+        prev_close=prev_close,
+        sma20=sma20,
+        sma50=sma50,
+        last=last,
+    )
+    if last is None or last <= 0 or atr is None or atr <= 0 or not daily_bars:
+        return legacy
+
+    from stocvest.api.services.structure_engine import (
+        nearest_resistance_above,
+        nearest_support_below,
+    )
+
+    mode = str(trading_mode).strip().lower() or "swing"
+    if direction == "short":
+        zone = nearest_resistance_above(
+            last=float(last),
+            floor_above=float(last),
+            atr=float(atr),
+            daily_bars=daily_bars,
+            trading_mode=mode,
+            extra_levels=[day_hi, vwap, sma20, sma50],
+        )
+    else:
+        zone = nearest_support_below(
+            last=float(last),
+            ceiling_below=float(last),
+            atr=float(atr),
+            daily_bars=daily_bars,
+            trading_mode=mode,
+            extra_levels=[day_lo, vwap, sma20, sma50],
+        )
+
+    if zone is not None:
+        return zone.level
+    return legacy
+
+
+def resolve_structure_zone_level(
+    *,
+    direction: str,
+    last: float | None,
+    atr: float | None,
+    daily_bars: list[dict[str, float]] | None,
+    trading_mode: str,
+    vwap: float | None = None,
+    sma20: float | None = None,
+    sma50: float | None = None,
+    day_lo: float | None = None,
+    day_hi: float | None = None,
+) -> float | None:
+    """Nearest ranked structure zone for stop anchoring (B80); no VWAP/SMA fallback."""
+    if last is None or last <= 0 or atr is None or atr <= 0 or not daily_bars:
+        return None
+
+    from stocvest.api.services.structure_engine import (
+        nearest_resistance_above,
+        nearest_support_below,
+    )
+
+    mode = str(trading_mode).strip().lower() or "swing"
+    if direction == "short":
+        zone = nearest_resistance_above(
+            last=float(last),
+            floor_above=float(last),
+            atr=float(atr),
+            daily_bars=daily_bars,
+            trading_mode=mode,
+            extra_levels=[day_hi, vwap, sma20, sma50],
+        )
+    else:
+        zone = nearest_support_below(
+            last=float(last),
+            ceiling_below=float(last),
+            atr=float(atr),
+            daily_bars=daily_bars,
+            trading_mode=mode,
+            extra_levels=[day_lo, vwap, sma20, sma50],
+        )
+    return zone.level if zone is not None else None
+
+
 @dataclass(frozen=True)
 class EntryZoneResult:
     low: float
@@ -155,7 +261,8 @@ def validate_entry_zone(
 ) -> EntryZoneResult:
     """Enforce stop / T1 / worst-case-R/R invariants, clamping the far edge inward."""
     quality = "clean"
-    lo, hi = float(low), float(high)
+    orig_lo, orig_hi = float(low), float(high)
+    lo, hi = orig_lo, orig_hi
     floor = float(min_rr_from_zone_high)
 
     if direction == "short":
@@ -174,6 +281,13 @@ def validate_entry_zone(
         worst = (reward / risk) if (risk and risk > _EPS and reward is not None and reward > 0) else None
         if hi <= lo or (worst is not None and worst < floor - 1e-3):
             quality = "no_clean_entry"
+            if hi <= lo:
+                lo, hi = orig_lo, orig_hi
+                risk = (stop - lo) if stop is not None else None
+                reward = (lo - target_1) if target_1 is not None else None
+                worst = (
+                    (reward / risk) if (risk and risk > _EPS and reward is not None and reward > 0) else None
+                )
         return EntryZoneResult(round(min(lo, hi), 4), round(max(lo, hi), 4), quality, round(worst, 2) if worst else None)
 
     # long (default): worst-case entry is the zone HIGH (you pay the most).
@@ -194,6 +308,11 @@ def validate_entry_zone(
     worst = (reward / risk) if (risk and risk > _EPS and reward is not None and reward > 0) else None
     if hi <= lo or (worst is not None and worst < floor - 1e-3):
         quality = "no_clean_entry"
+        if hi <= lo:
+            lo, hi = orig_lo, orig_hi
+            risk = (hi - stop) if stop is not None else None
+            reward = (target_1 - hi) if target_1 is not None else None
+            worst = (reward / risk) if (risk and risk > _EPS and reward is not None and reward > 0) else None
     return EntryZoneResult(round(min(lo, hi), 4), round(max(lo, hi), 4), quality, round(worst, 2) if worst else None)
 
 

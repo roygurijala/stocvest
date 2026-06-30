@@ -1,7 +1,10 @@
 /**
  * Structural resistance/support from daily OHLC — pivot highs/lows + recent extremes.
+ * When `atr` is supplied, delegates to the B80 zone engine (ATR window, clustered levels).
  * Keep in sync with stocvest/signals/structure_resistance_scanner.py.
  */
+
+import { nearestResistanceAbove, nearestSupportBelow } from "@/lib/structure-engine";
 
 export type OhlcBar = { low: number; high: number };
 
@@ -60,17 +63,16 @@ function lowCandidates(bars: OhlcBar[], pivotWindow: number, recentWindow: numbe
   return out;
 }
 
-export function scanNearestResistanceAbove(
-  bars: OhlcBar[] | null | undefined,
+function legacyNearestResistanceAbove(
+  bars: OhlcBar[],
   opts: {
     last: number;
     floorAbove: number;
-    proximityPct?: number;
-    extraLevels?: number[];
+    proximityPct: number;
+    extraLevels: number[];
   }
 ): number | null {
-  const { last, floorAbove, proximityPct = DEFAULT_PROXIMITY_PCT, extraLevels = [] } = opts;
-  if (!bars?.length || last <= 0 || floorAbove <= 0) return null;
+  const { last, floorAbove, proximityPct, extraLevels } = opts;
   const hiCap = last * (1 + proximityPct / 100);
   const candidates: number[] = [];
   for (const level of highCandidates(bars, PIVOT_WINDOW, RECENT_WINDOW)) {
@@ -83,17 +85,16 @@ export function scanNearestResistanceAbove(
   return Math.round(Math.min(...candidates) * 10000) / 10000;
 }
 
-export function scanNearestSupportBelow(
-  bars: OhlcBar[] | null | undefined,
+function legacyNearestSupportBelow(
+  bars: OhlcBar[],
   opts: {
     last: number;
     ceilingBelow: number;
-    proximityPct?: number;
-    extraLevels?: number[];
+    proximityPct: number;
+    extraLevels: number[];
   }
 ): number | null {
-  const { last, ceilingBelow, proximityPct = DEFAULT_PROXIMITY_PCT, extraLevels = [] } = opts;
-  if (!bars?.length || last <= 0 || ceilingBelow <= 0) return null;
+  const { last, ceilingBelow, proximityPct, extraLevels } = opts;
   const loCap = last * (1 - proximityPct / 100);
   const candidates: number[] = [];
   for (const level of lowCandidates(bars, PIVOT_WINDOW, RECENT_WINDOW)) {
@@ -104,6 +105,78 @@ export function scanNearestSupportBelow(
   }
   if (!candidates.length) return null;
   return Math.round(Math.max(...candidates) * 10000) / 10000;
+}
+
+export function scanNearestResistanceAbove(
+  bars: OhlcBar[] | null | undefined,
+  opts: {
+    last: number;
+    floorAbove: number;
+    proximityPct?: number;
+    extraLevels?: number[];
+    atr?: number | null;
+    tradingMode?: string;
+  }
+): number | null {
+  const {
+    last,
+    floorAbove,
+    proximityPct = DEFAULT_PROXIMITY_PCT,
+    extraLevels = [],
+    atr,
+    tradingMode = "swing"
+  } = opts;
+  if (!bars?.length || last <= 0 || floorAbove <= 0) return null;
+
+  if (atr != null && atr > 0) {
+    const zone = nearestResistanceAbove({
+      last,
+      floorAbove,
+      atr,
+      dailyBars: bars,
+      tradingMode,
+      extraLevels: undefined
+    });
+    return zone?.level ?? null;
+  }
+
+  return legacyNearestResistanceAbove(bars, { last, floorAbove, proximityPct, extraLevels });
+}
+
+export function scanNearestSupportBelow(
+  bars: OhlcBar[] | null | undefined,
+  opts: {
+    last: number;
+    ceilingBelow: number;
+    proximityPct?: number;
+    extraLevels?: number[];
+    atr?: number | null;
+    tradingMode?: string;
+  }
+): number | null {
+  const {
+    last,
+    ceilingBelow,
+    proximityPct = DEFAULT_PROXIMITY_PCT,
+    extraLevels = [],
+    atr,
+    tradingMode = "swing"
+  } = opts;
+  if (!bars?.length || last <= 0 || ceilingBelow <= 0) return null;
+
+  if (atr != null && atr > 0) {
+    const zone = nearestSupportBelow({
+      last,
+      ceilingBelow,
+      atr,
+      dailyBars: bars,
+      tradingMode,
+      extraLevels
+    });
+    return zone?.level ?? null;
+  }
+
+  return legacyNearestSupportBelow(bars, { last, ceilingBelow, proximityPct, extraLevels });
 }
 
 export function dailyBarsFromComposite(body: Record<string, unknown> | null | undefined): OhlcBar[] {

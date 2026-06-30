@@ -62,7 +62,19 @@ def test_resistance_outside_proximity_band_omitted() -> None:
     assert level is None
 
 
-def test_support_below_t1_for_shorts() -> None:
+def test_scan_with_atr_ignores_analyst_extras() -> None:
+    bars = _bars([3.0, 4.5, 6.0, 8.0, 9.0, 10.5, 11.4], base_low=2.0)
+    assert (
+        scan_nearest_resistance_above(
+            bars,
+            last=9.44,
+            floor_above=11.4,
+            extra_levels=[12.0],
+            atr=0.5,
+            trading_mode="swing",
+        )
+        is None
+    )
     last = 100.0
     t1 = 95.0
     lows = [100.0, 99.0, 98.0, 97.0, 96.0, 95.0, 94.0, 93.0, 92.0, 91.0, 90.0, 89.0, 88.0, 87.0, 86.0, 87.0, 88.0, 89.0]

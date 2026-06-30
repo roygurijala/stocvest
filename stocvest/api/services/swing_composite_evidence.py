@@ -18,8 +18,9 @@ from stocvest.api.services.market_environment import (
 )
 from stocvest.api.services.entry_zone import (
     config_for_mode as entry_zone_config_for_mode,
-    resolve_anchor as entry_zone_resolve_anchor,
     resolve_entry_zone,
+    resolve_structure_entry_anchor,
+    resolve_structure_zone_level,
 )
 from stocvest.signals.composite_score import CompositeSignal, CompositeVerdict
 from stocvest.signals.direction_confidence import assess_direction_confidence
@@ -483,7 +484,13 @@ def _long_side_geometry(
             # Session high collapsed onto entry (price at/near HOD). Rebuild T1 from the
             # nearest in-band structural resistance, then a 1R projection, then % fallback.
             struct_t1 = (
-                scan_nearest_resistance_above(daily_bars, last=entry_ref, floor_above=entry_ref)
+                scan_nearest_resistance_above(
+                    daily_bars,
+                    last=entry_ref,
+                    floor_above=entry_ref,
+                    atr=atr,
+                    trading_mode=trading_mode,
+                )
                 if daily_bars
                 else None
             )
@@ -503,16 +510,13 @@ def _long_side_geometry(
     reference_target_2: float | None = None
     target_2_provenance: str | None = None
     entry_guess = last if (last is not None and last > 0) else None
-    # Cap analyst price targets to a swing-realistic band so a long-horizon PT can't become
-    # the headline reward. ``None`` (legacy) leaves analyst levels uncapped beyond structure.
-    extra_proximity_pct = analyst_max_pct if target_geometry_v2 else None
     if daily_bars and entry_guess is not None and reference_target_1 is not None:
         structural_t2 = scan_nearest_resistance_above(
             daily_bars,
             last=entry_guess,
             floor_above=reference_target_1,
-            extra_levels=analyst_target_levels,
-            extra_proximity_pct=extra_proximity_pct,
+            atr=atr,
+            trading_mode=trading_mode,
         )
         if structural_t2 is not None:
             reference_target_2 = structural_t2
@@ -542,6 +546,7 @@ def _short_side_geometry(
     trading_mode: str = "swing",
     swing_lo: float | None = None,
     swing_hi: float | None = None,
+    zone_hi: float | None = None,
     daily_bars: list[dict[str, float]] | None = None,
     target_geometry_v3: bool = False,
     sma20: float | None = None,
@@ -558,6 +563,7 @@ def _short_side_geometry(
         last=last,
         swing_low=swing_lo,
         swing_high=swing_hi,
+        zone_hi=zone_hi,
     )
     entry_for_stop = entry if entry is not None and entry > 0 else (last if last is not None and last > 0 else None)
     reference_stop = structural
@@ -737,6 +743,9 @@ def build_swing_composite_evidence_fields(
             "low": round(last * 0.985, 4),
             "high": round(last * 1.015, 4),
         }
+    session_entry_zone: dict[str, float] | None = (
+        dict(historical_entry_zone) if historical_entry_zone else None
+    )
 
     zone_lo = historical_entry_zone["low"] if historical_entry_zone else None
     zone_hi = historical_entry_zone["high"] if historical_entry_zone else None
@@ -749,6 +758,35 @@ def build_swing_composite_evidence_fields(
     trading_mode = _trading_mode_from_payload(payload)
     analyst_target_levels = analyst_targets_from_payload(payload)
 
+    use_long = _use_long_rr_structure(composite.verdict, day_lo, day_hi, last)
+    structure_stop_lo: float | None = None
+    structure_stop_hi: float | None = None
+    if atr is not None and atr > 0 and daily_bars and last is not None and last > 0:
+        if use_long:
+            structure_stop_lo = resolve_structure_zone_level(
+                direction="long",
+                last=last,
+                atr=atr,
+                daily_bars=daily_bars,
+                trading_mode=trading_mode,
+                vwap=vwap,
+                sma20=_float_or_none(payload.get("sma20")),
+                sma50=_float_or_none(payload.get("sma50")),
+                day_lo=day_lo,
+            )
+        else:
+            structure_stop_hi = resolve_structure_zone_level(
+                direction="short",
+                last=last,
+                atr=atr,
+                daily_bars=daily_bars,
+                trading_mode=trading_mode,
+                vwap=vwap,
+                sma20=_float_or_none(payload.get("sma20")),
+                sma50=_float_or_none(payload.get("sma50")),
+                day_hi=day_hi,
+            )
+
     _settings = get_settings()
     target_geometry_v2 = bool(_settings.stocvest_swing_target_geometry_v2_enabled)
     target_geometry_v3 = bool(_settings.stocvest_target_geometry_v3_enabled)
@@ -757,7 +795,6 @@ def build_swing_composite_evidence_fields(
     sma50 = _float_or_none(payload.get("sma50"))
     sma200 = _float_or_none(payload.get("sma200"))
 
-    use_long = _use_long_rr_structure(composite.verdict, day_lo, day_hi, last)
     if use_long:
         reference_stop_level, reference_target_1, reference_target_2, used_atr_floor, target_2_provenance = _long_side_geometry(
             day_lo=day_lo,
@@ -770,8 +807,8 @@ def build_swing_composite_evidence_fields(
             trading_mode=trading_mode,
             swing_lo=swing_lo,
             swing_hi=swing_hi,
-            zone_lo=zone_lo,
-            zone_hi=zone_hi,
+            zone_lo=structure_stop_lo,
+            zone_hi=None,
             daily_bars=daily_bars,
             analyst_target_levels=analyst_target_levels or None,
             target_geometry_v2=target_geometry_v2,
@@ -811,6 +848,7 @@ def build_swing_composite_evidence_fields(
             trading_mode=trading_mode,
             swing_lo=swing_lo,
             swing_hi=swing_hi,
+            zone_hi=structure_stop_hi,
             daily_bars=daily_bars,
             target_geometry_v3=target_geometry_v3,
             sma20=sma20,
@@ -909,13 +947,19 @@ def build_swing_composite_evidence_fields(
     entry_zone_quality: str | None = None
     entry_zone_worst_case_rr: float | None = None
     if last is not None and last > 0 and reference_stop_level is not None and reference_target_1 is not None:
-        ez_anchor = entry_zone_resolve_anchor(
+        ez_anchor = resolve_structure_entry_anchor(
+            direction="long" if use_long else "short",
+            last=last,
+            atr=atr,
+            daily_bars=daily_bars,
+            trading_mode=trading_mode,
             preferred=str(ez_cfg["preferred_anchor"]),
             vwap=vwap,
             prev_close=prev_close,
             sma20=_float_or_none(payload.get("sma20")),
             sma50=_float_or_none(payload.get("sma50")),
-            last=last,
+            day_lo=day_lo,
+            day_hi=day_hi,
         )
         # Validate against the target the engine actually trades to (the same T1/T2
         # selection the headline R/R uses), not T1 unconditionally — otherwise a
@@ -1138,7 +1182,7 @@ def build_swing_composite_evidence_fields(
         "risk_factors_detailed": risk_factors_detailed,
         "signal_parameters": signal_parameters,
         "historical_entry_zone": historical_entry_zone,
-        "session_entry_zone": historical_entry_zone,
+        "session_entry_zone": session_entry_zone,
         "entry_zone_quality": entry_zone_quality,
         "entry_zone_worst_case_rr": entry_zone_worst_case_rr,
         "swing_range_zone": swing_range_zone,

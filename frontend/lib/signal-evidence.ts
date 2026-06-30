@@ -1361,13 +1361,15 @@ function longSideGeometry(opts: {
   last: number | null;
   dailyBars?: OhlcBar[];
   analystTargetLevels?: number[];
+  atr?: number | null;
+  tradingMode?: string;
 }): {
   stop: number | null;
   target1: number | null;
   target2: number | null;
   target2Provenance: "2r_extension" | "t1_bump" | "resistance" | null;
 } {
-  const { dayLo, dayHi, vwap, prevClose, last, dailyBars = [], analystTargetLevels = [] } = opts;
+  const { dayLo, dayHi, vwap, prevClose, last, dailyBars = [], analystTargetLevels = [], atr, tradingMode = "swing" } = opts;
   let reference_stop: number | null = null;
   if (dayLo != null && dayLo > 0 && vwap != null && vwap > 0) {
     reference_stop = roundPrice4(Math.min(dayLo, vwap) * 0.998);
@@ -1395,7 +1397,9 @@ function longSideGeometry(opts: {
     const structuralT2 = scanNearestResistanceAbove(dailyBars, {
       last: entryGuess,
       floorAbove: reference_target_1,
-      extraLevels: analystTargetLevels
+      extraLevels: atr != null && atr > 0 ? undefined : analystTargetLevels,
+      atr,
+      tradingMode
     });
     if (structuralT2 != null) {
       reference_target_2 = structuralT2;
@@ -1429,13 +1433,15 @@ function shortSideGeometry(opts: {
   prevClose: number | null;
   last: number | null;
   dailyBars?: OhlcBar[];
+  atr?: number | null;
+  tradingMode?: string;
 }): {
   stop: number | null;
   target1: number | null;
   target2: number | null;
   target2Provenance: "2r_extension" | "t1_bump" | "resistance" | null;
 } {
-  const { dayLo, dayHi, vwap, prevClose, last, dailyBars = [] } = opts;
+  const { dayLo, dayHi, vwap, prevClose, last, dailyBars = [], atr, tradingMode = "swing" } = opts;
   let reference_stop: number | null = null;
   if (dayHi != null && dayHi > 0 && vwap != null && vwap > 0) {
     reference_stop = roundPrice4(Math.max(dayHi, vwap) * 1.002);
@@ -1462,7 +1468,9 @@ function shortSideGeometry(opts: {
   if (dailyBars.length && entryGuess != null && reference_target_1 != null) {
     const structuralT2 = scanNearestSupportBelow(dailyBars, {
       last: entryGuess,
-      ceilingBelow: reference_target_1
+      ceilingBelow: reference_target_1,
+      atr,
+      tradingMode
     });
     if (structuralT2 != null) {
       reference_target_2 = structuralT2;
@@ -1562,6 +1570,9 @@ export function referenceLevelsFromSessionStructure(
       : null;
   const prevClose =
     typeof input.prevClose === "number" && Number.isFinite(input.prevClose) && input.prevClose > 0 ? input.prevClose : null;
+  const atr =
+    typeof input.atr === "number" && Number.isFinite(input.atr) && input.atr > 0 ? input.atr : null;
+  const tradingMode = input.tradingMode ?? "swing";
 
   const useLong = useLongRrStructure(input.direction, dayLo, dayHi, last);
   const scenarioDir: ScenarioDirection = useLong ? "bullish" : "bearish";
@@ -1573,9 +1584,11 @@ export function referenceLevelsFromSessionStructure(
         prevClose,
         last,
         dailyBars: input.dailyBars,
-        analystTargetLevels: input.analystTargetLevels
+        analystTargetLevels: input.analystTargetLevels,
+        atr,
+        tradingMode
       })
-    : shortSideGeometry({ dayLo, dayHi, vwap, prevClose, last, dailyBars: input.dailyBars });
+    : shortSideGeometry({ dayLo, dayHi, vwap, prevClose, last, dailyBars: input.dailyBars, atr, tradingMode });
 
   const structural = resolveStructuralStopAnchor({
     direction: scenarioDir,
@@ -1588,8 +1601,6 @@ export function referenceLevelsFromSessionStructure(
     swingHigh: input.swingHigh ?? null
   });
   const entry = entryPriceForRr(last, dayLo, dayHi);
-  const atr =
-    typeof input.atr === "number" && Number.isFinite(input.atr) && input.atr > 0 ? input.atr : null;
   let reference_stop_level = g.stop;
   if (entry != null && structural != null) {
     const merged = resolveMergedReferenceStop({

@@ -99,6 +99,12 @@ def _layer_scores_from_body(body: dict[str, Any]) -> dict[str, float]:
 def evaluate_entry_zone_gate(body: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
     price = price_from_body(body)
     zone = _entry_zone_from_body(body)
+    if str(body.get("entry_zone_quality") or "").strip().lower() == "no_clean_entry":
+        return False, {
+            "pass": False,
+            "reason": "no_clean_entry",
+            "price": round(price, 4) if price is not None else None,
+        }
     if price is None:
         return False, {"pass": False, "reason": "missing_price"}
     if zone is None:
