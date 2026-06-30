@@ -1724,6 +1724,23 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
       : "Observe how price behaves versus the Historical Entry Zone on a closing basis. Signal data only — not investment advice.";
   const historical_entry_zone = parseHistoricalZone(body.historical_entry_zone);
   const session_entry_zone = parseHistoricalZone(body.session_entry_zone) ?? historical_entry_zone;
+  const ideal_pullback_zone = parseHistoricalZone(body.ideal_pullback_zone);
+  const entry_zone_quality =
+    typeof body.entry_zone_quality === "string" && body.entry_zone_quality.trim()
+      ? body.entry_zone_quality.trim()
+      : null;
+  const entry_zone_worst_case_rr = numOrNull(body.entry_zone_worst_case_rr);
+  const entry_style_raw = String(body.entry_style ?? "").trim().toLowerCase();
+  const entry_style =
+    entry_style_raw === "pullback" || entry_style_raw === "breakout" ? entry_style_raw : null;
+  const entry_anchor = numOrNull(body.entry_anchor);
+  const entry_distance_atr = numOrNull(body.entry_distance_atr);
+  const zone_width_atr = numOrNull(body.zone_width_atr);
+  const tierRaw = String(body.entry_distance_tier ?? "").trim().toLowerCase();
+  const entry_distance_tier =
+    tierRaw === "ideal" || tierRaw === "acceptable" || tierRaw === "chasing" ? tierRaw : null;
+  const eqRaw = String(body.entry_quality_tier ?? "").trim().toLowerCase();
+  const entry_quality_tier = eqRaw === "high" || eqRaw === "medium" || eqRaw === "low" ? eqRaw : null;
   const swing_range_zone = parseSwingRangeZone(body.swing_range_zone);
   const reference_stop_provenance =
     typeof body.reference_stop_provenance === "string" && body.reference_stop_provenance.trim()
@@ -1775,6 +1792,15 @@ export function parseSwingCompositeInsight(body: Record<string, unknown>): Signa
     signal_parameters,
     historical_entry_zone,
     session_entry_zone,
+    entry_zone_quality,
+    entry_zone_worst_case_rr,
+    entry_style,
+    entry_anchor,
+    entry_distance_atr,
+    zone_width_atr,
+    entry_distance_tier,
+    entry_quality_tier,
+    ideal_pullback_zone,
     swing_range_zone,
     reference_target_1: numOrNull(body.reference_target_1),
     reference_target_2: numOrNull(body.reference_target_2),
