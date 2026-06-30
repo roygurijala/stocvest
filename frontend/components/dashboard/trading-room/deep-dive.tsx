@@ -1172,6 +1172,19 @@ export function DeepDive({
 
   const entryZoneWarning = useMemo(() => {
     if (!scenario) return null;
+    if (scenario.entryZoneQuality === "no_clean_entry") {
+      const gate = `${deskMinRr.toFixed(1)}:1`;
+      const lines = [
+        "No clean entry band — stop and target are too tight for a validated zone near current price."
+      ];
+      if (scenario.worstCaseRr != null) {
+        lines.push(
+          `R/R from entry zone top → ${scenario.chosenLabel}: ${scenario.worstCaseRr.toFixed(1)}:1 — still below the ${gate} desk gate.`
+        );
+      }
+      lines.push("Do not enter at current price — wait for a better structure.");
+      return lines;
+    }
     const position = resolveEntryZonePosition(scenario.currentPrice, scenario.entryLow, scenario.entryHigh);
     const lines = buildEntryZoneRrWarning({
       position,

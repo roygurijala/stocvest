@@ -18,9 +18,14 @@ Data sources:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from stocvest.api.services.structure_engine import (
+    nearest_resistance_above,
+    nearest_support_below,
+)
 from stocvest.data.benzinga_client import (
     BenzingaArticle,
     BenzingaClient,
@@ -31,6 +36,7 @@ from stocvest.data.benzinga_client import (
 )
 from stocvest.data.dashboard_cache import evidence_cache_key, read_dashboard_cache
 from stocvest.data.models import Bar, NewsArticle, Snapshot, Timeframe
+from stocvest.indicators.core import atr as atr_series
 from stocvest.data.polygon_client import PolygonClient
 from stocvest.data.symbol_normalize import to_polygon_symbol
 from stocvest.utils.config import get_settings
@@ -492,6 +498,74 @@ _PIVOT_WINDOW = 2
 _RECENT_WINDOW = 12
 
 
+def _daily_bars_for_structure(bars: list[Bar]) -> list[dict[str, float]]:
+    out: list[dict[str, float]] = []
+    for bar in bars:
+        try:
+            lo = float(bar.low)
+            hi = float(bar.high)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if lo > 0 and hi > 0 and hi >= lo:
+            out.append({"low": lo, "high": hi})
+    return out
+
+
+def _latest_daily_atr(bars: list[Bar], period: int = 14) -> float | None:
+    if len(bars) < period + 1:
+        return None
+    series = atr_series(bars, period=period)
+    for raw in reversed(series):
+        if raw is not None and float(raw) > 0:
+            return float(raw)
+    return None
+
+
+def _legacy_chart_support(
+    daily: list[Bar],
+    last: float,
+    *,
+    add: Callable[[str, str, float | None], None],
+) -> None:
+    lo_band = last * (1 - _SR_PROXIMITY_PCT / 100.0)
+    recent = daily[-_RECENT_WINDOW:]
+    recent_lows = [float(b.low) for b in recent if getattr(b, "low", None) is not None]
+    support_candidates = _swing_pivots(daily, "low", is_high=False)
+    if recent_lows:
+        support_candidates.append(min(recent_lows))
+    nearby_support = [v for v in support_candidates if lo_band <= v < last]
+    if nearby_support:
+        add("Support", "support", max(nearby_support))
+
+
+def _legacy_chart_resistance(
+    daily: list[Bar],
+    last: float,
+    *,
+    add: Callable[[str, str, float | None], None],
+) -> None:
+    hi_band = last * (1 + _SR_PROXIMITY_PCT / 100.0)
+    recent = daily[-_RECENT_WINDOW:]
+    recent_highs = [float(b.high) for b in recent if getattr(b, "high", None) is not None]
+    resistance_candidates = _swing_pivots(daily, "high", is_high=True)
+    if recent_highs:
+        resistance_candidates.append(max(recent_highs))
+    nearby_resistance = [v for v in resistance_candidates if last < v <= hi_band]
+    if nearby_resistance:
+        add("Resistance", "resistance", min(nearby_resistance))
+
+
+def _legacy_chart_support_resistance(
+    daily: list[Bar],
+    last: float,
+    *,
+    add: Callable[[str, str, float | None], None],
+) -> None:
+    """Pivot + % proximity fallback when ATR is unavailable."""
+    _legacy_chart_support(daily, last, add=add)
+    _legacy_chart_resistance(daily, last, add=add)
+
+
 def _swing_pivots(bars: list, attr: str, *, is_high: bool) -> list[float]:
     """Return the values of confirmed fractal swing pivots for an OHLC attribute.
 
@@ -578,30 +652,35 @@ def _compute_chart_levels(ctx: AssistantSymbolContext, last: float | None) -> li
         window = closes[-_SMA_PERIOD:]
         _add(f"{len(window)}-day avg" if len(window) < _SMA_PERIOD else "50-day avg", "sma50", sum(window) / len(window))
 
-    # Support/resistance: confirmed swing pivots plus the most recent window
-    # extreme, filtered to the nearest level on each side that sits WITHIN the
-    # proximity band. When nothing qualifies near price (e.g. a parabolic move
-    # with no recent base), we deliberately render no level — an honest blank is
-    # better than a faraway window-extreme dressed up as "support".
+    # Support/resistance: B80 zone engine when daily ATR is available; otherwise
+    # legacy pivot + proximity band. Omit levels when nothing qualifies near price.
     if last and last > 0 and len(daily) >= (2 * _PIVOT_WINDOW + 1):
-        lo_band = last * (1 - _SR_PROXIMITY_PCT / 100.0)
-        hi_band = last * (1 + _SR_PROXIMITY_PCT / 100.0)
-        recent = daily[-_RECENT_WINDOW:]
-        recent_lows = [float(b.low) for b in recent if getattr(b, "low", None) is not None]
-        recent_highs = [float(b.high) for b in recent if getattr(b, "high", None) is not None]
-
-        support_candidates = _swing_pivots(daily, "low", is_high=False)
-        if recent_lows:
-            support_candidates.append(min(recent_lows))
-        nearby_support = [v for v in support_candidates if lo_band <= v < last]
-        if nearby_support:
-            _add("Support", "support", max(nearby_support))
-
-        resistance_candidates = _swing_pivots(daily, "high", is_high=True)
-        if recent_highs:
-            resistance_candidates.append(max(recent_highs))
-        nearby_resistance = [v for v in resistance_candidates if last < v <= hi_band]
-        if nearby_resistance:
-            _add("Resistance", "resistance", min(nearby_resistance))
+        daily_dicts = _daily_bars_for_structure(daily)
+        atr_val = _latest_daily_atr(daily)
+        if atr_val is not None and atr_val > 0 and daily_dicts:
+            sup_zone = nearest_support_below(
+                last=last,
+                ceiling_below=last,
+                atr=atr_val,
+                daily_bars=daily_dicts,
+                trading_mode="swing",
+            )
+            if sup_zone is not None:
+                _add("Support", "support", sup_zone.level)
+            else:
+                _legacy_chart_support(daily, last, add=_add)
+            res_zone = nearest_resistance_above(
+                last=last,
+                floor_above=last,
+                atr=atr_val,
+                daily_bars=daily_dicts,
+                trading_mode="swing",
+            )
+            if res_zone is not None:
+                _add("Resistance", "resistance", res_zone.level)
+            else:
+                _legacy_chart_resistance(daily, last, add=_add)
+        else:
+            _legacy_chart_support_resistance(daily, last, add=_add)
 
     return levels

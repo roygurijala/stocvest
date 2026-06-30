@@ -1,19 +1,24 @@
 """Structural support/resistance from daily OHLC — pivot highs/lows + recent extremes.
 
 Used by swing/day composite geometry to anchor T2 on real price levels instead of
-pure 2R math. Mirrors the assistant chart-level logic (fractal pivots within a
-proximity band of last price).
+pure 2R math. When ``atr`` is supplied, delegates to the unified ``structure_engine``
+(B80) with ATR-normalized windows; otherwise falls back to legacy pivot + % proximity.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from stocvest.api.services.structure_engine import (
+    nearest_resistance_above as _zone_resistance_above,
+    nearest_support_below as _zone_support_below,
+)
+
 # Fractal pivot: bars on each side that must be lower/higher than the center bar.
 PIVOT_WINDOW = 2
 # Recent sessions whose window extreme is always a candidate (unconfirmed pivots).
 RECENT_WINDOW = 12
-# Only surface levels within this % band of last — avoids faraway window extremes.
+# Legacy-only: only surface levels within this % band of last.
 DEFAULT_PROXIMITY_PCT = 25.0
 # Daily bars serialized for resistance scan (engines pass up to this many sessions).
 RESISTANCE_SCAN_LOOKBACK = 30
@@ -85,26 +90,17 @@ def _low_candidates(bars: list[Any], *, pivot_window: int, recent_window: int) -
     return out
 
 
-def scan_nearest_resistance_above(
+def _legacy_nearest_resistance_above(
     bars: list[Any] | None,
     *,
     last: float,
     floor_above: float,
-    proximity_pct: float = DEFAULT_PROXIMITY_PCT,
-    pivot_window: int = PIVOT_WINDOW,
-    recent_window: int = RECENT_WINDOW,
-    extra_levels: list[float] | None = None,
-    extra_proximity_pct: float | None = None,
+    proximity_pct: float,
+    pivot_window: int,
+    recent_window: int,
+    extra_levels: list[float] | None,
+    extra_proximity_pct: float | None,
 ) -> float | None:
-    """
-    Nearest structural resistance strictly above ``floor_above`` and ``last``,
-    within ``proximity_pct`` of ``last``. Returns None when no honest level exists.
-
-    ``extra_levels`` (e.g. analyst price targets) bypass the structural ``proximity_pct``
-    band by default. Pass ``extra_proximity_pct`` to also bound them: an extra level beyond
-    ``last * (1 + extra_proximity_pct/100)`` is dropped — prevents a long-horizon analyst PT
-    from becoming an unrealistic swing target.
-    """
     if not bars or last <= 0 or floor_above <= 0:
         return None
     hi_cap = last * (1.0 + proximity_pct / 100.0)
@@ -120,9 +116,6 @@ def scan_nearest_resistance_above(
             level = float(raw)
         except (TypeError, ValueError):
             continue
-        # Analyst / external targets may sit beyond the structural proximity band, but are
-        # still bounded by ``extra_proximity_pct`` when provided so a 12-month PT can't
-        # masquerade as a swing target.
         if level <= floor_above + 1e-6 or level <= last + 1e-6:
             continue
         if extra_hi_cap is not None and level > extra_hi_cap + 1e-6:
@@ -131,6 +124,51 @@ def scan_nearest_resistance_above(
     if not candidates:
         return None
     return round(min(candidates), 4)
+
+
+def scan_nearest_resistance_above(
+    bars: list[Any] | None,
+    *,
+    last: float,
+    floor_above: float,
+    proximity_pct: float = DEFAULT_PROXIMITY_PCT,
+    pivot_window: int = PIVOT_WINDOW,
+    recent_window: int = RECENT_WINDOW,
+    extra_levels: list[float] | None = None,
+    extra_proximity_pct: float | None = None,
+    atr: float | None = None,
+    trading_mode: str = "swing",
+) -> float | None:
+    """
+    Nearest structural resistance strictly above ``floor_above`` and ``last``.
+
+    When ``atr`` is provided, uses the B80 zone engine (ATR window, clustered levels).
+    Analyst / external ``extra_levels`` are **never** passed to the zone engine — only
+    the legacy path may include them (v2 T2 cap via ``extra_proximity_pct``).
+    """
+    if atr is not None and atr > 0 and bars:
+        zone = _zone_resistance_above(
+            last=last,
+            floor_above=floor_above,
+            atr=float(atr),
+            daily_bars=bars,  # type: ignore[arg-type]
+            trading_mode=trading_mode,
+            extra_levels=None,
+        )
+        if zone is not None:
+            return zone.level
+        return None
+
+    return _legacy_nearest_resistance_above(
+        bars,
+        last=last,
+        floor_above=floor_above,
+        proximity_pct=proximity_pct,
+        pivot_window=pivot_window,
+        recent_window=recent_window,
+        extra_levels=extra_levels,
+        extra_proximity_pct=extra_proximity_pct,
+    )
 
 
 def scan_nearest_support_below(
@@ -142,8 +180,23 @@ def scan_nearest_support_below(
     pivot_window: int = PIVOT_WINDOW,
     recent_window: int = RECENT_WINDOW,
     extra_levels: list[float] | None = None,
+    atr: float | None = None,
+    trading_mode: str = "swing",
 ) -> float | None:
     """Nearest structural support strictly below ``ceiling_below`` and ``last``."""
+    if atr is not None and atr > 0 and bars:
+        zone = _zone_support_below(
+            last=last,
+            ceiling_below=ceiling_below,
+            atr=float(atr),
+            daily_bars=bars,  # type: ignore[arg-type]
+            trading_mode=trading_mode,
+            extra_levels=extra_levels,
+        )
+        if zone is not None:
+            return zone.level
+        return None
+
     if not bars or last <= 0 or ceiling_below <= 0:
         return None
     lo_cap = last * (1.0 - proximity_pct / 100.0)

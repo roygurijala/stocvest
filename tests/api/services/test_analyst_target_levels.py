@@ -49,23 +49,25 @@ def test_analyst_targets_from_payload() -> None:
     assert analyst_targets_from_payload(payload) == [9.5, 12.0]
 
 
-def test_long_geometry_uses_analyst_target_as_resistance() -> None:
+def test_long_geometry_never_promotes_analyst_pt_to_t2() -> None:
+    """B80: analyst levels stay informational — T2 comes from structure / 2R / bump only."""
     from stocvest.api.services.swing_composite_evidence import _long_side_geometry
 
     bars = [{"low": 2.0, "high": h} for h in [3.0, 4.5, 6.0, 8.0, 9.0, 10.5, 11.4]]
-    stop, t1, t2, _, prov = _long_side_geometry(
+    _, t1, t2, _, prov = _long_side_geometry(
         day_lo=8.0,
         day_hi=11.4,
         vwap=9.0,
         prev_close=8.5,
-        last=9.44,
+        last=11.0,
+        entry=11.0,
+        atr=0.4,
         daily_bars=bars,
         analyst_target_levels=[12.0],
     )
     assert t1 == 11.4
-    assert t2 == 12.0
-    assert prov == "resistance"
-    assert stop is not None
+    assert t2 != 12.0
+    assert prov != "resistance" or t2 is None
 
 
 # --- B76: swing target geometry v2 (analyst-T2 cap + session-high T1 guard) -------------
@@ -75,8 +77,8 @@ def test_long_geometry_uses_analyst_target_as_resistance() -> None:
 _ATAI_BARS = [{"low": 3.6, "high": h} for h in [4.0, 4.5, 5.0, 5.1, 5.2, 5.25, 5.3]]
 
 
-def test_long_geometry_v2_off_is_legacy_atai() -> None:
-    """Flag OFF: served geometry is byte-identical to legacy (T1 = HOD, T2 = $14 analyst)."""
+def test_long_geometry_v2_off_no_longer_promotes_analyst_pt_when_atr_present() -> None:
+    """B80: with ATR present, T2 scan uses zone engine — analyst PTs stay informational only."""
     from stocvest.api.services.swing_composite_evidence import _long_side_geometry
 
     _, t1, t2, _, prov = _long_side_geometry(
@@ -92,8 +94,8 @@ def test_long_geometry_v2_off_is_legacy_atai() -> None:
         target_geometry_v2=False,
     )
     assert t1 == 5.31  # degenerate: T1 == entry == session high
-    assert t2 == 14.0  # uncapped analyst PT
-    assert prov == "resistance"
+    assert t2 != 14.0
+    assert prov != "resistance" or t2 is None
 
 
 def test_long_geometry_v2_caps_distant_analyst_target() -> None:
@@ -166,7 +168,7 @@ def test_scan_resistance_extra_proximity_pct_caps_analyst_level() -> None:
         scan_nearest_resistance_above(bars, last=5.31, floor_above=5.31, extra_levels=[14.0])
         == 14.0
     )
-    # With a 40% cap it is dropped (14 > 5.31 * 1.40 = 7.434).
+    # Cap analyst PTs from structural T2 when ATR is absent (legacy path only).
     assert (
         scan_nearest_resistance_above(
             bars, last=5.31, floor_above=5.31, extra_levels=[14.0], extra_proximity_pct=40.0

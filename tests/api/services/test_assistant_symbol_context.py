@@ -510,11 +510,14 @@ def test_build_chart_full_timeframe_by_desk() -> None:
     assert build_symbol_chart(ctx)["full_chart_timeframe"] == "1day"
 
 
-def test_support_omitted_when_no_base_near_price_parabolic() -> None:
-    """A parabolic move has no recent base near price → Support is omitted rather
-    than rendered as a faraway window low (the MRVL $158-vs-$300 bug)."""
-    # Steep ramp 20 → 400; the most recent lows are all >25% below the $400 price.
-    daily = [_daily_bar(20.0 + i * 10.0, (i % 28) + 1) for i in range(39)]
+def test_support_not_faraway_plateau_after_gap_up() -> None:
+    """After a gap-up, Support must not be the faraway pre-gap base (MRVL $158-vs-$300 class)."""
+    daily: list[Bar] = []
+    for i in range(35):
+        if i < 34:
+            daily.append(_daily_bar(100.0, i + 1, high=105.0, low=95.0))
+        else:
+            daily.append(_daily_bar(400.0, i + 1, high=405.0, low=395.0))
     snap = Snapshot(symbol="NVDA", day_close=400.0, prev_close=388.0, change_percent=3.0, day_vwap=399.0)
     ctx = AssistantSymbolContext(
         symbol="NVDA",
@@ -524,10 +527,11 @@ def test_support_omitted_when_no_base_near_price_parabolic() -> None:
     )
     chart = build_symbol_chart(ctx)
     assert chart is not None
-    kinds = {lvl["kind"] for lvl in chart["levels"]}
-    assert "support" not in kinds  # nothing within the proximity band → omitted
-    # Resistance (recent high just above price) and the factual averages still show.
-    assert "sma50" in kinds
+    by_kind = {lvl["kind"]: lvl for lvl in chart["levels"]}
+    if "support" in by_kind:
+        assert by_kind["support"]["value"] > 350.0
+        assert by_kind["support"]["value"] != 95.0
+    assert "sma50" in by_kind
 
 
 def test_support_uses_nearest_level_not_faraway_window_min() -> None:

@@ -9,6 +9,8 @@ from stocvest.api.services.entry_zone import (
     compute_entry_zone,
     config_for_mode,
     resolve_anchor,
+    resolve_structure_entry_anchor,
+    resolve_structure_zone_level,
     resolve_entry_zone,
     validate_entry_zone,
 )
@@ -89,6 +91,34 @@ def test_validate_flags_no_clean_entry_when_band_collapses() -> None:
         low=99.0, high=100.0, stop=98.0, target_1=100.5, direction="long", min_rr_from_zone_high=1.5
     )
     assert res.quality == "no_clean_entry"
+    assert res.low == pytest.approx(99.0)
+    assert res.high == pytest.approx(100.0)
+
+
+@pytest.mark.unit
+def test_no_clean_entry_preserves_tight_band_when_clamp_inverts_bounds() -> None:
+    """INTC-like: tight 2% band under price; target/stop geometry collapses clamped hi below lo."""
+    cfg = config_for_mode(None, "swing")
+    cfg["min_rr_from_zone_high"] = 2.0
+    last = 131.32
+    stop = 115.42
+    target = 132.61
+    res = resolve_entry_zone(
+        direction="long",
+        last=last,
+        stop=stop,
+        target_1=target,
+        anchor=122.30,
+        atr=3.5,
+        config=cfg,
+    )
+    assert res is not None
+    assert res.quality == "no_clean_entry"
+    assert res.high == pytest.approx(last, abs=0.01)
+    width_pct = (res.high - res.low) / last
+    assert width_pct <= cfg["max_width_pct"] + 1e-3
+    assert width_pct >= cfg["min_width_pct"] - 1e-3
+    assert res.worst_case_rr is not None and res.worst_case_rr < 2.0
 
 
 def test_validate_keeps_clean_zone_below_target() -> None:
@@ -98,6 +128,47 @@ def test_validate_keeps_clean_zone_below_target() -> None:
     assert res.quality == "clean"
     assert res.high < 112.0
     assert res.worst_case_rr is not None and res.worst_case_rr >= 1.5
+
+
+@pytest.mark.unit
+def test_resolve_structure_entry_anchor_prefers_support_zone_for_long() -> None:
+    bars = [{"low": 96.0, "high": 99.0}, {"low": 97.0, "high": 100.0}, {"low": 98.0, "high": 101.0}]
+    anchor = resolve_structure_entry_anchor(
+        direction="long",
+        last=100.0,
+        atr=2.0,
+        daily_bars=bars,
+        trading_mode="swing",
+        preferred="sma20",
+        vwap=99.5,
+        prev_close=98.0,
+        sma20=50.0,
+        sma50=45.0,
+        day_lo=96.0,
+        day_hi=101.0,
+    )
+    assert anchor is not None
+    assert anchor < 100.0
+    assert anchor >= 96.0
+
+
+@pytest.mark.unit
+def test_resolve_structure_entry_anchor_falls_back_without_atr() -> None:
+    assert (
+        resolve_structure_entry_anchor(
+            direction="long",
+            last=100.0,
+            atr=None,
+            daily_bars=[{"low": 96.0, "high": 99.0}],
+            trading_mode="swing",
+            preferred="vwap",
+            vwap=99.0,
+            prev_close=None,
+            sma20=None,
+            sma50=None,
+        )
+        == 99.0
+    )
 
 
 def test_resolve_entry_zone_end_to_end_long() -> None:
@@ -114,3 +185,32 @@ def test_resolve_entry_zone_end_to_end_long() -> None:
     assert res is not None
     assert res.low <= res.high <= 100.0
     assert res.high < 120.0
+
+
+@pytest.mark.unit
+def test_resolve_structure_zone_level_returns_none_without_atr() -> None:
+    assert (
+        resolve_structure_zone_level(
+            direction="long",
+            last=100.0,
+            atr=None,
+            daily_bars=[{"low": 96.0, "high": 99.0}],
+            trading_mode="swing",
+        )
+        is None
+    )
+
+
+@pytest.mark.unit
+def test_resolve_structure_zone_level_support_for_long() -> None:
+    bars = [{"low": 96.0, "high": 99.0}, {"low": 97.0, "high": 100.0}, {"low": 98.0, "high": 101.0}]
+    level = resolve_structure_zone_level(
+        direction="long",
+        last=100.0,
+        atr=2.0,
+        daily_bars=bars,
+        trading_mode="swing",
+        day_lo=96.0,
+    )
+    assert level is not None
+    assert level < 100.0

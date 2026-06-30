@@ -52,6 +52,15 @@ def test_entry_zone_gate_outside() -> None:
     assert gate["pass"] is False
 
 
+def test_entry_zone_gate_fails_on_no_clean_entry_even_when_price_inside() -> None:
+    body = _active_body(price=100.0)
+    body["entry_zone_quality"] = "no_clean_entry"
+    ok, gate = evaluate_entry_zone_gate(body)
+    assert ok is False
+    assert gate["pass"] is False
+    assert gate["reason"] == "no_clean_entry"
+
+
 def test_execution_actionable_requires_zone_and_ledger() -> None:
     body = _active_body()
     ledger_ok, exec_ok, gates = evaluate_execution_actionable(body, mode="swing")
