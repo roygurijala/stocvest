@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from stocvest.data.benzinga_client import BenzingaClient
 from stocvest.data.finnhub_client import get_earnings_calendar as finnhub_earnings_calendar
 from stocvest.data.finnhub_client import get_market_earnings_calendar
 from stocvest.data.ticker_name_resolver import get_resolver
@@ -17,7 +16,7 @@ from stocvest.utils.logging import get_logger
 _LOG = get_logger(__name__)
 
 _POLYGON_EARNINGS_NOTICE = (
-    "Earnings data requires a Polygon Stocks Developer plan or Benzinga earnings add-on. "
+    "Earnings data requires a Polygon Stocks Developer plan with earnings access. "
     "Upgrade at polygon.io to enable this feature, or configure FINNHUB_API_KEY."
 )
 
@@ -31,39 +30,6 @@ def _dedupe_events(events: list[EarningsEvent]) -> list[EarningsEvent]:
             continue
         seen.add(k)
         out.append(ev)
-    return out
-
-
-async def _from_benzinga_symbols(
-    symbols: list[str],
-    *,
-    from_date: date,
-    to_date: date,
-) -> list[EarningsEvent]:
-    """Best-effort per-symbol Benzinga forward calendar."""
-    client = BenzingaClient()
-    today = date.today()
-    window = max(1, (to_date - today).days + 1)
-    out: list[EarningsEvent] = []
-    for sym in symbols:
-        s = sym.strip().upper()
-        if not s:
-            continue
-        try:
-            dates = await client.get_upcoming_earnings_calendar(s, days=min(30, window + 7))
-        except Exception:
-            continue
-        for d in dates:
-            if d < from_date or d > to_date:
-                continue
-            out.append(
-                EarningsEvent(
-                    symbol=s,
-                    company_name=s,
-                    report_date=d,
-                    report_time="unknown",
-                )
-            )
     return out
 
 
@@ -112,7 +78,7 @@ async def fetch_earnings_events(
     """
     Load earnings for ``symbols`` in [from_date, to_date].
 
-    Returns ``(events, notice, source)`` where ``source`` is finnhub|benzinga|polygon|fmp|empty.
+    Returns ``(events, notice, source)`` where ``source`` is finnhub|polygon|fmp|empty.
     """
     syms = [s.strip().upper() for s in symbols if s and str(s).strip()]
     if not syms:
@@ -129,15 +95,6 @@ async def fetch_earnings_events(
             source = "finnhub"
     except Exception as exc:
         _LOG.warning("earnings_fetch_finnhub err=%s", type(exc).__name__)
-
-    if not merged:
-        try:
-            bz = await _from_benzinga_symbols(syms, from_date=from_date, to_date=to_date)
-            if bz:
-                merged.extend(bz)
-                source = "benzinga"
-        except Exception as exc:
-            _LOG.warning("earnings_fetch_benzinga err=%s", type(exc).__name__)
 
     if not merged and polygon_client is not None:
         try:

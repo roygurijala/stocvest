@@ -23,13 +23,10 @@ def notify_execution_actionable_transition(
     funnel_symbol: bool = True,
 ) -> int:
     """
-    Email users when a symbol becomes execution-actionable.
+    Email users when a symbol becomes tradable on the desk (execution-actionable or ledger-qualified).
 
-    Delivers when:
-    - ``funnel_symbol`` is true (desk batch): all users with email alerts enabled, or
-    - symbol is on the user's default watchlist when ``funnel_symbol`` is false.
-
-    Returns count of send attempts.
+    Fan-out is platform-wide for desk batch / retained-pool tracking (``funnel_symbol=True``).
+    ``watchlist_only`` does not apply to these alerts.
     """
     trig = alert_trigger or get_alert_trigger()
     sym = symbol.strip().upper()
@@ -51,8 +48,6 @@ def notify_execution_actionable_transition(
             wl = wl_store.get_default_watchlist(uid)
             syms = {s.strip().upper() for s in (wl.symbols if wl else item.symbols or [])}
             on_watchlist = sym in syms
-            prefs = trig.alert_store.get_preferences(uid)
-            # Desk funnel crosses email all opted-in users; watchlist_only applies to other alerts.
             if not on_watchlist and not funnel_symbol:
                 continue
             try:

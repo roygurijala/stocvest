@@ -184,7 +184,7 @@ def serialize_symbol_context(ctx: AssistantSymbolContext) -> str:
             if desc:
                 lines.append(f"      summary: {desc}")
 
-    # ── Analyst consensus + ratings ──────────────────────────────────────────
+    # Analyst price targets — Benzinga standing ratings first, then Perplexity.
     if ctx.analyst_ratings:
         last_price = None
         if snap is not None and snap.last_trade_price:
@@ -200,6 +200,14 @@ def serialize_symbol_context(ctx: AssistantSymbolContext) -> str:
             lines.append(
                 f"  - {r.analyst_firm}: action={r.action}  rating={r.rating}{pt_str}  date={date_str}"
             )
+    elif getattr(ctx, "perplexity_analyst_targets", None) is not None:
+        enrich = ctx.perplexity_analyst_targets
+        last_price = None
+        if snap is not None and snap.last_trade_price:
+            last_price = float(snap.last_trade_price)
+        elif snap is not None and snap.day_close:
+            last_price = float(snap.day_close)
+        lines.extend(_perplexity_analyst_consensus_lines(enrich, last_price))
 
     # ── Earnings results ────────────────────────────────────────────────────
     if ctx.earnings:
@@ -234,7 +242,19 @@ def serialize_symbol_context(ctx: AssistantSymbolContext) -> str:
                 f"  - {g.guidance_type}  period={g.period}  date={date_str}  headline={g.headline[:120]}"
             )
 
-    # ── Broader coverage (Benzinga newsfeed, channel-tagged) ─────────────────
+    # ── Perplexity supplementary (thin Polygon coverage) ───────────────────
+    px_news = getattr(ctx, "perplexity_news", None)
+    if px_news is not None and str(px_news.summary or "").strip():
+        lines.append("")
+        lines.append("SUPPLEMENTARY RESEARCH (Perplexity Sonar, thin Polygon news coverage):")
+        lines.append(f"  sentiment={px_news.sentiment}")
+        lines.append(f"  summary={px_news.summary}")
+        if px_news.catalysts:
+            lines.append(f"  catalysts={' ; '.join(px_news.catalysts[:3])}")
+        if px_news.headwinds:
+            lines.append(f"  headwinds={' ; '.join(px_news.headwinds[:3])}")
+
+    # ── Broader coverage (legacy Benzinga newsfeed, channel-tagged) ──────────
     # Complements the structured catalyst sections above with general / M&A /
     # policy / sector headlines so the assistant has wider context. Deduped
     # against the Polygon NEWS section and the dedicated WIIM section.
@@ -453,6 +473,38 @@ def _analyst_consensus_lines(ratings: list, last_price: float | None) -> list[st
     date_txt = f" on {ldate.strftime('%Y-%m-%d')}" if ldate else ""
     out.append(f"  most_recent={firm} {action} ({rating}){pt_txt}{date_txt}")
 
+    return out
+
+
+def _perplexity_analyst_consensus_lines(enrich: object, last_price: float | None) -> list[str]:
+    """Aggregate Perplexity Sonar price targets into a forecast summary block."""
+    targets_raw = getattr(enrich, "price_targets", None) or []
+    targets: list[float] = []
+    for pt in targets_raw:
+        try:
+            val = float(pt)
+            if val > 0:
+                targets.append(val)
+        except (TypeError, ValueError):
+            continue
+    if not targets:
+        return []
+
+    avg = sum(targets) / len(targets)
+    lo, hi = min(targets), max(targets)
+    out: list[str] = [
+        "",
+        "ANALYST CONSENSUS (Perplexity Sonar price targets; synthesize into plain English):",
+        f"  price_target_avg=${avg:.2f}  range=${lo:.2f}-${hi:.2f}  (n_targets={len(targets)})",
+    ]
+    if last_price and last_price > 0:
+        implied = (avg - last_price) / last_price * 100.0
+        out.append(
+            f"  implied_vs_current={implied:+.1f}% (current ${last_price:.2f} -> avg target ${avg:.2f})"
+        )
+    summary = str(getattr(enrich, "summary", "") or "").strip()
+    if summary:
+        out.append(f"  coverage_note={summary[:240]}")
     return out
 
 

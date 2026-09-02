@@ -1,4 +1,16 @@
-# Optional Fargate service: Benzinga + EDGAR news worker (set news_worker_desired_count > 0 after pushing image).
+# Optional Fargate service: EDGAR news worker (+ optional Benzinga WS; set news_worker_desired_count > 0 after pushing image).
+
+variable "day_composite_benzinga_enabled" {
+  description = "ADR-001 Phase 7: enable Benzinga get_multi on day composite. Default off (Polygon-primary; expired Benzinga keys return 401). Sets STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED on the signals Lambda."
+  type        = bool
+  default     = false
+}
+
+variable "news_worker_benzinga_ws_enabled" {
+  description = "ADR-001 Phase 2: enable Benzinga WebSocket ingestion on the ECS news worker. Default off (EDGAR-only; Benzinga keys return 401). Sets STOCVEST_NEWS_WORKER_BENZINGA_WS_ENABLED on the task."
+  type        = bool
+  default     = false
+}
 
 variable "news_worker_container_image" {
   description = "Container image for stocvest news worker (e.g. ACCOUNT.dkr.ecr.REGION.amazonaws.com/stocvest-news-worker:latest). Leave empty to skip ECS service."
@@ -231,18 +243,16 @@ resource "aws_ecs_task_definition" "news_worker" {
         { name = "REDIS_URL", value = "redis://${aws_elasticache_replication_group.redis.primary_endpoint_address}:${aws_elasticache_replication_group.redis.port}/0" },
         { name = "STOCVEST_NEWS_TRIAGE_QUEUE_URL", value = aws_sqs_queue.news_triage.url },
         { name = "STOCVEST_NEWS_SENTIMENT_CACHE_ENABLED", value = var.news_sentiment_cache_enabled ? "1" : "0" },
-        { name = "BENZINGA_NEWS_WS_URL", value = "wss://api.benzinga.com/api/v1/news/stream" },
+        { name = "STOCVEST_NEWS_WORKER_BENZINGA_WS_ENABLED", value = var.news_worker_benzinga_ws_enabled ? "1" : "0" },
         { name = "POLYGON_API_KEY", value = var.polygon_api_key },
       ]
-      secrets = [
+      secrets = var.news_worker_benzinga_ws_enabled ? [
         {
-          # The worker's WebSocket reads BENZINGA_API_KEY (settings.benzinga_api_key).
-          # Map it from the generic BENZINGA_API_KEY secret field (the dedicated
-          # BENZINGA_NEWS_API_KEY also returned 401, so test the generic key here).
+          # Only mount when Benzinga WS is explicitly enabled (ADR-001 default: off).
           name      = "BENZINGA_API_KEY"
           valueFrom = "${data.aws_secretsmanager_secret.external_api_keys[0].arn}:BENZINGA_API_KEY::"
         },
-      ]
+      ] : []
       logConfiguration = {
         logDriver = "awslogs"
         options = {

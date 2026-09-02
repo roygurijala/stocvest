@@ -40,7 +40,7 @@ def test_desk_funnel_sends_when_watchlist_only_and_not_on_watchlist() -> None:
     assert svc.email_service.send_alert_email.call_args.kwargs["alert_type"] == AlertType.EXECUTION_ACTIONABLE
 
 
-def test_non_funnel_skips_when_watchlist_only_and_not_on_watchlist() -> None:
+def test_execution_actionable_sends_when_not_on_watchlist() -> None:
     svc = _service()
     svc.alert_store.get_preferences.return_value = AlertPreferences(
         user_id="u1",
@@ -48,13 +48,17 @@ def test_non_funnel_skips_when_watchlist_only_and_not_on_watchlist() -> None:
         watchlist_only=True,
         on_execution_actionable=True,
     )
-    svc.trigger_execution_actionable(
-        user_id="u1",
-        user_email="roygurijala@yahoo.com",
-        symbol="GGAL",
-        mode="swing",
-        scenario={"symbol": "GGAL"},
-        on_watchlist=False,
-        desk_funnel=False,
-    )
-    svc.email_service.send_alert_email.assert_not_called()
+    with patch.object(svc, "_in_quiet_hours", return_value=False), patch.object(
+        svc, "_execution_actionable_email_deduped", return_value=False
+    ), patch.object(svc, "_mark_execution_actionable_email_sent"):
+        svc.trigger_execution_actionable(
+            user_id="u1",
+            user_email="roygurijala@yahoo.com",
+            symbol="GGAL",
+            mode="swing",
+            scenario={"symbol": "GGAL"},
+            on_watchlist=False,
+            desk_funnel=False,
+        )
+    svc.email_service.send_alert_email.assert_called_once()
+    assert svc.email_service.send_alert_email.call_args.kwargs["alert_type"] == AlertType.EXECUTION_ACTIONABLE

@@ -297,12 +297,13 @@ def test_build_rows_rejects_non_positive_trailing_days() -> None:
 
 
 def test_load_baseline_for_mode_uses_shared_block_when_no_override() -> None:
-    """No per-mode override → shared composite block is the baseline."""
-    params = _fake_signal_params()
+    """Day uses shared composite; swing uses code default when secret has no override."""
+    params = SignalParameters()
     swing_w, swing_bull, swing_bear = load_baseline_for_mode(params, "swing")
     day_w, day_bull, day_bear = load_baseline_for_mode(params, "day")
-    # Without overrides, both modes lift the same shared block.
-    assert swing_w.as_dict() == day_w.as_dict()
+    assert swing_w.news == pytest.approx(0.12)
+    assert day_w.news == pytest.approx(params.composite.news_weight)
+    assert swing_w.as_dict() != day_w.as_dict()
     assert swing_bull == day_bull
     assert swing_bear == day_bear
 

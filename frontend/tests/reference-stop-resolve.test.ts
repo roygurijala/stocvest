@@ -81,6 +81,20 @@ describe("reference-stop-resolve", () => {
     expect(referenceStopAtrK({ preset: "dip" })).toBe(0.75);
     expect(referenceStopAtrK({ preset: "breakout" })).toBe(1.25);
     expect(referenceStopAtrK({ tradingMode: "day" })).toBe(0.85);
-    expect(referenceStopAtrK({ tradingMode: "swing" })).toBe(1);
+    expect(referenceStopAtrK({ tradingMode: "swing" })).toBe(2);
+  });
+
+  test("swing merge widens sub-$10 stop to 6% / 1.5×ATR floor", () => {
+    const merged = resolveMergedReferenceStop({
+      direction: "bullish",
+      entry: 7.78,
+      structuralStop: 7.59,
+      atr: 0.2,
+      atrK: 2,
+      tradingMode: "swing"
+    });
+    expect(merged.stop).not.toBeNull();
+    expect(7.78 - (merged.stop ?? 0)).toBeGreaterThanOrEqual(0.466);
+    expect(merged.stop!).toBeLessThan(7.59);
   });
 });

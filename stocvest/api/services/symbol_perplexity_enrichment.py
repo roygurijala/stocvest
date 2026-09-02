@@ -70,6 +70,8 @@ def needs_perplexity_news(
     benzinga_data: BenzingaMultiResult | None,
     *,
     ticker_ref: TickerReference | None = None,
+    watchlist_thin: bool = False,
+    on_demand: bool = False,
 ) -> bool:
     if news.article_count > 0:
         return False
@@ -81,6 +83,8 @@ def needs_perplexity_news(
         return False
     if benzinga_data and benzinga_data.wim and str(benzinga_data.wim.reason or "").strip():
         return False
+    if watchlist_thin or on_demand:
+        return news.data_state in ("stale", "fresh")
     if not qualifies_for_supplementary_news_context(ticker_ref=ticker_ref, benzinga_data=benzinga_data):
         return False
     return news.data_state in ("stale", "fresh")
@@ -270,6 +274,7 @@ async def resolve_analyst_target_levels(
     ticker_ref: TickerReference | None,
     ratings: list,
     current_price: float | None = None,
+    allow_perplexity: bool = True,
 ) -> tuple[list[float], str]:
     """
     Benzinga standing ratings first; Perplexity Sonar when Benzinga has no numeric targets.
@@ -278,6 +283,8 @@ async def resolve_analyst_target_levels(
     levels = analyst_targets_from_ratings(ratings)
     if levels:
         return levels, "benzinga"
+    if not allow_perplexity:
+        return [], "none"
     enrich = await fetch_analyst_target_enrichment(symbol, ticker_ref, current_price=current_price)
     if enrich and enrich.price_targets:
         _LOG.info(
@@ -393,12 +400,25 @@ async def maybe_apply_perplexity_layers(
     economic_event_count: int,
     news_bullish_threshold: int,
     news_bearish_threshold: int,
+    enabled: bool = True,
+    news_only: bool = False,
+    watchlist_thin: bool = False,
+    on_demand: bool = False,
 ) -> tuple[NewsLayerResult, MacroLayerResult, PerplexityNewsEnrichment | None, PerplexityMacroEnrichment | None]:
     """Fetch supplementary Perplexity context for ADR / thin-coverage names only."""
     news_enrich: PerplexityNewsEnrichment | None = None
     macro_enrich: PerplexityMacroEnrichment | None = None
 
-    if needs_perplexity_news(news, benzinga_data, ticker_ref=ticker_ref):
+    if not enabled:
+        return news, macro, None, None
+
+    if needs_perplexity_news(
+        news,
+        benzinga_data,
+        ticker_ref=ticker_ref,
+        watchlist_thin=watchlist_thin,
+        on_demand=on_demand,
+    ):
         news_enrich = await fetch_news_enrichment(symbol, ticker_ref)
         if news_enrich is not None:
             news = apply_perplexity_news_enrichment(
@@ -415,7 +435,7 @@ async def maybe_apply_perplexity_layers(
                 bool(ticker_ref and ticker_ref.is_adr()),
             )
 
-    if needs_perplexity_macro(macro, ticker_ref=ticker_ref, economic_event_count=economic_event_count):
+    if not news_only and needs_perplexity_macro(macro, ticker_ref=ticker_ref, economic_event_count=economic_event_count):
         macro_enrich = await fetch_macro_enrichment(symbol, ticker_ref)
         if macro_enrich is not None:
             macro = apply_perplexity_macro_enrichment(macro, macro_enrich)

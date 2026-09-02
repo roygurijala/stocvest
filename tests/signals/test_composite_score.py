@@ -4,7 +4,12 @@ from dataclasses import replace
 
 import pytest
 
-from stocvest.config.signal_parameters import CompositeParameters, default_signal_parameters
+from stocvest.config.signal_parameters import (
+    CompositeParameters,
+    SignalParameters,
+    default_signal_parameters,
+    default_swing_composite_parameters,
+)
 from stocvest.signals.composite_score import (
     DEFAULT_BASE_WEIGHTS,
     CompositeScoreEngine,
@@ -226,23 +231,47 @@ def test_helper_coerces_int_weights_to_float():
 # geo / intraday tech). The seam is `resolve_composite_block(params, mode)`
 # plus the new `mode` kwarg on `build_composite_score_engine_from_params`.
 #
-# The load-bearing invariant is **no-op back-compat**: when Secrets Manager
-# JSON has no `swing_composite` / `day_composite` keys (i.e. every existing
-# secret today), the resolver returns the shared `params.composite` block, so
-# both engines behave identically — production is unchanged. The tests below
-# pin both the back-compat path AND the per-mode override path.
+# The load-bearing invariant for day is **no-op back-compat**: when Secrets Manager
+# JSON has no `day_composite` key, the day engine uses the shared `params.composite`
+# block. Swing uses :func:`default_swing_composite_parameters` when `swing_composite`
+# is unset (ADR-001 Phase 3).
 
 
 @pytest.mark.unit
-def test_resolve_composite_block_falls_back_to_shared_when_no_per_mode_block():
-    """No-op default: with no override blocks set, both modes return the shared block."""
-    params = default_signal_parameters()
-    assert params.swing_composite is None
-    assert params.day_composite is None
+def test_default_swing_composite_parameters_sum_to_one_and_lower_news_weight():
+    swing = default_swing_composite_parameters()
+    total = (
+        swing.technical_weight
+        + swing.news_weight
+        + swing.macro_weight
+        + swing.sector_weight
+        + swing.geopolitical_weight
+        + swing.internals_weight
+    )
+    assert total == pytest.approx(1.0)
+    assert swing.news_weight == pytest.approx(0.12)
+    assert swing.technical_weight == pytest.approx(0.34)
+    assert swing.sector_weight == pytest.approx(0.19)
 
-    assert resolve_composite_block(params, mode="swing") is params.composite
+
+@pytest.mark.unit
+def test_resolve_composite_block_uses_swing_defaults_when_no_override():
+    params = SignalParameters()
+    assert params.swing_composite is None
+
+    swing_block = resolve_composite_block(params, mode="swing")
+    assert swing_block is not params.composite
+    assert swing_block.news_weight == pytest.approx(0.12)
     assert resolve_composite_block(params, mode="day") is params.composite
     assert resolve_composite_block(params, mode=None) is params.composite
+
+
+@pytest.mark.unit
+def test_default_signal_parameters_includes_swing_composite_block():
+    params = default_signal_parameters()
+    assert params.swing_composite is not None
+    assert params.swing_composite.news_weight == pytest.approx(0.12)
+    assert resolve_composite_block(params, mode="swing") is params.swing_composite
 
 
 @pytest.mark.unit
@@ -281,8 +310,9 @@ def test_resolve_composite_block_returns_day_block_when_set():
     custom = replace(params, day_composite=day_override)
 
     assert resolve_composite_block(custom, mode="day") is day_override
-    # mode="swing" must NOT pick up the day override.
-    assert resolve_composite_block(custom, mode="swing") is custom.composite
+    # mode="swing" must NOT pick up the day override (uses swing defaults instead).
+    assert resolve_composite_block(custom, mode="swing") is not day_override
+    assert resolve_composite_block(custom, mode="swing").news_weight == pytest.approx(0.12)
     assert resolve_composite_block(custom, mode=None) is custom.composite
 
 
@@ -313,22 +343,26 @@ def test_resolve_composite_block_ignores_unknown_mode():
 
 
 @pytest.mark.unit
-def test_build_engine_swing_and_day_identical_when_no_override():
-    """No-op default end-to-end: with shared block only, both modes build the same engine.
-
-    This is the **back-compat guarantee** of the per-mode override system. Until
-    operators add `swing_composite` / `day_composite` to Secrets Manager, every
-    parameter version stamped on a SignalRecord is identical regardless of mode.
-    """
+def test_build_engine_swing_and_day_differ_with_code_defaults():
+    """Swing uses the de-Benzinga default blend; day stays on the shared block."""
     params = default_signal_parameters()
     swing_engine = build_composite_score_engine_from_params(params, mode="swing")
     day_engine = build_composite_score_engine_from_params(params, mode="day")
-    legacy_engine = build_composite_score_engine_from_params(params)  # mode=None
 
-    assert swing_engine._base_weights == day_engine._base_weights
-    assert swing_engine._base_weights == legacy_engine._base_weights
-    assert swing_engine._bullish_threshold == day_engine._bullish_threshold
-    assert swing_engine._bearish_threshold == day_engine._bearish_threshold
+    assert swing_engine._base_weights["news"] == pytest.approx(0.12)
+    assert day_engine._base_weights["news"] == pytest.approx(params.composite.news_weight)
+    assert swing_engine._base_weights != day_engine._base_weights
+
+
+@pytest.mark.unit
+def test_build_engine_legacy_mode_uses_shared_block():
+    params = default_signal_parameters()
+    legacy_engine = build_composite_score_engine_from_params(params)  # mode=None
+    day_engine = build_composite_score_engine_from_params(params, mode="day")
+
+    assert legacy_engine._base_weights == day_engine._base_weights
+    assert legacy_engine._bullish_threshold == day_engine._bullish_threshold
+    assert legacy_engine._bearish_threshold == day_engine._bearish_threshold
 
 
 @pytest.mark.unit
@@ -397,9 +431,8 @@ def test_build_engine_swing_mode_does_not_pick_up_day_override():
     custom = replace(params, day_composite=day_override)
 
     swing_engine = build_composite_score_engine_from_params(custom, mode="swing")
-    # Swing engine sees the shared block, not the day override.
     assert swing_engine._base_weights["technical"] == pytest.approx(
-        params.composite.technical_weight
+        params.swing_composite.technical_weight
     )
     assert swing_engine._base_weights["technical"] != pytest.approx(0.99)
 
@@ -432,16 +465,16 @@ def test_per_mode_overrides_actually_change_composite_score():
         LayerSignal(layer="news", score=-1.0, confidence=1.0),
         LayerSignal(layer="macro", score=0.0, confidence=1.0),
     ]
-    params = default_signal_parameters()
+    params = SignalParameters()
 
-    # Baseline: no overrides — swing and day produce the same score.
+    # Baseline: legacy secrets with no overrides — swing defaults, day shared block.
     baseline_swing = build_composite_score_engine_from_params(params, mode="swing").compute(
         signals, regime="sideways"
     )
     baseline_day = build_composite_score_engine_from_params(params, mode="day").compute(
         signals, regime="sideways"
     )
-    assert baseline_swing.score == pytest.approx(baseline_day.score)
+    assert baseline_swing.score != pytest.approx(baseline_day.score)
 
     # Rotate swing override to be heavily bullish-technical / low-news (the proposed
     # audit direction is the opposite, but we use an extreme value here so the score

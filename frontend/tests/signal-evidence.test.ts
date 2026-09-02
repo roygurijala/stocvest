@@ -179,7 +179,7 @@ describe("session reference levels and fallback R/R", () => {
     expect(lv.reference_stop_level).toBeCloseTo(98 * 0.995, 4);
   });
 
-  test("referenceLevelsFromSessionStructure widens stop to ATR floor when structural is tight", () => {
+  test("referenceLevelsFromSessionStructure widens swing stop to 2×ATR floor when structural is tight", () => {
     const lv = referenceLevelsFromSessionStructure({
       direction: "bullish",
       support: 99.2,
@@ -190,7 +190,7 @@ describe("session reference levels and fallback R/R", () => {
       atr: 3,
       tradingMode: "swing"
     });
-    expect(lv.reference_stop_level).toBeCloseTo(97, 4);
+    expect(lv.reference_stop_level).toBeCloseTo(94, 4);
   });
 
   test("deriveEvidenceInsightFallback does not inflate R/R with unanchored T2 when T1 is sub-1:1", () => {

@@ -55,6 +55,24 @@ def test_benzinga_thin_coverage_requires_empty_bundle() -> None:
     assert benzinga_thin_coverage(bz) is True
 
 
+def test_swing_polygon_primary_bundle_does_not_degrade_empty_news() -> None:
+    from stocvest.api.services.swing_news_source import swing_news_source_bundle
+
+    bz = swing_news_source_bundle()
+    assert benzinga_news_feed_degraded(bz) is False
+    out = apply_news_degraded_if_feed_failed(_empty_news(), bz)
+    assert out.status == "available"
+    assert out.score == 50
+
+
+def test_swing_polygon_primary_unconfigured_is_not_thin_yet() -> None:
+    """Perplexity thin-coverage for polygon-primary swing is Phase 5 (DBZ-5)."""
+    from stocvest.api.services.swing_news_source import swing_news_source_bundle
+
+    bz = swing_news_source_bundle()
+    assert benzinga_thin_coverage(bz) is False
+
+
 def test_us_empty_news_does_not_qualify_without_adr_or_thin_bundle() -> None:
     bz = BenzingaMultiResult(
         wim=BenzingaWIMEntry(

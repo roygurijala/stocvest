@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal, MutableMapping
 
-from stocvest.data.benzinga_client import BenzingaClient
 from stocvest.data.models import EarningsEvent
 from stocvest.data.polygon_client import PolygonClient
 from stocvest.utils.logging import get_logger
@@ -68,18 +67,6 @@ def _horizon_from_event(event: EarningsEvent, *, today: date) -> EarningsHorizon
     )
 
 
-async def _from_benzinga(symbol: str, *, today: date, window_days: int) -> date | None:
-    client = BenzingaClient()
-    rows = await client.get_upcoming_earnings_calendar(symbol, days=window_days)
-    best: date | None = None
-    for row in rows:
-        if row < today:
-            continue
-        if best is None or row < best:
-            best = row
-    return best
-
-
 async def _from_polygon(
     symbol: str,
     *,
@@ -106,9 +93,10 @@ async def resolve_upcoming_earnings_horizon(
     window_days: int = 30,
 ) -> EarningsHorizon | None:
     """
-  Return the next scheduled earnings date within ``window_days``, if any.
+    Return the next scheduled earnings date within ``window_days``, if any.
 
-    Never raises. Uses a 24h in-process cache per symbol.
+    Provider order (ADR-001): Finnhub → Polygon → FMP. Never raises.
+    Uses a 24h in-process cache per symbol.
     """
     sym = symbol.strip().upper()
     if not sym:
@@ -142,25 +130,6 @@ async def resolve_upcoming_earnings_horizon(
             horizon = best_fh
     except Exception as exc:
         _LOG.warning("earnings_calendar_finnhub_failed symbol=%s err=%s", sym, type(exc).__name__)
-
-    if horizon is not None:
-        _horizon_cache[sym] = (now, horizon)
-        return horizon
-
-    try:
-        bz_date = await _from_benzinga(sym, today=today, window_days=window_days)
-        if bz_date is not None:
-            days = (bz_date - today).days
-            risk, chip = classify_earnings_risk(days)
-            horizon = EarningsHorizon(
-                report_date=bz_date,
-                days_away=days,
-                risk=risk,
-                report_time="unknown",
-                chip=chip,
-            )
-    except Exception as exc:
-        _LOG.warning("earnings_calendar_benzinga_failed symbol=%s err=%s", sym, type(exc).__name__)
 
     if horizon is None and polygon_client is not None:
         try:

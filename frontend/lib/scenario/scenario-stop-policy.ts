@@ -7,13 +7,24 @@
 
 import type { ScenarioDirection } from "@/lib/scenario/types";
 
+export type StopPolicyTradingMode = "day" | "swing";
+
 function round4(n: number): number {
   return Math.round(n * 10000) / 10000;
 }
 
 /** Minimum risk distance in USD by price tier (AMZN rule: avoid sub-$1 noise stops). */
-export function minStopDistanceUsd(entry: number, atr?: number | null): number {
+export function minStopDistanceUsd(
+  entry: number,
+  atr?: number | null,
+  tradingMode?: StopPolicyTradingMode | null
+): number {
   if (!Number.isFinite(entry) || entry <= 0) return 0.1;
+  if (tradingMode === "swing") {
+    const atrFloor = atr != null && Number.isFinite(atr) && atr > 0 ? atr * 1.5 : 0;
+    const pctFloor = entry * 0.06;
+    return Math.max(atrFloor, pctFloor, 0.1);
+  }
   const atrFloor = atr != null && Number.isFinite(atr) && atr > 0 ? atr * 0.5 : 0;
   let priceFloor: number;
   if (entry >= 200) priceFloor = 1.25;
@@ -28,10 +39,11 @@ export function applyMinStopDistance(
   direction: ScenarioDirection,
   entry: number,
   stop: number,
-  atr?: number | null
+  atr?: number | null,
+  tradingMode?: StopPolicyTradingMode | null
 ): number {
   if (!Number.isFinite(entry) || !Number.isFinite(stop)) return stop;
-  const minDist = minStopDistanceUsd(entry, atr);
+  const minDist = minStopDistanceUsd(entry, atr, tradingMode);
   if (direction === "bullish") {
     if (stop >= entry) return round4(entry - minDist);
     if (entry - stop < minDist) return round4(entry - minDist);

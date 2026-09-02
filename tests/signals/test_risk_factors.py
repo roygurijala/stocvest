@@ -71,7 +71,7 @@ def test_no_risk_factors_when_clean_signal() -> None:
         snapshot={
             "last_trade_price": 100.0,
             "day_low": 99.0,
-            "day_high": 106.0,
+            "day_high": 115.0,
             "day_vwap": 99.5,
         },
     )

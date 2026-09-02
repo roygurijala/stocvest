@@ -385,6 +385,7 @@ def real_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             symbol=symbol,
             user_id=rc.user_id,
             user_email=rc.email,
+            perplexity_mode="deep_dive",
         ),
     )
     return ok(body)
@@ -410,6 +411,7 @@ def swing_real_composite_handler(event: LambdaEvent, context: LambdaContext) -> 
             symbol=symbol,
             user_id=rc.user_id,
             user_email=rc.email,
+            perplexity_mode="deep_dive",
         ),
     )
     return ok(body)

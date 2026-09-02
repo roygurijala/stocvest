@@ -156,6 +156,8 @@ class EmailService:
             mode_s = str(context.get("mode") or "").strip().lower()
             mode_label = "Swing" if mode_s == "swing" else "Day" if mode_s == "day" else mode_s.capitalize()
             direction = format_direction(str(context.get("direction") or ""))
+            if context.get("ledger_qualified_only"):
+                return f"STOCVEST · {sym} {direction} — {mode_label} desk qualified"
             return f"STOCVEST · {sym} {direction} — {mode_label} desk actionable"
         if alert_type == AlertType.TRACKED_PLAN_THESIS:
             mode_s = str(context.get("mode") or "").strip().lower()
@@ -202,6 +204,14 @@ class EmailService:
                 stop = context.get("stop_level")
             if isinstance(stop, (int, float)):
                 rows.append(("Stop loss", f"${float(stop):.2f}"))
+            stop_atr = context.get("reference_stop_distance_atr")
+            stop_pct = context.get("reference_stop_distance_pct")
+            if isinstance(stop_atr, (int, float)) and isinstance(stop_pct, (int, float)):
+                rows.append(("Stop distance", f"{float(stop_atr):.2f}×ATR ({float(stop_pct):.1f}%)"))
+            elif isinstance(stop_atr, (int, float)):
+                rows.append(("Stop distance", f"{float(stop_atr):.2f}×ATR"))
+            elif isinstance(stop_pct, (int, float)):
+                rows.append(("Stop distance", f"{float(stop_pct):.1f}%"))
             t1 = context.get("target_1")
             t2 = context.get("target_2")
             if isinstance(t1, (int, float)) and isinstance(t2, (int, float)):
@@ -212,12 +222,26 @@ class EmailService:
             if isinstance(price, (int, float)):
                 rows.append(("Price", f"${float(price):.2f}"))
             rr = context.get("risk_reward")
+            t1_rr = context.get("t1_risk_reward")
             min_rr = context.get("min_rr")
-            if isinstance(rr, (int, float)):
+            is_swing = mode_s == "swing"
+            if is_swing and isinstance(rr, (int, float)):
                 rr_label = f"{float(rr):.2f}"
                 if isinstance(min_rr, (int, float)):
                     rr_label = f"{rr_label} (min {float(min_rr):.2f})"
-                rows.append(("Risk / reward", rr_label))
+                rows.append(("T1 risk / reward", rr_label))
+            elif isinstance(rr, (int, float)):
+                rr_label = f"{float(rr):.2f}"
+                if isinstance(min_rr, (int, float)):
+                    rr_label = f"{rr_label} (min {float(min_rr):.2f})"
+                rows.append(("Plan risk / reward", rr_label))
+                if (
+                    isinstance(t1_rr, (int, float))
+                    and (not isinstance(rr, (int, float)) or abs(float(t1_rr) - float(rr)) > 0.05)
+                ):
+                    rows.append(("T1 risk / reward", f"{float(t1_rr):.2f}"))
+            elif isinstance(t1_rr, (int, float)):
+                rows.append(("T1 risk / reward", f"{float(t1_rr):.2f}"))
             ar = context.get("alignment_ratio")
             if isinstance(ar, (int, float)):
                 rows.append(("Layer alignment", f"{int(round(float(ar) * 100))}%"))

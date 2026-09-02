@@ -352,14 +352,15 @@ def resolve_composite_block(params: object, mode: str | None = None) -> object:
     Resolution order:
 
     * If ``mode == "swing"`` and ``params.swing_composite`` is set, return it.
+    * If ``mode == "swing"`` and ``params.swing_composite`` is unset, return
+      :func:`default_swing_composite_parameters` (ADR-001 de-Benzinga swing blend).
     * If ``mode == "day"`` and ``params.day_composite`` is set, return it.
     * Otherwise fall back to ``params.composite`` (the shared / legacy block).
 
-    The fallback is the load-bearing invariant: when Secrets Manager JSON does
-    not declare per-mode override blocks (which is the case for every existing
-    secret today), this resolver returns the shared block → production behavior
-    is unchanged. Operators rotate weights per mode by adding ``swing_composite``
-    and/or ``day_composite`` keys to the secret payload.
+    When Secrets Manager JSON does not declare per-mode override blocks, swing
+    still uses the code default swing blend; day continues on the shared block.
+    Explicit ``swing_composite`` / ``day_composite`` keys in the secret override
+    these defaults.
 
     ``params`` is typed as ``object`` to avoid a circular import; the contract
     is duck-typed: ``params`` must expose a ``composite`` attribute and may
@@ -370,6 +371,9 @@ def resolve_composite_block(params: object, mode: str | None = None) -> object:
         per_mode = getattr(params, "swing_composite", None)
         if per_mode is not None:
             return per_mode
+        from stocvest.config.signal_parameters import DEFAULT_SWING_COMPOSITE_PARAMETERS
+
+        return DEFAULT_SWING_COMPOSITE_PARAMETERS
     elif mode == "day":
         per_mode = getattr(params, "day_composite", None)
         if per_mode is not None:

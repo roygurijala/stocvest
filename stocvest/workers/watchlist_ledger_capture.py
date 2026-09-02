@@ -183,6 +183,7 @@ def run_watchlist_ledger_capture_sync(*, desk: LedgerCaptureDesk = "both") -> di
                     user_id=user_id,
                     user_email=None,
                     ledger_capture=True,
+                    perplexity_mode="watchlist_thin",
                 )
                 if body.get("ledger_qualified"):
                     day_qualified += 1
@@ -207,6 +208,7 @@ def run_watchlist_ledger_capture_sync(*, desk: LedgerCaptureDesk = "both") -> di
                     user_id=user_id,
                     user_email=None,
                     ledger_capture=True,
+                    perplexity_mode="watchlist_thin",
                 )
                 if body.get("ledger_qualified"):
                     swing_qualified += 1

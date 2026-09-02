@@ -183,7 +183,12 @@ def run_catchup_jobs(
     for job in planned:
         try:
             if job.desk == "day":
-                body = real_composite_body_sync(symbol=job.symbol, user_id=job.user_id, user_email=None)
+                body = real_composite_body_sync(
+                    symbol=job.symbol,
+                    user_id=job.user_id,
+                    user_email=None,
+                    perplexity_mode="watchlist_thin",
+                )
                 status = sync_watchlist_maturation_from_composite(
                     user_id=job.user_id,
                     symbol=job.symbol,
@@ -194,7 +199,12 @@ def run_catchup_jobs(
                 )
                 day_ok += 1
             else:
-                body = swing_composite_body_sync(symbol=job.symbol, user_id=job.user_id, user_email=None)
+                body = swing_composite_body_sync(
+                    symbol=job.symbol,
+                    user_id=job.user_id,
+                    user_email=None,
+                    perplexity_mode="watchlist_thin",
+                )
                 status = sync_watchlist_maturation_from_composite(
                     user_id=job.user_id,
                     symbol=job.symbol,

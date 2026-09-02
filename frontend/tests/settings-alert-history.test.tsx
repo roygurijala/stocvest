@@ -27,7 +27,7 @@ const defaultPrefs = {
   on_pdt_blocked: true,
   on_gap_detected: false,
   on_watchlist_maturation: true,
-  watchlist_only: true,
+  watchlist_only: false,
   quiet_hours_enabled: false,
   quiet_hours_start: "22:00",
   quiet_hours_end: "07:00"

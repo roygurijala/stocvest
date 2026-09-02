@@ -20,6 +20,10 @@ function round4(n: number): number {
   return Math.round(n * 10000) / 10000;
 }
 
+export const SWING_STOP_ATR_K = 2.0;
+export const SWING_MIN_STOP_ATR_MULT = 1.5;
+export const SWING_MIN_STOP_PCT = 0.06;
+
 /** ATR multiplier for structural + ATR merge (preset overrides mode). */
 export function referenceStopAtrK(opts?: {
   tradingMode?: ReferenceStopTradingMode | null;
@@ -27,7 +31,7 @@ export function referenceStopAtrK(opts?: {
 }): number {
   if (opts?.preset) return REFERENCE_STOP_ATR_K_BY_PRESET[opts.preset];
   if (opts?.tradingMode === "day") return 0.85;
-  return 1.0;
+  return SWING_STOP_ATR_K;
 }
 
 export type StructuralStopAnchorInput = {
@@ -117,6 +121,7 @@ export function resolveMergedReferenceStop(args: {
   structuralStop: number | null;
   atr: number | null;
   atrK: number;
+  tradingMode?: ReferenceStopTradingMode | null;
 }): MergedReferenceStopResult {
   const structural =
     args.structuralStop != null && Number.isFinite(args.structuralStop) && args.structuralStop > 0
@@ -154,7 +159,7 @@ export function resolveMergedReferenceStop(args: {
     return { stop: null, structuralStop: structural, atrStop, usedAtrFloor: false };
   }
 
-  const stop = applyMinStopDistance(args.direction, entry, merged, atr);
+  const stop = applyMinStopDistance(args.direction, entry, merged, atr, args.tradingMode ?? null);
   return { stop, structuralStop: structural, atrStop, usedAtrFloor };
 }
 

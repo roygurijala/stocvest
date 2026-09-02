@@ -431,10 +431,9 @@ def test_apply_proposal_does_not_mutate_shared_composite_block() -> None:
 
 def test_apply_proposal_does_not_mutate_input_parameters() -> None:
     """apply_proposal_to_parameters returns a new instance, not the input."""
-    current = default_signal_parameters()
+    current = SignalParameters()
     proposal = _pending_proposal(swing=True)
     updated = apply_proposal_to_parameters(proposal, current)
-    # Input's swing_composite still None (default) — wasn't reassigned.
     assert current.swing_composite is None
     assert updated.swing_composite is not None
 

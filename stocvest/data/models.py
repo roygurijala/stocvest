@@ -335,15 +335,16 @@ class AlertStatus(str, Enum):
 class AlertPreferences(BaseModel):
     user_id: str
     email_enabled: bool = True
-    on_signal_fired: bool = True
-    on_confluence_alert: bool = True
+    # Tradeable-desk policy (Jun 2026): one email path for ledger-qualified desk signals.
+    on_signal_fired: bool = False
+    on_confluence_alert: bool = False
     on_pdt_warning: bool = True
     on_pdt_blocked: bool = True
     on_gap_detected: bool = False
-    on_watchlist_maturation: bool = True
+    on_watchlist_maturation: bool = False
     on_execution_actionable: bool = True
     on_tracked_plan_thesis: bool = True
-    watchlist_only: bool = True
+    watchlist_only: bool = False
     quiet_hours_enabled: bool = False
     quiet_hours_start: str = "22:00"
     quiet_hours_end: str = "07:00"

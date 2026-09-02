@@ -201,8 +201,8 @@ def test_swing_composite_handler_responds_differently_under_tuned_parameters(
     )
     baseline = json.loads(swing_composite_handler(event, {})["body"])
 
-    tuned_composite = replace(
-        base.composite,
+    tuned_swing = replace(
+        base.swing_composite,
         technical_weight=0.70,
         news_weight=0.05,
         macro_weight=0.05,
@@ -210,7 +210,7 @@ def test_swing_composite_handler_responds_differently_under_tuned_parameters(
         geopolitical_weight=0.05,
         internals_weight=0.05,
     )
-    tuned_params = replace(base, composite=tuned_composite, version="9.9.9-tuned")
+    tuned_params = replace(base, swing_composite=tuned_swing, version="9.9.9-tuned")
     monkeypatch.setattr(
         "stocvest.api.handlers.signals.ParameterStore.get_parameters_sync",
         lambda: tuned_params,

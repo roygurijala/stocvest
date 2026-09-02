@@ -51,6 +51,14 @@ from stocvest.api.services.benzinga_feed_health import (
     composite_layers_meta,
     layer_available_for_composite,
 )
+from stocvest.api.services.composite_perplexity_gate import (
+    SwingPerplexityMode,
+    resolve_swing_perplexity_invocation,
+)
+from stocvest.api.services.swing_news_source import (
+    SWING_NEWS_SOURCE_POLYGON_PRIMARY,
+    swing_news_source_bundle,
+)
 from stocvest.api.services.symbol_perplexity_enrichment import (
     maybe_apply_perplexity_layers,
     perplexity_risk_factor_lines,
@@ -303,7 +311,11 @@ class RealCompositeEnginePhase:
 
 
 async def run_real_composite_engine_phase(
-    *, symbol: str, params: SignalParameters
+    *,
+    symbol: str,
+    params: SignalParameters,
+    user_id: str | None = None,
+    perplexity_mode: SwingPerplexityMode = "off",
 ) -> dict[str, Any] | RealCompositeEnginePhase:
     """
     Shared scoring path for real composite: data fetch → six layers → engine.compute.
@@ -319,7 +331,13 @@ async def run_real_composite_engine_phase(
     sector_cache = DynamoSectorCache(settings.dynamodb_sector_cache_table)
 
     news_since = datetime.now(timezone.utc) - timedelta(hours=float(params.news.lookback_hours))
-    benzinga = BenzingaClient()
+    benzinga_enabled = bool(get_settings().stocvest_day_composite_benzinga_enabled)
+    benzinga: BenzingaClient | None = BenzingaClient() if benzinga_enabled else None
+
+    async def _fetch_benzinga_bundle() -> BenzingaMultiResult:
+        if not benzinga_enabled or benzinga is None:
+            return swing_news_source_bundle()
+        return await benzinga.get_multi(sym, mode="day")
 
     async def _fetch_composite_news_rows() -> list[dict[str, Any]]:
         return await fetch_symbol_panel_raw_articles(
@@ -339,7 +357,7 @@ async def run_real_composite_engine_phase(
             client.get_snapshot("QQQ"),
             get_vix_snapshot_with_fallback(client),
             client.get_economic_calendar_for_day(date.today()),
-            benzinga.get_multi(sym, mode="day"),
+            _fetch_benzinga_bundle(),
             _fetch_composite_news_rows(),
             get_ticker_reference(client, sym),
             return_exceptions=True,
@@ -348,8 +366,9 @@ async def run_real_composite_engine_phase(
         bars: list[Bar] = _safe_result(bars_r, [])
         daily_bars: list[Bar] = _safe_result(daily_r, [])
         sym_snap: Snapshot | None = _safe_result(sym_r, None)
-        bz_data: BenzingaMultiResult = _safe_result(bz_r, benzinga_multi_shell())
-        bz_data = await ensure_analyst_feed(benzinga, sym, bz_data)
+        bz_data: BenzingaMultiResult = _safe_result(bz_r, swing_news_source_bundle())
+        if benzinga_enabled and benzinga is not None:
+            bz_data = await ensure_analyst_feed(benzinga, sym, bz_data)
         news_raw: list[dict[str, Any]] = _safe_result(news_raw_r, [])
         news_rows = [
             enrich_article_ticker_metadata(a, sym) for a in news_raw if isinstance(a, dict)
@@ -467,6 +486,12 @@ async def run_real_composite_engine_phase(
     macro = MacroAnalyzer().analyze(
         spy_snap, qqq_snap, vix_snap, econ, params.macro, events_lookback_days=1, macro_context=macro_ctx
     )
+    perplexity_invocation = resolve_swing_perplexity_invocation(
+        perplexity_mode,
+        user_id=user_id,
+        symbol=sym,
+        news=news,
+    )
     news, macro, perplexity_news, perplexity_macro = await maybe_apply_perplexity_layers(
         symbol=sym,
         ticker_ref=ticker_ref,
@@ -476,6 +501,10 @@ async def run_real_composite_engine_phase(
         economic_event_count=len(econ) if isinstance(econ, list) else 0,
         news_bullish_threshold=params.news.bullish_threshold,
         news_bearish_threshold=params.news.bearish_threshold,
+        enabled=perplexity_invocation.apply_layers,
+        news_only=perplexity_invocation.news_only,
+        watchlist_thin=perplexity_invocation.watchlist_thin,
+        on_demand=perplexity_invocation.on_demand,
     )
     perplexity_headwinds = perplexity_risk_factor_lines(perplexity_news)
     if perplexity_macro is not None:
@@ -575,6 +604,7 @@ async def run_real_composite_engine_phase(
         ticker_ref=ticker_ref,
         ratings=list(getattr(bz_data, "ratings", None) or []),
         current_price=_snapshot_mark_price(sym_snap),
+        allow_perplexity=perplexity_invocation.allow_analyst_perplexity,
     )
 
     return RealCompositeEnginePhase(
@@ -613,12 +643,18 @@ async def build_real_composite_response(
     user_email: str | None,
     params: SignalParameters,
     ledger_capture: bool = False,
+    perplexity_mode: SwingPerplexityMode = "off",
 ) -> dict[str, Any]:
     # See stocvest/data/symbol_normalize.py — Polygon's REST endpoints
     # reject the dash form of class-share tickers (BRK-B → 404). Normalising
     # here keeps every downstream Polygon call on the dot form.
     sym = to_polygon_symbol(symbol)
-    phase = await run_real_composite_engine_phase(symbol=sym, params=params)
+    phase = await run_real_composite_engine_phase(
+        symbol=sym,
+        params=params,
+        user_id=user_id,
+        perplexity_mode=perplexity_mode,
+    )
     if isinstance(phase, dict):
         return phase
 
@@ -775,8 +811,10 @@ async def build_real_composite_response(
         "sector_technical_calibration": sector_technical_calibration_payload(sic_bucket_for_geo),
     }
     response_body.update(composite_layers_meta(phase.layer_results, phase.layer_ids))
-    if phase.benzinga_feed_health:
+    if get_settings().stocvest_day_composite_benzinga_enabled and phase.benzinga_feed_health:
         response_body["benzinga_feed_health"] = phase.benzinga_feed_health
+    if not get_settings().stocvest_day_composite_benzinga_enabled:
+        response_body["news_source"] = SWING_NEWS_SOURCE_POLYGON_PRIMARY
     if phase.market_context_dampening:
         response_body["market_context_dampening"] = phase.market_context_dampening
     if alignment is not None:
@@ -1259,6 +1297,7 @@ def real_composite_body_sync(
     user_email: str | None = None,
     params: SignalParameters | None = None,
     ledger_capture: bool = False,
+    perplexity_mode: SwingPerplexityMode = "off",
 ) -> dict[str, Any]:
     """Sync entry for Lambda handler (isolated event loop per invocation)."""
     p = params or ParameterStore.get_parameters_sync()
@@ -1269,5 +1308,6 @@ def real_composite_body_sync(
             user_email=user_email,
             params=p,
             ledger_capture=ledger_capture,
+            perplexity_mode=perplexity_mode,
         )
     )

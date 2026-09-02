@@ -49,3 +49,25 @@ def test_merged_long_widens_with_atr() -> None:
 def test_preset_k_values() -> None:
     assert reference_stop_atr_k(preset="dip") == 0.75
     assert reference_stop_atr_k(trading_mode="day") == 0.85
+    assert reference_stop_atr_k(trading_mode="swing") == 2.0
+
+
+def test_swing_min_stop_distance_widens_sub_dollar_setup() -> None:
+    """UPWK-style: sub-$10 swing stop must clear ~6% / 1.5×ATR floor, not 2.5% day tier."""
+    entry = 7.78
+    structural = 7.59
+    atr = 0.20
+    stop, used = resolve_merged_reference_stop(
+        direction="bullish",
+        entry=entry,
+        structural_stop=structural,
+        atr=atr,
+        atr_k=2.0,
+        trading_mode="swing",
+    )
+    min_dist = max(1.5 * atr, entry * 0.06)
+    assert stop is not None
+    assert entry - stop >= min_dist - 1e-4
+    assert stop <= entry - min_dist + 1e-4
+    assert stop < structural
+    assert used is True

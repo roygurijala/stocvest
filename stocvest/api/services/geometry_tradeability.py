@@ -9,7 +9,8 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from stocvest.api.services.market_environment import min_risk_reward_from_environment
-from stocvest.api.services.risk_reward_structure import structure_risk_reward_long, structure_risk_reward_short
+from stocvest.api.services.reference_stop_policy import MIN_SWING_STOP_DISTANCE_ATR
+from stocvest.api.services.risk_reward_structure import structure_risk_reward_for_mode
 from stocvest.signals.composite_score import CompositeVerdict
 
 Mode = Literal["day", "swing"]
@@ -67,7 +68,7 @@ def _use_long_rr(body: dict[str, Any], *, entry: float | None) -> bool:
     return entry >= mid
 
 
-def structure_rr_from_body(body: dict[str, Any]) -> float | None:
+def structure_rr_from_body(body: dict[str, Any], *, mode: Mode | None = None) -> float | None:
     """Honest structure R/R from served reference levels, or None when geometry fails."""
     entry = _entry_from_body(body)
     stop = _float_or_none(body.get("reference_stop_level"))
@@ -78,9 +79,31 @@ def structure_rr_from_body(body: dict[str, Any]) -> float | None:
     if entry is None or stop is None or t1 is None:
         return None
     use_long = _use_long_rr(body, entry=entry)
-    if use_long:
-        return structure_risk_reward_long(entry, t1, stop, t2, prov)
-    return structure_risk_reward_short(entry, t1, stop, t2, prov)
+    resolved_mode = mode
+    if resolved_mode is None:
+        raw_mode = str(body.get("mode") or "").strip().lower()
+        resolved_mode = "day" if raw_mode == "day" else "swing"
+    return structure_risk_reward_for_mode(
+        entry,
+        t1,
+        stop,
+        t2,
+        prov,
+        trading_mode=resolved_mode,
+        use_long=use_long,
+    )
+
+
+def _stop_distance_atr_from_body(body: dict[str, Any]) -> float | None:
+    raw = body.get("reference_stop_distance_atr")
+    if isinstance(raw, (int, float)) and float(raw) == float(raw):
+        return float(raw)
+    entry = _entry_from_body(body)
+    stop = _float_or_none(body.get("reference_stop_level"))
+    atr = _float_or_none(body.get("atr")) or _float_or_none(body.get("atr14"))
+    if entry is None or stop is None or atr is None or atr <= 0:
+        return None
+    return round(abs(entry - stop) / atr, 2)
 
 
 def geometry_tradeability(
@@ -102,9 +125,13 @@ def geometry_tradeability(
     eq = str(body.get("entry_zone_quality") or "").strip().lower()
     if eq == "no_clean_entry":
         return False, "no_clean_entry"
-    rr = structure_rr_from_body(body)
+    rr = structure_rr_from_body(body, mode=mode)
     if rr is None:
         return False, "geometry_insufficient"
+    if mode == "swing":
+        stop_atr = _stop_distance_atr_from_body(body)
+        if stop_atr is None or stop_atr < MIN_SWING_STOP_DISTANCE_ATR:
+            return False, "stop_too_tight_for_swing"
     env = body.get("market_environment")
     env_dict = env if isinstance(env, dict) else None
     min_rr_raw = body.get("min_rr_desk")

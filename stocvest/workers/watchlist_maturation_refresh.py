@@ -153,7 +153,12 @@ def run_watchlist_maturation_refresh_sync(
 
         if resolved_slot == "swing_open":
             try:
-                body_s = swing_composite_body_sync(symbol=sym, user_id=user_id, user_email=None)
+                body_s = swing_composite_body_sync(
+                    symbol=sym,
+                    user_id=user_id,
+                    user_email=None,
+                    perplexity_mode="watchlist_thin",
+                )
                 sync_watchlist_maturation_from_composite(
                     user_id=user_id,
                     symbol=sym,
@@ -177,7 +182,12 @@ def run_watchlist_maturation_refresh_sync(
 
         if resolved_slot in ("day_open", "eod") and calls < max_calls:
             try:
-                body = real_composite_body_sync(symbol=sym, user_id=user_id, user_email=None)
+                body = real_composite_body_sync(
+                    symbol=sym,
+                    user_id=user_id,
+                    user_email=None,
+                    perplexity_mode="watchlist_thin",
+                )
                 sync_watchlist_maturation_from_composite(
                     user_id=user_id,
                     symbol=sym,
@@ -200,7 +210,12 @@ def run_watchlist_maturation_refresh_sync(
 
         if resolved_slot == "eod" and include_swing_eod and calls < max_calls:
             try:
-                body_s = swing_composite_body_sync(symbol=sym, user_id=user_id, user_email=None)
+                body_s = swing_composite_body_sync(
+                    symbol=sym,
+                    user_id=user_id,
+                    user_email=None,
+                    perplexity_mode="watchlist_thin",
+                )
                 sync_watchlist_maturation_from_composite(
                     user_id=user_id,
                     symbol=sym,

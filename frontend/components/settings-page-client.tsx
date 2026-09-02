@@ -354,7 +354,7 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
               Actionable).
             </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
-              <span>Execution actionable (desk funnel)</span>
+              <span>Tradable desk alerts</span>
               <input
                 type="checkbox"
                 className="h-6 w-6 shrink-0"
@@ -364,8 +364,9 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
               />
             </label>
             <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
-              Email when any symbol crosses into execution-ready on the opportunity desk (ledger gates + price in entry zone).
-              Applies to the whole desk — not limited by “Watchlist symbols only” below. One email per symbol per day.
+              Email when any symbol on the opportunity desk passes ledger gates (qualified) or becomes
+              execution-ready (price in entry zone). Applies to the whole desk — not limited by your watchlist.
+              One email per symbol per desk per day.
             </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
               <span>Tracked plan thesis changes</span>
@@ -383,7 +384,7 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
             </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
               <span>
-                Watchlist symbols only <span style={{ color: colors.accent, fontSize: 10 }}>Recommended</span>
+                Watchlist symbols only
               </span>
               <input
                 type="checkbox"
@@ -394,8 +395,8 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
               />
             </label>
             <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
-              Limits signal-fired, confluence, gap, and maturation emails to your default watchlist. Does not limit
-              execution-actionable desk alerts or tracked-plan thesis alerts above.
+              Optional filter for legacy signal-fired, confluence, gap, and maturation emails only. Does not limit
+              tradable desk alerts above.
             </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
               <span>Enable quiet hours</span>

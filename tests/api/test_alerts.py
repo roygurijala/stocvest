@@ -59,8 +59,10 @@ def test_alert_preferences_default_values(brokers: None) -> None:
     b = _body(r)
     assert b["email_enabled"] is True
     assert b["on_gap_detected"] is False
-    assert b.get("on_watchlist_maturation", True) is True
-    assert b["watchlist_only"] is True
+    assert b.get("on_watchlist_maturation", False) is False
+    assert b.get("on_execution_actionable", True) is True
+    assert b.get("on_signal_fired", False) is False
+    assert b["watchlist_only"] is False
 
 
 def test_save_and_retrieve_preferences(brokers: None) -> None:
@@ -117,6 +119,31 @@ def test_signal_alert_skipped_when_not_on_watchlist(monkeypatch: pytest.MonkeyPa
         confluence_score=None,
     )
     send.assert_not_called()
+
+
+def test_signal_alert_sent_when_ledger_qualified_off_watchlist(monkeypatch: pytest.MonkeyPatch) -> None:
+    send = MagicMock(return_value=True)
+    monkeypatch.setattr(EmailService, "send_alert_email", send)
+    store = get_in_memory_alert_store()
+    store.save_preferences(
+        "u1",
+        AlertPreferences(user_id="u1", watchlist_only=True, on_signal_fired=True),
+    )
+    wl = get_watchlist_store()
+    wl.create_watchlist("u1", "D", ["AAPL"], is_default=True)
+    trig = AlertTriggerService(store, EmailService(), wl)
+    trig.trigger_signal_alert(
+        user_id="u1",
+        user_email="a@b.com",
+        symbol="NVDA",
+        direction="long",
+        signal_strength=80,
+        pattern="swing_composite",
+        is_confluence=False,
+        confluence_score=None,
+        ledger_qualified=True,
+    )
+    send.assert_called_once()
 
 
 def test_signal_alert_skipped_below_ledger_strength_floor(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -189,6 +216,7 @@ def test_signal_alert_sent_at_72_with_two_triggers(monkeypatch: pytest.MonkeyPat
     send = MagicMock(return_value=True)
     monkeypatch.setattr(EmailService, "send_alert_email", send)
     store = get_in_memory_alert_store()
+    store.save_preferences("u1", AlertPreferences(user_id="u1", on_signal_fired=True))
     wl = get_watchlist_store()
     wl.create_watchlist("u1", "D", ["NVDA"], is_default=True)
     trig = AlertTriggerService(store, EmailService(), wl)
@@ -211,6 +239,7 @@ def test_signal_alert_sent_when_on_watchlist(monkeypatch: pytest.MonkeyPatch) ->
     send = MagicMock(return_value=True)
     monkeypatch.setattr(EmailService, "send_alert_email", send)
     store = get_in_memory_alert_store()
+    store.save_preferences("u1", AlertPreferences(user_id="u1", on_signal_fired=True))
     wl = get_watchlist_store()
     wl.create_watchlist("u1", "D", ["NVDA"], is_default=True)
     trig = AlertTriggerService(store, EmailService(), wl)
@@ -233,6 +262,7 @@ def test_confluence_alert_type_when_confluence(monkeypatch: pytest.MonkeyPatch) 
     send = MagicMock(return_value=True)
     monkeypatch.setattr(EmailService, "send_alert_email", send)
     store = get_in_memory_alert_store()
+    store.save_preferences("u1", AlertPreferences(user_id="u1", on_confluence_alert=True))
     wl = get_watchlist_store()
     wl.create_watchlist("u1", "D", ["NVDA"], is_default=True)
     trig = AlertTriggerService(store, EmailService(), wl)
@@ -305,6 +335,7 @@ def test_maturation_alert_sent_when_prefs_on(monkeypatch: pytest.MonkeyPatch) ->
     send = MagicMock(return_value=True)
     monkeypatch.setattr(EmailService, "send_alert_email", send)
     store = get_in_memory_alert_store()
+    store.save_preferences("u1", AlertPreferences(user_id="u1", on_watchlist_maturation=True))
     wl = get_watchlist_store()
     wl.create_watchlist("u1", "D", ["AAPL"], is_default=True)
     trig = AlertTriggerService(store, EmailService(), wl)
@@ -324,6 +355,7 @@ def test_maturation_alert_skipped_when_desk_not_tracked(monkeypatch: pytest.Monk
     send = MagicMock(return_value=True)
     monkeypatch.setattr(EmailService, "send_alert_email", send)
     store = get_in_memory_alert_store()
+    store.save_preferences("u1", AlertPreferences(user_id="u1", on_watchlist_maturation=True))
     wl = get_watchlist_store()
     w = wl.create_watchlist("u1", "D", ["AAPL"], is_default=True)
     wl.set_symbol_tracking("u1", w.watchlist_id, "AAPL", track_swing=True, track_day=False)
@@ -372,6 +404,7 @@ def test_maturation_alert_deduped_same_et_calendar_day(monkeypatch: pytest.Monke
     send = MagicMock(return_value=True)
     monkeypatch.setattr(EmailService, "send_alert_email", send)
     store = get_in_memory_alert_store()
+    store.save_preferences("u1", AlertPreferences(user_id="u1", on_watchlist_maturation=True))
     wl = get_watchlist_store()
     wl.create_watchlist("u1", "D", ["AAPL"], is_default=True)
 
@@ -399,6 +432,7 @@ def test_maturation_distinct_transitions_same_day_send_separately(monkeypatch: p
     send = MagicMock(return_value=True)
     monkeypatch.setattr(EmailService, "send_alert_email", send)
     store = get_in_memory_alert_store()
+    store.save_preferences("u1", AlertPreferences(user_id="u1", on_watchlist_maturation=True))
     wl = get_watchlist_store()
     wl.create_watchlist("u1", "D", ["AAPL"], is_default=True)
 

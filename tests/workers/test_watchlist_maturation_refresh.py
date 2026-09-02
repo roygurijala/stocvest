@@ -21,7 +21,7 @@ def test_refresh_skips_without_maturation_table(monkeypatch: pytest.MonkeyPatch)
 def test_refresh_calls_day_composite_and_sync(monkeypatch: pytest.MonkeyPatch) -> None:
     sync_calls: list[tuple[str, str, str]] = []
 
-    def fake_day(*, symbol: str, user_id: str | None, user_email: str | None) -> dict:
+    def fake_day(*, symbol: str, user_id: str | None, user_email: str | None, **_: object) -> dict:
         _ = user_email
         return {"symbol": symbol, "signal_summary": "bullish", "layers": []}
 
@@ -75,7 +75,7 @@ def test_refresh_calls_day_composite_and_sync(monkeypatch: pytest.MonkeyPatch) -
 def test_swing_open_runs_swing_only(monkeypatch: pytest.MonkeyPatch) -> None:
     sync_calls: list[str] = []
 
-    def fake_swing(*, symbol: str, user_id: str | None, user_email: str | None) -> dict:
+    def fake_swing(*, symbol: str, user_id: str | None, user_email: str | None, **_: object) -> dict:
         _ = (user_id, user_email)
         return {"symbol": symbol, "signal_summary": "bullish", "layers": []}
 

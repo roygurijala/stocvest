@@ -76,3 +76,28 @@ def structure_risk_reward_short(
     if rr_t1 < 1.0 and rr_t2 > rr_t1:
         return rr_t2
     return rr_t1
+
+
+def structure_risk_reward_for_mode(
+    entry: float,
+    target_1: float,
+    stop: float,
+    target_2: float | None = None,
+    target_2_provenance: str | None = None,
+    *,
+    trading_mode: str | None = None,
+    use_long: bool = True,
+) -> float | None:
+    """Swing desk/email R/R uses T1 only — T2 promotion inflated headline R/R on tight T1 setups."""
+    if trading_mode == "swing":
+        rr_t1 = (
+            rr_from_levels_long(entry, target_1, stop)
+            if use_long
+            else rr_from_levels_short(entry, target_1, stop)
+        )
+        if rr_t1 is not None and rr_t1 < 1.0:
+            return None
+        return rr_t1
+    if use_long:
+        return structure_risk_reward_long(entry, target_1, stop, target_2, target_2_provenance)
+    return structure_risk_reward_short(entry, target_1, stop, target_2, target_2_provenance)

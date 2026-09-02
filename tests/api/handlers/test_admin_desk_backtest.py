@@ -104,8 +104,17 @@ def test_historical_validation_public_scope() -> None:
 
 def test_environment_backtest_returns_ranked_candidates() -> None:
     store = InMemorySignalRecorder()
-    store.record_signal(_record(vix=18, tier="normal", outcome_1d="correct"))
-    store.record_signal(_record(vix=29, tier="stressed", outcome_1d="incorrect"))
+    recent = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    store.record_signal(
+        _record(vix=18, tier="normal", outcome_1d="correct").model_copy(
+            update={"signal_id": "env-bt-1", "generated_at": recent}
+        )
+    )
+    store.record_signal(
+        _record(vix=29, tier="stressed", outcome_1d="incorrect").model_copy(
+            update={"signal_id": "env-bt-2", "generated_at": recent}
+        )
+    )
     event = _evt(
         path="/v1/admin/environment-policy/backtest",
         qs={"days": "180", "horizon": "1d", "mode": "swing", "top": "5"},

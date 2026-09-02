@@ -269,15 +269,9 @@ def test_whitespace_symbol_returns_none() -> None:
 
 def test_snapshot_failure_does_not_raise() -> None:
     """When Polygon snapshot raises, the context is returned with snapshot=None."""
-    with (
-        patch(
-            "stocvest.api.services.assistant_symbol_context.PolygonClient",
-        ) as MockPoly,
-        patch(
-            "stocvest.api.services.assistant_symbol_context.BenzingaClient",
-        ) as MockBz,
-    ):
-        # Polygon snapshot raises; news and bars succeed with empty lists.
+    with patch(
+        "stocvest.api.services.assistant_symbol_context.PolygonClient",
+    ) as MockPoly:
         mock_poly = AsyncMock()
         mock_poly.get_snapshot.side_effect = RuntimeError("Polygon down")
         mock_poly.get_news = AsyncMock(return_value=[])
@@ -286,13 +280,6 @@ def test_snapshot_failure_does_not_raise() -> None:
         mock_poly.__aexit__ = AsyncMock(return_value=None)
         MockPoly.return_value = mock_poly
 
-        mock_bz = AsyncMock()
-        mock_bz.get_why_is_it_moving = AsyncMock(return_value=None)
-        mock_bz.get_analyst_ratings = AsyncMock(return_value=[])
-        mock_bz.get_earnings_results = AsyncMock(return_value=[])
-        mock_bz.get_corporate_guidance = AsyncMock(return_value=[])
-        MockBz.return_value = mock_bz
-
         result = asyncio.run(fetch_assistant_symbol_context("MRVL"))
 
     assert result is not None
@@ -300,17 +287,28 @@ def test_snapshot_failure_does_not_raise() -> None:
     assert result.snapshot is None
 
 
-def test_benzinga_failure_does_not_raise() -> None:
-    """When Benzinga raises entirely, snapshot still arrives."""
+def test_perplexity_failure_does_not_raise() -> None:
+    """When Perplexity raises, Polygon snapshot still arrives."""
     snap = MagicMock(spec=Snapshot)
     with (
         patch(
             "stocvest.api.services.assistant_symbol_context.PolygonClient",
         ) as MockPoly,
         patch(
-            "stocvest.api.services.assistant_symbol_context.BenzingaClient",
-        ) as MockBz,
+            "stocvest.api.services.assistant_symbol_context.get_settings",
+        ) as MockSettings,
+        patch(
+            "stocvest.api.services.assistant_symbol_context.fetch_news_enrichment",
+            new_callable=AsyncMock,
+            side_effect=Exception("Perplexity down"),
+        ),
+        patch(
+            "stocvest.api.services.assistant_symbol_context.fetch_analyst_target_enrichment",
+            new_callable=AsyncMock,
+            side_effect=Exception("Perplexity down"),
+        ),
     ):
+        MockSettings.return_value = MagicMock(polygon_api_key="k", perplexity_api_key="px-key")
         mock_poly = AsyncMock()
         mock_poly.get_snapshot = AsyncMock(return_value=snap)
         mock_poly.get_news = AsyncMock(return_value=[])
@@ -319,20 +317,79 @@ def test_benzinga_failure_does_not_raise() -> None:
         mock_poly.__aexit__ = AsyncMock(return_value=None)
         MockPoly.return_value = mock_poly
 
-        # Benzinga raises on every call
-        mock_bz = AsyncMock()
-        mock_bz.get_why_is_it_moving = AsyncMock(side_effect=Exception("Benzinga down"))
-        mock_bz.get_analyst_ratings = AsyncMock(side_effect=Exception("Benzinga down"))
-        mock_bz.get_earnings_results = AsyncMock(side_effect=Exception("Benzinga down"))
-        mock_bz.get_corporate_guidance = AsyncMock(side_effect=Exception("Benzinga down"))
-        MockBz.return_value = mock_bz
-
         result = asyncio.run(fetch_assistant_symbol_context("MRVL"))
 
     assert result is not None
     assert result.snapshot is snap
+    assert result.perplexity_news is None
     assert result.analyst_ratings == []
-    assert result.earnings == []
+
+
+def test_benzinga_client_not_used() -> None:
+    """Regression: assistant symbol context must not call Benzinga (DBZ-6)."""
+    benzinga_calls: list[str] = []
+
+    class _SpyBenzinga:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            benzinga_calls.append("init")
+
+    with (
+        patch("stocvest.api.services.assistant_symbol_context.PolygonClient") as MockPoly,
+        patch("stocvest.data.benzinga_client.BenzingaClient", _SpyBenzinga),
+        patch(
+            "stocvest.api.services.assistant_symbol_context.get_settings",
+            return_value=MagicMock(polygon_api_key="k", perplexity_api_key=""),
+        ),
+    ):
+        mock_poly = AsyncMock()
+        mock_poly.get_snapshot = AsyncMock(return_value=None)
+        mock_poly.get_news = AsyncMock(return_value=[])
+        mock_poly.get_bars = AsyncMock(return_value=[])
+        mock_poly.__aenter__ = AsyncMock(return_value=mock_poly)
+        mock_poly.__aexit__ = AsyncMock(return_value=None)
+        MockPoly.return_value = mock_poly
+
+        asyncio.run(fetch_assistant_symbol_context("MRVL"))
+
+    assert benzinga_calls == []
+
+
+def test_thin_news_triggers_perplexity_news_fetch() -> None:
+    enrich = MagicMock()
+    enrich.summary = "Policy tailwind."
+    enrich.sentiment = "neutral"
+    enrich.catalysts = []
+    enrich.headwinds = []
+    with (
+        patch("stocvest.api.services.assistant_symbol_context.PolygonClient") as MockPoly,
+        patch(
+            "stocvest.api.services.assistant_symbol_context.get_settings",
+            return_value=MagicMock(polygon_api_key="k", perplexity_api_key="px-key"),
+        ),
+        patch(
+            "stocvest.api.services.assistant_symbol_context.fetch_news_enrichment",
+            new_callable=AsyncMock,
+            return_value=enrich,
+        ) as mock_news,
+        patch(
+            "stocvest.api.services.assistant_symbol_context.fetch_analyst_target_enrichment",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+    ):
+        mock_poly = AsyncMock()
+        mock_poly.get_snapshot = AsyncMock(return_value=None)
+        mock_poly.get_news = AsyncMock(return_value=[])
+        mock_poly.get_bars = AsyncMock(return_value=[])
+        mock_poly.__aenter__ = AsyncMock(return_value=mock_poly)
+        mock_poly.__aexit__ = AsyncMock(return_value=None)
+        MockPoly.return_value = mock_poly
+
+        result = asyncio.run(fetch_assistant_symbol_context("MRVL"))
+
+    mock_news.assert_awaited_once()
+    assert result is not None
+    assert result.perplexity_news is enrich
 
 
 def test_symbol_normalized_to_polygon_form() -> None:
@@ -343,9 +400,6 @@ def test_symbol_normalized_to_polygon_form() -> None:
         patch(
             "stocvest.api.services.assistant_symbol_context.PolygonClient",
         ) as MockPoly,
-        patch(
-            "stocvest.api.services.assistant_symbol_context.BenzingaClient",
-        ) as MockBz,
     ):
         mock_poly = AsyncMock()
 
@@ -359,13 +413,6 @@ def test_symbol_normalized_to_polygon_form() -> None:
         mock_poly.__aenter__ = AsyncMock(return_value=mock_poly)
         mock_poly.__aexit__ = AsyncMock(return_value=None)
         MockPoly.return_value = mock_poly
-
-        mock_bz = AsyncMock()
-        mock_bz.get_why_is_it_moving = AsyncMock(return_value=None)
-        mock_bz.get_analyst_ratings = AsyncMock(return_value=[])
-        mock_bz.get_earnings_results = AsyncMock(return_value=[])
-        mock_bz.get_corporate_guidance = AsyncMock(return_value=[])
-        MockBz.return_value = mock_bz
 
         result = asyncio.run(fetch_assistant_symbol_context("BRK-B"))
 
@@ -386,13 +433,10 @@ def test_polygon_client_constructed_with_api_key() -> None:
             "stocvest.api.services.assistant_symbol_context.PolygonClient",
         ) as MockPoly,
         patch(
-            "stocvest.api.services.assistant_symbol_context.BenzingaClient",
-        ) as MockBz,
-        patch(
             "stocvest.api.services.assistant_symbol_context.get_settings",
         ) as MockSettings,
     ):
-        MockSettings.return_value = MagicMock(polygon_api_key="TEST_POLYGON_KEY")
+        MockSettings.return_value = MagicMock(polygon_api_key="TEST_POLYGON_KEY", perplexity_api_key="")
 
         mock_poly = AsyncMock()
         mock_poly.get_snapshot = AsyncMock(return_value=None)
@@ -401,14 +445,6 @@ def test_polygon_client_constructed_with_api_key() -> None:
         mock_poly.__aenter__ = AsyncMock(return_value=mock_poly)
         mock_poly.__aexit__ = AsyncMock(return_value=None)
         MockPoly.return_value = mock_poly
-
-        mock_bz = AsyncMock()
-        mock_bz.get_why_is_it_moving = AsyncMock(return_value=None)
-        mock_bz.get_analyst_ratings = AsyncMock(return_value=[])
-        mock_bz.get_earnings_results = AsyncMock(return_value=[])
-        mock_bz.get_corporate_guidance = AsyncMock(return_value=[])
-        mock_bz.get_news = AsyncMock(return_value=[])
-        MockBz.return_value = mock_bz
 
         asyncio.run(fetch_assistant_symbol_context("MRVL"))
 
@@ -584,10 +620,7 @@ def test_build_chart_quote_only_when_single_bar() -> None:
 
 
 def test_result_symbol_is_uppercase() -> None:
-    with (
-        patch("stocvest.api.services.assistant_symbol_context.PolygonClient") as MockPoly,
-        patch("stocvest.api.services.assistant_symbol_context.BenzingaClient") as MockBz,
-    ):
+    with patch("stocvest.api.services.assistant_symbol_context.PolygonClient") as MockPoly:
         mock_poly = AsyncMock()
         mock_poly.get_snapshot = AsyncMock(return_value=None)
         mock_poly.get_news = AsyncMock(return_value=[])
@@ -595,13 +628,6 @@ def test_result_symbol_is_uppercase() -> None:
         mock_poly.__aenter__ = AsyncMock(return_value=mock_poly)
         mock_poly.__aexit__ = AsyncMock(return_value=None)
         MockPoly.return_value = mock_poly
-
-        mock_bz = AsyncMock()
-        mock_bz.get_why_is_it_moving = AsyncMock(return_value=None)
-        mock_bz.get_analyst_ratings = AsyncMock(return_value=[])
-        mock_bz.get_earnings_results = AsyncMock(return_value=[])
-        mock_bz.get_corporate_guidance = AsyncMock(return_value=[])
-        MockBz.return_value = mock_bz
 
         result = asyncio.run(fetch_assistant_symbol_context("aapl"))
 

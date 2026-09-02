@@ -50,7 +50,7 @@ def test_rr_warning_false_when_above_2() -> None:
         confluence=None,
         snapshot={
             "last_trade_price": 100.0,
-            "day_high": 106.0,
+            "day_high": 115.0,
             "day_low": 99.0,
             "day_vwap": 99.5,
         },
