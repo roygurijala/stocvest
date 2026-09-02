@@ -240,7 +240,12 @@ class DynamoDBUserAlertStore:
         out = self.table.get_item(Key={"userId": user_id, "alertId": PREFS_ALERT_ID})
         it = out.get("Item")
         if not it:
-            return _defaults(user_id)
+            prefs = _defaults(user_id)
+            try:
+                self.save_preferences(user_id, prefs)
+            except Exception as exc:  # noqa: BLE001 — read path must not fail
+                _LOG.warning("alert prefs seed failed user=%s: %s", user_id[:8], exc)
+            return prefs
         return AlertPreferences(
             user_id=user_id,
             email_enabled=bool(it.get("emailEnabled", True)),
@@ -252,7 +257,7 @@ class DynamoDBUserAlertStore:
             on_watchlist_maturation=bool(it.get("onWatchlistMaturation", True)),
             on_execution_actionable=bool(it.get("onExecutionActionable", True)),
             on_tracked_plan_thesis=bool(it.get("onTrackedPlanThesis", True)),
-            watchlist_only=bool(it.get("watchlistOnly", True)),
+            watchlist_only=bool(it.get("watchlistOnly", False)),
             quiet_hours_enabled=bool(it.get("quietHoursEnabled", False)),
             quiet_hours_start=str(it.get("quietHoursStart") or "22:00"),
             quiet_hours_end=str(it.get("quietHoursEnd") or "07:00"),

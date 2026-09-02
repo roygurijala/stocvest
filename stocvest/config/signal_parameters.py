@@ -344,6 +344,22 @@ class CompositeParameters:
     confluence_alert_threshold: int = 60
 
 
+def default_swing_composite_parameters() -> CompositeParameters:
+    """ADR-001 Phase 3: swing desk blend — lower news weight after de-Benzinga."""
+    return CompositeParameters(
+        technical_weight=0.34,
+        news_weight=0.12,
+        macro_weight=0.15,
+        sector_weight=0.19,
+        geopolitical_weight=0.10,
+        internals_weight=0.10,
+    )
+
+
+# Shared immutable default — returned by resolve_composite_block when swing_composite unset.
+DEFAULT_SWING_COMPOSITE_PARAMETERS = default_swing_composite_parameters()
+
+
 @dataclass
 class SignalParameters:
     version: str = "1.0.0"
@@ -387,7 +403,7 @@ class SignalParameters:
 
 
 def default_signal_parameters() -> SignalParameters:
-    return SignalParameters()
+    return SignalParameters(swing_composite=default_swing_composite_parameters())
 
 
 def signal_parameters_to_dict(params: SignalParameters) -> dict:

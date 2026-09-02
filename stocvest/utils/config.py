@@ -419,6 +419,16 @@ class Settings(BaseSettings):
         "stocvest:news_worker:heartbeat",
         alias="STOCVEST_NEWS_WORKER_HEARTBEAT_KEY",
     )
+    # ADR-001 Phase 2: Benzinga WebSocket on the ECS news worker (default OFF — EDGAR-only).
+    stocvest_news_worker_benzinga_ws_enabled: bool = Field(
+        False,
+        alias="STOCVEST_NEWS_WORKER_BENZINGA_WS_ENABLED",
+    )
+    # ADR-001 Phase 7: Benzinga get_multi on day composite (default OFF — Polygon-primary).
+    stocvest_day_composite_benzinga_enabled: bool = Field(
+        False,
+        alias="STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED",
+    )
 
     model_config = {"populate_by_name": True}
 

@@ -26,6 +26,7 @@ def test_execution_hint_blocks_low_rr_swing() -> None:
             "last_trade_price": 100.0,
             "reference_stop_level": 95.0,
             "reference_target_1": 106.0,
+            "reference_stop_distance_atr": 2.0,
             "risk_reward": 0.5,
         },
         mode="swing",

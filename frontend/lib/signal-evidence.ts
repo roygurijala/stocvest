@@ -1605,7 +1605,8 @@ export function referenceLevelsFromSessionStructure(
       entry,
       structuralStop: structural,
       atr,
-      atrK: referenceStopAtrK({ tradingMode: input.tradingMode ?? null })
+      atrK: referenceStopAtrK({ tradingMode: input.tradingMode ?? null }),
+      tradingMode: input.tradingMode ?? null
     });
     if (merged.stop != null) reference_stop_level = merged.stop;
   }

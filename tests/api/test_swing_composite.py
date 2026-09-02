@@ -437,3 +437,96 @@ async def test_swing_response_includes_earnings_horizon_fields(
     assert out.get("earnings_report_time") == "after_market"
     assert out.get("earnings_chip") == "⚠️ Earnings in 3 days"
     assert out.get("mode") == "swing"
+
+
+@pytest.mark.asyncio
+async def test_swing_composite_polygon_primary_news_source(
+    _mute_side_effects: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-001 Phase 1: swing desk uses Polygon news only; Benzinga REST is not invoked."""
+
+    benzinga_calls: list[str] = []
+
+    class SpyBenzinga:
+        async def get_multi(self, symbol: str, **kwargs: object) -> None:
+            benzinga_calls.append(symbol)
+            raise AssertionError("BenzingaClient.get_multi must not run on swing composite")
+
+    monkeypatch.setattr("stocvest.data.benzinga_client.BenzingaClient", SpyBenzinga)
+
+    class FakePoly:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+
+        async def get_bars(self, symbol, timeframe, **kwargs):
+            return _bullish_daily_series(symbol, 220)
+
+        async def get_snapshot(self, symbol):
+            sym = symbol or "AAPL"
+            return Snapshot(
+                symbol=sym,
+                last_trade_price=180.0,
+                prev_close=178.0,
+                change_percent=0.8,
+                change=2.0,
+                day_close=180.0,
+                day_volume=50_000_000,
+                day_vwap=179.0,
+                day_high=181.0,
+                day_low=177.0,
+            )
+
+        async def get_market_news(self, **kwargs):
+            now = datetime.now(timezone.utc)
+            return [
+                {
+                    "title": "Polygon headline",
+                    "tickers": ["AAPL"],
+                    "published_utc": now.isoformat(),
+                    "insights": [{"sentiment": "positive"}],
+                    "publisher": {"name": "Reuters"},
+                }
+            ]
+
+        async def get_economic_calendar_range(self, *a, **k):
+            return []
+
+    monkeypatch.setattr("stocvest.api.services.swing_composite_engine.PolygonClient", FakePoly)
+    monkeypatch.setattr(
+        "stocvest.api.services.swing_composite_engine.get_vix_snapshot_with_fallback",
+        AsyncMock(
+            return_value=Snapshot(
+                symbol="I:VIX",
+                last_trade_price=17.0,
+                change_percent=-1.0,
+                prev_close=17.2,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "stocvest.api.services.swing_composite_engine.SectorMapper.get_sector_etf",
+        AsyncMock(
+            return_value=("XLK", "Technology", "technology", SectorResolutionState.RESOLVED, SicMappingTier.EXACT)
+        ),
+    )
+
+    from stocvest.api.services.swing_composite_engine import build_swing_composite_response
+    from stocvest.api.services.swing_news_source import SWING_NEWS_SOURCE_POLYGON_PRIMARY
+
+    out = await build_swing_composite_response(
+        symbol="AAPL",
+        user_id=None,
+        user_email=None,
+        params=default_signal_parameters(),
+    )
+    assert benzinga_calls == []
+    assert out.get("news_source") == SWING_NEWS_SOURCE_POLYGON_PRIMARY
+    assert "benzinga_feed_health" not in out
+    headlines = out.get("catalyst_headlines") or []
+    assert any("Polygon headline" in str(h.get("title") or h) for h in headlines)

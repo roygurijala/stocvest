@@ -35,12 +35,12 @@ def test_ledger_capture_prioritizes_actionable(monkeypatch: pytest.MonkeyPatch) 
             _ = (user_id, mode, exclude_archived)
             return []
 
-    def fake_day(*, symbol: str, user_id: str | None, user_email: str | None, ledger_capture: bool) -> dict:
+    def fake_day(*, symbol: str, user_id: str | None, user_email: str | None, ledger_capture: bool, **_: object) -> dict:
         _ = (user_id, user_email, ledger_capture)
         day_calls.append(symbol)
         return {"ledger_qualified": False}
 
-    def fake_swing(*, symbol: str, user_id: str | None, user_email: str | None, ledger_capture: bool) -> dict:
+    def fake_swing(*, symbol: str, user_id: str | None, user_email: str | None, ledger_capture: bool, **_: object) -> dict:
         _ = (symbol, user_id, user_email, ledger_capture)
         return {"ledger_qualified": False}
 
@@ -91,12 +91,12 @@ def test_ledger_capture_both_interleaves_so_swing_is_not_starved(
             _ = (user_id, mode, exclude_archived)
             return []
 
-    def fake_day(*, symbol: str, user_id: str | None, user_email: str | None, ledger_capture: bool) -> dict:
+    def fake_day(*, symbol: str, user_id: str | None, user_email: str | None, ledger_capture: bool, **_: object) -> dict:
         _ = (user_id, user_email, ledger_capture)
         day_calls.append(symbol)
         return {"ledger_qualified": False}
 
-    def fake_swing(*, symbol: str, user_id: str | None, user_email: str | None, ledger_capture: bool) -> dict:
+    def fake_swing(*, symbol: str, user_id: str | None, user_email: str | None, ledger_capture: bool, **_: object) -> dict:
         _ = (user_id, user_email, ledger_capture)
         swing_calls.append(symbol)
         return {"ledger_qualified": False}
@@ -135,7 +135,7 @@ def test_ledger_capture_syncs_maturation_after_composite(monkeypatch: pytest.Mon
             _ = (user_id, mode, exclude_archived)
             return []
 
-    def fake_swing(*, symbol: str, user_id: str | None, user_email: str | None, ledger_capture: bool) -> dict:
+    def fake_swing(*, symbol: str, user_id: str | None, user_email: str | None, ledger_capture: bool, **_: object) -> dict:
         _ = (user_email, ledger_capture)
         return {
             "ledger_qualified": False,

@@ -15,6 +15,7 @@ from stocvest.api.services.watchlist_scanner_alerts import notify_intraday_setup
 from stocvest.data.alert_store import InMemoryAlertStore
 from stocvest.data.models import (
     AlertChannel,
+    AlertPreferences,
     AlertRecord,
     AlertStatus,
     AlertType,
@@ -80,6 +81,10 @@ def test_notify_watchlist_users_fires_alert() -> None:
     profiles = InMemoryUserProfileStore()
     profiles.put_profile(UserProfile(user_id="u1", email="u1@example.com"))
     alerts = InMemoryAlertStore()
+    alerts.save_preferences(
+        "u1",
+        AlertPreferences(user_id="u1", email_enabled=True, on_signal_fired=True),
+    )
     mock_email = MagicMock()
     mock_email.send_alert_email.return_value = True
     mock_email._build_subject = MagicMock(return_value="Alert")

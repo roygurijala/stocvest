@@ -56,7 +56,7 @@ def tradeable_composite_evidence(*, mode: str = "day", entry: float = 102.2) -> 
     stop = entry - 4.0
     t1 = entry + 6.0 if mode == "day" else entry + 10.0
     t2 = entry + 10.0 if mode == "day" else entry + 15.0
-    return {
+    body = {
         "status": "active",
         "verdict": "bullish",
         "signal_summary": "bullish",
@@ -66,6 +66,11 @@ def tradeable_composite_evidence(*, mode: str = "day", entry: float = 102.2) -> 
         "reference_target_2": t2,
         "entry_zone_quality": "clean",
     }
+    if mode == "swing":
+        body["reference_stop_distance_atr"] = 2.0
+        body["min_rr_desk"] = 2.0
+        body["risk_reward"] = 2.5
+    return body
 
 
 def patch_tradeable_geometry_cache(monkeypatch: pytest.MonkeyPatch) -> None:

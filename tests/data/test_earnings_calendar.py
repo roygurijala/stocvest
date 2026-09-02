@@ -52,10 +52,15 @@ def test_earnings_horizon_to_api_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_prefers_benzinga_then_polygon() -> None:
+async def test_resolve_prefers_finnhub_then_polygon() -> None:
     clear_earnings_horizon_cache()
     today = date(2026, 5, 16)
-    bz_date = today + timedelta(days=2)
+    fh_event = EarningsEvent(
+        symbol="AAPL",
+        company_name="Apple",
+        report_date=today + timedelta(days=2),
+        report_time="before_market",
+    )
     poly_event = EarningsEvent(
         symbol="AAPL",
         company_name="Apple",
@@ -70,24 +75,21 @@ async def test_resolve_prefers_benzinga_then_polygon() -> None:
         patch("stocvest.data.earnings_calendar.datetime") as dt_mock,
         patch(
             "stocvest.data.earnings_calendar_fetch.fetch_earnings_events",
-            new=AsyncMock(return_value=([], None, None)),
-        ),
-        patch(
-            "stocvest.data.earnings_calendar._from_benzinga",
-            new=AsyncMock(return_value=bz_date),
+            new=AsyncMock(return_value=([fh_event], None, "finnhub")),
         ),
     ):
         dt_mock.now.return_value.date.return_value = today
         h = await resolve_upcoming_earnings_horizon("AAPL", polygon_client=FakePoly())  # type: ignore[arg-type]
 
     assert h is not None
-    assert h.report_date == bz_date
+    assert h.report_date == fh_event.report_date
     assert h.days_away == 2
     assert h.risk == "elevated"
+    FakePoly.get_earnings_calendar.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_resolve_polygon_fallback_when_benzinga_empty() -> None:
+async def test_resolve_polygon_fallback_when_finnhub_empty() -> None:
     clear_earnings_horizon_cache("MSFT")
     today = date(2026, 5, 16)
     poly_event = EarningsEvent(
@@ -102,7 +104,10 @@ async def test_resolve_polygon_fallback_when_benzinga_empty() -> None:
 
     with (
         patch("stocvest.data.earnings_calendar.datetime") as dt_mock,
-        patch("stocvest.data.earnings_calendar._from_benzinga", new=AsyncMock(return_value=None)),
+        patch(
+            "stocvest.data.earnings_calendar_fetch.fetch_earnings_events",
+            new=AsyncMock(return_value=([], None, "empty")),
+        ),
     ):
         dt_mock.now.return_value.date.return_value = today
         h = await resolve_upcoming_earnings_horizon("MSFT", polygon_client=FakePoly())  # type: ignore[arg-type]
@@ -114,7 +119,7 @@ async def test_resolve_polygon_fallback_when_benzinga_empty() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_fmp_fallback_when_benzinga_and_polygon_empty() -> None:
+async def test_resolve_fmp_fallback_when_finnhub_and_polygon_empty() -> None:
     clear_earnings_horizon_cache("MSFT")
     today = date(2026, 5, 16)
     fmp_date = today + timedelta(days=5)
@@ -124,7 +129,10 @@ async def test_resolve_fmp_fallback_when_benzinga_and_polygon_empty() -> None:
 
     with (
         patch("stocvest.data.earnings_calendar.datetime") as dt_mock,
-        patch("stocvest.data.earnings_calendar._from_benzinga", new=AsyncMock(return_value=None)),
+        patch(
+            "stocvest.data.earnings_calendar_fetch.fetch_earnings_events",
+            new=AsyncMock(return_value=([], None, "empty")),
+        ),
         patch(
             "stocvest.data.fmp_client.get_upcoming_earnings_date",
             new=AsyncMock(return_value=fmp_date),
@@ -145,11 +153,54 @@ async def test_resolve_never_raises_on_provider_errors() -> None:
     class FakePoly:
         get_earnings_calendar = AsyncMock(side_effect=RuntimeError("down"))
 
-    with (
-        patch("stocvest.data.earnings_calendar.datetime") as dt_mock,
-        patch("stocvest.data.earnings_calendar._from_benzinga", new=AsyncMock(side_effect=RuntimeError("bz"))),
-    ):
+    with patch("stocvest.data.earnings_calendar.datetime") as dt_mock:
         dt_mock.now.return_value.date.return_value = date(2026, 5, 16)
         h = await resolve_upcoming_earnings_horizon("ZZZ", polygon_client=FakePoly())  # type: ignore[arg-type]
 
     assert h is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_earnings_events_skips_benzinga_when_finnhub_empty() -> None:
+    """ADR-001 Phase 4: batch fetch goes Finnhub → Polygon → FMP only."""
+    from stocvest.data.earnings_calendar_fetch import fetch_earnings_events
+
+    today = date.today()
+    to_date = today + timedelta(days=14)
+    poly_event = EarningsEvent(
+        symbol="NVDA",
+        company_name="NVIDIA",
+        report_date=today + timedelta(days=3),
+        report_time="after_market",
+    )
+
+    class FakePoly:
+        get_earnings_calendar = AsyncMock(return_value=[poly_event])
+
+    benzinga_called = {"n": 0}
+
+    class SpyBenzinga:
+        def __init__(self, *a, **k):
+            benzinga_called["n"] += 1
+
+        async def get_upcoming_earnings_calendar(self, *a, **k):
+            raise AssertionError("Benzinga earnings must not be called")
+
+    with (
+        patch(
+            "stocvest.data.earnings_calendar_fetch.finnhub_earnings_calendar",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch("stocvest.data.benzinga_client.BenzingaClient", SpyBenzinga),
+    ):
+        events, _notice, source = await fetch_earnings_events(
+            ["NVDA"],
+            from_date=today,
+            to_date=to_date,
+            polygon_client=FakePoly(),  # type: ignore[arg-type]
+        )
+
+    assert benzinga_called["n"] == 0
+    assert source == "polygon"
+    assert len(events) == 1
+    assert events[0].symbol == "NVDA"

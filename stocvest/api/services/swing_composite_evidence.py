@@ -9,8 +9,9 @@ from stocvest.api.services.analyst_target_levels import analyst_targets_from_pay
 from stocvest.api.services.geometry_tradeability import geometry_tradeability
 from stocvest.api.services.risk_reward_structure import (
     round_risk_reward_display,
-    structure_risk_reward_long,
-    structure_risk_reward_short,
+    rr_from_levels_long,
+    rr_from_levels_short,
+    structure_risk_reward_for_mode,
 )
 from stocvest.api.services.market_environment import (
     min_risk_reward_from_environment,
@@ -447,6 +448,7 @@ def _long_side_geometry(
             structural_stop=structural,
             atr=atr,
             atr_k=k,
+            trading_mode=trading_mode,  # type: ignore[arg-type]
         )
 
     # --- T1 (primary target) ---
@@ -575,6 +577,7 @@ def _short_side_geometry(
             structural_stop=structural,
             atr=atr,
             atr_k=k,
+            trading_mode=trading_mode,  # type: ignore[arg-type]
         )
 
     # B78 (target geometry v3): structure-derived, ATR-bounded T1/T2 mirror for shorts.
@@ -891,35 +894,37 @@ def build_swing_composite_evidence_fields(
             else "T2 optional — elevated VIX; prefer T1 for R/R"
         )
 
+    mode = str(payload.get("mode") or "swing").strip().lower()
+    mode_for_env: str = "day" if mode == "day" else "swing"
+
     rr_from_structure: float | None = None
+    t1_rr_raw: float | None = None
     if (
         entry is not None
         and reference_stop_level is not None
         and reference_target_1 is not None
     ):
         if use_long:
-            rr_from_structure = structure_risk_reward_long(
-                entry,
-                reference_target_1,
-                reference_stop_level,
-                reference_target_2,
-                target_2_provenance,
-            )
+            t1_rr_raw = rr_from_levels_long(entry, reference_target_1, reference_stop_level)
         else:
-            rr_from_structure = structure_risk_reward_short(
-                entry,
-                reference_target_1,
-                reference_stop_level,
-                reference_target_2,
-                target_2_provenance,
-            )
+            t1_rr_raw = rr_from_levels_short(entry, reference_target_1, reference_stop_level)
+        rr_from_structure = structure_risk_reward_for_mode(
+            entry,
+            reference_target_1,
+            reference_stop_level,
+            reference_target_2,
+            target_2_provenance,
+            trading_mode=mode_for_env,
+            use_long=use_long,
+        )
 
-    mode = str(payload.get("mode") or "swing").strip().lower()
-    mode_for_env: str = "day" if mode == "day" else "swing"
     min_rr = min_risk_reward_from_environment(env_dict, mode=mode_for_env)  # type: ignore[arg-type]
 
     structure_risk_reward: float | None = (
         round_risk_reward_display(rr_from_structure) if rr_from_structure is not None else None
+    )
+    t1_risk_reward: float | None = (
+        round_risk_reward_display(t1_rr_raw) if t1_rr_raw is not None else None
     )
     # Never substitute layer-confidence synthetic R/R when stop/target geometry is degenerate —
     # that masked sub-1:1 setups (e.g. price at HOD with T1 = entry + 1.5×ATR).
@@ -1213,6 +1218,7 @@ def build_swing_composite_evidence_fields(
         "direction_confidence_reason": dir_conf.reason,
         "risk_reward": risk_reward,
         "structure_risk_reward": structure_risk_reward,
+        "t1_risk_reward": t1_risk_reward,
         "rr_warning": rr_warning,
         "rr_quality": rr_quality,
         "market_regime": market_regime,

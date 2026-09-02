@@ -33,6 +33,32 @@ def test_needs_perplexity_news_false_for_us_without_adr() -> None:
     assert needs_perplexity_news(_empty_news(), BenzingaMultiResult(), ticker_ref=None) is False
 
 
+def test_needs_perplexity_news_true_for_us_when_watchlist_thin() -> None:
+    assert (
+        needs_perplexity_news(
+            _empty_news(),
+            BenzingaMultiResult(),
+            ticker_ref=None,
+            watchlist_thin=True,
+        )
+        is True
+    )
+
+
+def test_needs_perplexity_news_true_for_us_when_on_demand() -> None:
+    from stocvest.api.services.swing_news_source import swing_news_source_bundle
+
+    assert (
+        needs_perplexity_news(
+            _empty_news(),
+            swing_news_source_bundle(),
+            ticker_ref=None,
+            on_demand=True,
+        )
+        is True
+    )
+
+
 def test_needs_perplexity_news_when_stale_and_empty_for_adr() -> None:
     ref = TickerReference(
         symbol="GGAL",

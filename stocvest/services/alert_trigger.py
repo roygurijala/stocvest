@@ -49,7 +49,7 @@ class AlertTriggerService:
         if not prefs.email_enabled:
             return
         sym_u = symbol.strip().upper()
-        if prefs.watchlist_only:
+        if prefs.watchlist_only and not ledger_qualified:
             wl = self.watchlist_store.get_default_watchlist(user_id)
             if wl and sym_u not in {s.upper() for s in wl.symbols}:
                 _LOG.debug("alert skipped: %s not on default watchlist for %s", sym_u, user_ref_for_logs(user_id))
@@ -250,8 +250,6 @@ class AlertTriggerService:
             return
         sym_u = symbol.strip().upper()
         mode_s = str(mode or "").strip().lower()
-        if prefs.watchlist_only and not on_watchlist and not desk_funnel:
-            return
         if self._in_quiet_hours(prefs):
             _LOG.debug("execution_actionable alert skipped: quiet hours user=%s", user_ref_for_logs(user_id))
             return

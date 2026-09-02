@@ -59,6 +59,23 @@ async def test_resolve_falls_back_to_perplexity_when_benzinga_empty() -> None:
 
 
 @pytest.mark.asyncio
+async def test_resolve_skips_perplexity_when_not_allowed() -> None:
+    with patch(
+        "stocvest.api.services.symbol_perplexity_enrichment.fetch_analyst_target_enrichment",
+        new_callable=AsyncMock,
+    ) as mock_fetch:
+        levels, source = await resolve_analyst_target_levels(
+            symbol="ABC",
+            ticker_ref=None,
+            ratings=[],
+            allow_perplexity=False,
+        )
+    assert levels == []
+    assert source == "none"
+    mock_fetch.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_resolve_none_when_both_empty() -> None:
     with patch(
         "stocvest.api.services.symbol_perplexity_enrichment.fetch_analyst_target_enrichment",

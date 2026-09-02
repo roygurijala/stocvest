@@ -169,7 +169,8 @@ function resolveStop(
       entry,
       structuralStop: anchor ?? structural,
       atr,
-      atrK: referenceStopAtrK({ preset, tradingMode: source.tradingMode ?? null })
+      atrK: referenceStopAtrK({ preset, tradingMode: source.tradingMode ?? null }),
+      tradingMode: source.tradingMode ?? null
     });
     if (merged.stop != null) return merged.stop;
     base = structural;
@@ -185,7 +186,7 @@ function resolveStop(
     }
   }
 
-  return applyMinStopDistance(direction, entry, round4(base), atr);
+  return applyMinStopDistance(direction, entry, round4(base), atr, source.tradingMode ?? null);
 }
 
 function resolveTarget(

@@ -8,11 +8,9 @@ and logged; the bundle is returned with whatever data arrived.
 
 Data sources:
   - Polygon  → snapshot (price, volume, VWAP), intraday bars (5-min, ~1 session)
-  - Polygon  → news articles with descriptions (last 24 h, up to 8)
-  - Benzinga → "why is it moving" entry (WIIM channel)
-  - Benzinga → analyst ratings (last 30 d)
-  - Benzinga → earnings results (last 2 periods)
-  - Benzinga → corporate guidance (last 30 d)
+  - Polygon  → news articles with descriptions (last 48 h, up to 8)
+  - Perplexity Sonar (optional) → supplementary news when Polygon coverage is thin
+  - Perplexity Sonar (optional) → analyst price targets for chart / forecast context
 """
 
 from __future__ import annotations
@@ -22,13 +20,18 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from stocvest.api.services.symbol_perplexity_enrichment import (
+    PerplexityAnalystTargetEnrichment,
+    PerplexityNewsEnrichment,
+    fetch_analyst_target_enrichment,
+    fetch_news_enrichment,
+)
 from stocvest.api.services.structure_engine import (
     nearest_resistance_above,
     nearest_support_below,
 )
 from stocvest.data.benzinga_client import (
     BenzingaArticle,
-    BenzingaClient,
     BenzingaEarningsResult,
     BenzingaGuidance,
     BenzingaRating,
@@ -51,12 +54,11 @@ _LOG = get_logger(__name__)
 # failure mode for live symbol answers.
 _FETCH_TIMEOUT_S = 7.0
 
-# Analyst-ratings look-back for the assistant. A 30-day window often returned
-# zero standing targets for actively-covered names (analysts don't re-rate every
-# month), which left forecast answers with no consensus and the chart with no
-# target range to draw. A wider window captures each firm's CURRENT standing
-# target while staying recent enough to be relevant.
-_ANALYST_RATINGS_LOOKBACK_DAYS = 120
+# Perplexity Sonar budget after Polygon completes (assistant is on-demand).
+_PERPLEXITY_TIMEOUT_S = 3.0
+
+# Polygon news below this count triggers optional Perplexity supplementary fetch.
+_THIN_NEWS_ARTICLE_THRESHOLD = 2
 
 
 @dataclass
@@ -66,13 +68,16 @@ class AssistantSymbolContext:
     symbol: str
     snapshot: Snapshot | None = None
     news: list[NewsArticle] = field(default_factory=list)
-    # Broader, channel-tagged Benzinga newsfeed (M&A, policy, sector, general) —
-    # complements the structured WIIM/ratings/earnings/guidance sections.
+    # Legacy Benzinga-shaped fields — retained for backward-compatible serialization
+    # when tests or cached payloads populate them manually; no longer fetched here.
     benzinga_news: list[BenzingaArticle] = field(default_factory=list)
-    wim: BenzingaWIMEntry | None = None          # "why is it moving" Benzinga entry
+    wim: BenzingaWIMEntry | None = None
     analyst_ratings: list[BenzingaRating] = field(default_factory=list)
     earnings: list[BenzingaEarningsResult] = field(default_factory=list)
     guidance: list[BenzingaGuidance] = field(default_factory=list)
+    # Optional Perplexity Sonar supplements (ADR-001 DBZ-6).
+    perplexity_news: PerplexityNewsEnrichment | None = None
+    perplexity_analyst_targets: PerplexityAnalystTargetEnrichment | None = None
     bars_5m: list[Bar] = field(default_factory=list)
     # Recent daily bars (~3 months) for SMA50 / support / resistance levels.
     bars_1d: list[Bar] = field(default_factory=list)
@@ -96,6 +101,7 @@ class AssistantSymbolContext:
             or bool(self.benzinga_news)
             or bool(self.bars_5m)
             or bool(self.bars_1d)
+            or self.perplexity_news is not None
         )
 
 
@@ -148,79 +154,73 @@ async def fetch_assistant_symbol_context(symbol: str) -> AssistantSymbolContext 
 
         await asyncio.gather(_snapshot(), _news(), _bars(), _daily_bars())
 
-    async def _benzinga() -> None:
-        try:
-            bz = BenzingaClient()
-            wim, ratings, earnings, guidance, news = await asyncio.gather(
-                _safe(bz.get_why_is_it_moving(sym)),
-                _safe(bz.get_analyst_ratings(sym, days=_ANALYST_RATINGS_LOOKBACK_DAYS)),
-                _safe(bz.get_earnings_results(sym, periods=2)),
-                _safe(bz.get_corporate_guidance(sym, days=30)),
-                # Broader channel-tagged newsfeed (last 48h) for general/M&A/policy
-                # coverage beyond the structured catalyst sections.
-                _safe(bz.get_news(sym, hours=48, limit=20)),
-                return_exceptions=False,
-            )
-            ctx.wim = wim
-            # The wider look-back can surface the same firm multiple times (it
-            # re-rated within the window). Keep each firm's MOST RECENT standing
-            # rating so the consensus average/range and the chart's target lines
-            # aren't double-counted toward firms that simply re-rated more often.
-            # Benzinga returns newest-first, so the first row seen per firm wins.
-            deduped: list[BenzingaRating] = []
-            seen_firms: set[str] = set()
-            for r in (ratings or []):
-                firm = (getattr(r, "analyst_firm", "") or "").strip().lower()
-                if firm and firm in seen_firms:
-                    continue
-                if firm:
-                    seen_firms.add(firm)
-                deduped.append(r)
-            ctx.analyst_ratings = deduped
-            ctx.earnings = earnings or []
-            ctx.guidance = guidance or []
-            ctx.benzinga_news = news if isinstance(news, list) else []
-        except Exception as exc:  # noqa: BLE001
-            _LOG.warning("assistant_ctx.benzinga failed %s: %s", sym, exc)
+    async def _perplexity() -> None:
+        settings = get_settings()
+        if not (settings.perplexity_api_key or "").strip():
+            return
+
+        thin_news = len(ctx.news) < _THIN_NEWS_ARTICLE_THRESHOLD
+        last_px: float | None = None
+        if ctx.snapshot is not None:
+            if ctx.snapshot.last_trade_price is not None:
+                last_px = float(ctx.snapshot.last_trade_price)
+            elif ctx.snapshot.day_close is not None:
+                last_px = float(ctx.snapshot.day_close)
+
+        async def _news_enrich() -> None:
+            if not thin_news:
+                return
+            try:
+                ctx.perplexity_news = await fetch_news_enrichment(sym, None)
+            except Exception as exc:  # noqa: BLE001
+                _LOG.warning("assistant_ctx.perplexity_news failed %s: %s", sym, exc)
+
+        async def _analyst_enrich() -> None:
+            try:
+                ctx.perplexity_analyst_targets = await fetch_analyst_target_enrichment(
+                    sym,
+                    None,
+                    current_price=last_px,
+                )
+            except Exception as exc:  # noqa: BLE001
+                _LOG.warning("assistant_ctx.perplexity_analyst failed %s: %s", sym, exc)
+
+        await asyncio.gather(_news_enrich(), _analyst_enrich())
 
     try:
         # PolygonClient requires the API key explicitly — constructing it bare
         # raised a TypeError that left the assistant with no live data.
         async with PolygonClient(api_key=get_settings().polygon_api_key) as poly:
-            await asyncio.wait_for(
-                asyncio.gather(_polygon(poly), _benzinga()),
-                timeout=_FETCH_TIMEOUT_S,
-            )
+            await asyncio.wait_for(_polygon(poly), timeout=_FETCH_TIMEOUT_S)
     except asyncio.TimeoutError:
-        _LOG.warning("assistant_ctx fetch timed out for %s (partial data returned)", sym)
+        _LOG.warning("assistant_ctx polygon fetch timed out for %s (partial data returned)", sym)
     except Exception as exc:  # noqa: BLE001
-        _LOG.warning("assistant_ctx gather error %s: %s", sym, exc)
+        _LOG.warning("assistant_ctx polygon gather error %s: %s", sym, exc)
 
-    # Promote articles that are actually ABOUT this ticker above sector roundups
-    # and off-ticker pieces (e.g. a "C3 AI earnings" story tagged with AVGO).
-    # Stable sort preserves the newest-first order within each relevance tier.
     if ctx.news:
-        ctx.news = sorted(ctx.news, key=lambda a: news_relevance_rank(sym, getattr(a, "tickers", None), getattr(a, "title", None)))
+        ctx.news = sorted(
+            ctx.news,
+            key=lambda a: news_relevance_rank(sym, getattr(a, "tickers", None), getattr(a, "title", None)),
+        )
+
+    try:
+        await asyncio.wait_for(_perplexity(), timeout=_PERPLEXITY_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        _LOG.warning("assistant_ctx perplexity timed out for %s (partial data returned)", sym)
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("assistant_ctx perplexity error %s: %s", sym, exc)
 
     if not ctx.has_data:
         _LOG.warning(
-            "assistant_ctx: NO live data for %s (snapshot=%s news=%d benzinga_news=%d) — "
+            "assistant_ctx: NO live data for %s (snapshot=%s news=%d perplexity=%s) — "
             "assistant will fall back to generic answer",
             sym,
             ctx.snapshot is not None,
             len(ctx.news),
-            len(ctx.benzinga_news),
+            ctx.perplexity_news is not None,
         )
 
     return ctx
-
-
-async def _safe(coro):
-    """Run *coro* and return its result, or None on any exception."""
-    try:
-        return await coro
-    except Exception:  # noqa: BLE001
-        return None
 
 
 def news_relevance_rank(symbol: str, tickers: object, title: object) -> int:
@@ -633,6 +633,14 @@ def _compute_chart_levels(ctx: AssistantSymbolContext, last: float | None) -> li
         for r in (ctx.analyst_ratings or [])
         if getattr(r, "price_target", None) is not None and float(r.price_target) > 0
     ]
+    if not targets:
+        px = getattr(ctx, "perplexity_analyst_targets", None)
+        if px is not None:
+            targets = [
+                float(pt)
+                for pt in (getattr(px, "price_targets", None) or [])
+                if pt is not None and float(pt) > 0
+            ]
     if targets:
         avg_t = sum(targets) / len(targets)
         _add("Analyst target", "target", avg_t)

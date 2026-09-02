@@ -42,6 +42,39 @@ def test_geometry_tradeable_false_for_no_clean_entry() -> None:
     assert reason == "no_clean_entry"
 
 
+def test_geometry_tradeable_false_when_swing_stop_too_tight() -> None:
+    body = {
+        "status": "active",
+        "signal_summary": "bullish",
+        "last_trade_price": 7.78,
+        "reference_stop_level": 7.59,
+        "reference_target_1": 8.10,
+        "reference_stop_distance_atr": 0.95,
+        "min_rr_desk": 2.0,
+    }
+    ok, reason = geometry_tradeability(body, mode="swing")
+    assert ok is False
+    assert reason == "stop_too_tight_for_swing"
+
+
+def test_geometry_tradeable_swing_uses_t1_rr_not_t2_promotion() -> None:
+    body = {
+        "status": "active",
+        "signal_summary": "bullish",
+        "last_trade_price": 7.78,
+        "reference_stop_level": 7.10,
+        "reference_target_1": 7.95,
+        "reference_target_2": 9.50,
+        "reference_target_2_provenance": "resistance",
+        "reference_stop_distance_atr": 3.4,
+        "min_rr_desk": 2.0,
+    }
+    assert structure_rr_from_body(body, mode="swing") is None
+    ok, reason = geometry_tradeability(body, mode="swing")
+    assert ok is False
+    assert reason == "geometry_insufficient"
+
+
 def test_filter_setups_bundle_drops_ineligible_rows() -> None:
     bundle = {
         "qualifying": [

@@ -148,8 +148,31 @@ def test_html_execution_actionable_shows_strength_setup_and_zone() -> None:
     assert "Volume Expansion" in html_out
     assert "$42.10" in html_out
     assert "$43.50" in html_out
-    assert "Risk / reward" in html_out
+    assert "T1 risk / reward" in html_out
     assert "Layer alignment" in html_out
+
+
+def test_html_execution_actionable_shows_stop_distance_and_t1_rr() -> None:
+    es = EmailService()
+    html_out = es._build_html_body(
+        AlertType.EXECUTION_ACTIONABLE,
+        {
+            "symbol": "UPWK",
+            "mode": "swing",
+            "direction": "long",
+            "strength": 72,
+            "stop": 7.31,
+            "price": 7.78,
+            "reference_stop_distance_atr": 2.35,
+            "reference_stop_distance_pct": 6.0,
+            "risk_reward": 0.4,
+            "min_rr": 2.0,
+        },
+    )
+    assert "Stop distance" in html_out
+    assert "2.35×ATR" in html_out
+    assert "6.0%" in html_out
+    assert "T1 risk / reward" in html_out
 
 
 def test_html_execution_actionable_shows_stop_and_take_profit() -> None:

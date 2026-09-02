@@ -14,6 +14,14 @@ ATR_K_BY_PRESET: dict[str, float] = {
     "breakout": 1.25,
 }
 
+# Swing holds need room for multi-day noise — day-style floors were stopping out on routine volatility.
+SWING_STOP_ATR_K = 2.0
+SWING_MIN_STOP_ATR_MULT = 1.5
+SWING_MIN_STOP_PCT = 0.06
+
+# Desk / email gate: headline stop must be at least this many ATR from entry (swing only).
+MIN_SWING_STOP_DISTANCE_ATR = 1.5
+
 
 def _round4(n: float) -> float:
     return round(n, 4)
@@ -28,7 +36,7 @@ def reference_stop_atr_k(
         return ATR_K_BY_PRESET[preset]
     if trading_mode == "day":
         return 0.85
-    return 1.0
+    return SWING_STOP_ATR_K
 
 
 def resolve_structural_stop_anchor(
@@ -91,9 +99,18 @@ def resolve_structural_stop_anchor(
     return None
 
 
-def _min_stop_distance_usd(entry: float, atr: float | None) -> float:
+def _min_stop_distance_usd(
+    entry: float,
+    atr: float | None,
+    *,
+    trading_mode: TradingMode | None = None,
+) -> float:
     if entry <= 0:
         return 0.1
+    if trading_mode == "swing":
+        atr_floor = atr * SWING_MIN_STOP_ATR_MULT if atr is not None and atr > 0 else 0.0
+        pct_floor = entry * SWING_MIN_STOP_PCT
+        return max(atr_floor, pct_floor, 0.1)
     atr_floor = atr * 0.5 if atr is not None and atr > 0 else 0.0
     if entry >= 200:
         price_floor = 1.25
@@ -111,8 +128,10 @@ def _apply_min_stop_distance(
     entry: float,
     stop: float,
     atr: float | None,
+    *,
+    trading_mode: TradingMode | None = None,
 ) -> float:
-    min_dist = _min_stop_distance_usd(entry, atr)
+    min_dist = _min_stop_distance_usd(entry, atr, trading_mode=trading_mode)
     if direction == "bullish":
         if stop >= entry:
             return _round4(entry - min_dist)
@@ -133,6 +152,7 @@ def resolve_merged_reference_stop(
     structural_stop: float | None,
     atr: float | None,
     atr_k: float,
+    trading_mode: TradingMode | None = None,
 ) -> tuple[float | None, bool]:
     """Returns (stop, used_atr_floor)."""
     structural = (
@@ -167,7 +187,7 @@ def resolve_merged_reference_stop(
     if merged is None:
         return None, False
 
-    return _apply_min_stop_distance(direction, entry, merged, atr), used_atr_floor
+    return _apply_min_stop_distance(direction, entry, merged, atr, trading_mode=trading_mode), used_atr_floor
 
 
 def format_merged_stop_provenance(base_label: str, *, atr_k: float, used_atr_floor: bool) -> str:

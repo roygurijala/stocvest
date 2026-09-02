@@ -1,4 +1,4 @@
-"""ECS Fargate news worker: Benzinga websocket + SEC EDGAR 8-K → triage → SQS."""
+"""ECS Fargate news worker: SEC EDGAR 8-K (+ optional Benzinga websocket) → triage → SQS."""
 
 from __future__ import annotations
 
@@ -34,6 +34,22 @@ class NewsWorker:
         self._cw: Any = None
         self._queue_url = self._settings.stocvest_news_triage_queue_url.strip()
         self._edgar = EdgarClient()
+
+    def benzinga_ws_enabled(self) -> bool:
+        return bool(self._settings.stocvest_news_worker_benzinga_ws_enabled)
+
+    def build_worker_tasks(self) -> list[asyncio.Task[None]]:
+        """Spawn ingestion loops. Benzinga WS is omitted when ADR-001 flag is off."""
+        tasks: list[asyncio.Task[None]] = []
+        if self.benzinga_ws_enabled():
+            tasks.append(asyncio.create_task(self._run_benzinga_stream()))
+        else:
+            log.info(
+                "Benzinga WebSocket disabled (STOCVEST_NEWS_WORKER_BENZINGA_WS_ENABLED=0); EDGAR-only ingestion"
+            )
+        tasks.append(asyncio.create_task(self._run_edgar_poller()))
+        tasks.append(asyncio.create_task(self._run_health_reporter()))
+        return tasks
 
     def _get_sqs(self) -> Any:
         if self._sqs is None:
@@ -163,9 +179,9 @@ class NewsWorker:
 
     async def start(self) -> None:
         log.info(
-            "NewsWorker starting queue=%s ws=%s",
+            "NewsWorker starting queue=%s benzinga_ws=%s",
             self._queue_url or "(missing)",
-            self._settings.benzinga_news_ws_url,
+            self.benzinga_ws_enabled(),
         )
 
         def _shutdown() -> None:
@@ -183,11 +199,7 @@ class NewsWorker:
             except ValueError:
                 pass
 
-        tasks = [
-            asyncio.create_task(self._run_benzinga_stream()),
-            asyncio.create_task(self._run_edgar_poller()),
-            asyncio.create_task(self._run_health_reporter()),
-        ]
+        tasks = self.build_worker_tasks()
         try:
             await asyncio.gather(*tasks)
         finally:

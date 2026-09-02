@@ -1,10 +1,14 @@
-"""Tests for the Benzinga 'broader coverage' section in serialize_symbol_context."""
+"""Tests for Perplexity supplementary + legacy Benzinga serialization in assistant_chat."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
 from stocvest.api.services.assistant_symbol_context import AssistantSymbolContext
+from stocvest.api.services.symbol_perplexity_enrichment import (
+    PerplexityAnalystTargetEnrichment,
+    PerplexityNewsEnrichment,
+)
 from stocvest.data.benzinga_client import BenzingaArticle
 from stocvest.data.models import Bar, NewsArticle, Timeframe
 from stocvest.data.benzinga_client import BenzingaRating
@@ -12,6 +16,7 @@ from stocvest.signals.assistant_chat import (
     _analyst_consensus_lines,
     _benzinga_channel_category,
     _classify_rating,
+    _perplexity_analyst_consensus_lines,
     _stocvest_read_lines,
     serialize_symbol_context,
 )
@@ -49,6 +54,50 @@ def test_channel_category_maps_known_channels() -> None:
     assert _benzinga_channel_category(["Dividends"]) == "capital"
     assert _benzinga_channel_category(["Some Random Channel"]) == "general"
     assert _benzinga_channel_category([]) == "general"
+
+
+def test_perplexity_supplementary_section_rendered() -> None:
+    ctx = AssistantSymbolContext(
+        symbol="NVDA",
+        perplexity_news=PerplexityNewsEnrichment(
+            symbol="NVDA",
+            summary="Demand remains strong across data-center GPUs.",
+            sentiment="bullish",
+            catalysts=["Hyperscaler capex"],
+            headwinds=["Export controls"],
+        ),
+    )
+    block = serialize_symbol_context(ctx)
+    assert "SUPPLEMENTARY RESEARCH" in block
+    assert "Demand remains strong" in block
+    assert "Hyperscaler capex" in block
+    assert "Export controls" in block
+
+
+def test_perplexity_analyst_consensus_in_symbol_context() -> None:
+    ctx = AssistantSymbolContext(
+        symbol="AVGO",
+        snapshot=Snapshot(symbol="AVGO", last_trade_price=218.0),
+        perplexity_analyst_targets=PerplexityAnalystTargetEnrichment(
+            symbol="AVGO",
+            price_targets=[260.0, 290.0],
+            summary="Recent upgrades from two banks.",
+        ),
+    )
+    block = serialize_symbol_context(ctx)
+    assert "ANALYST CONSENSUS (Perplexity Sonar" in block
+    assert "price_target_avg=$275.00" in block
+
+
+def test_perplexity_analyst_consensus_helper() -> None:
+    enrich = PerplexityAnalystTargetEnrichment(
+        symbol="AVGO",
+        price_targets=[200.0, 220.0],
+        summary="Two firms updated targets.",
+    )
+    block = "\n".join(_perplexity_analyst_consensus_lines(enrich, last_price=210.0))
+    assert "price_target_avg=$210.00" in block
+    assert "implied_vs_current=+0.0%" in block
 
 
 def test_broader_coverage_section_rendered() -> None:

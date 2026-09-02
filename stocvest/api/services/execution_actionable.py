@@ -332,7 +332,13 @@ def scenario_payload_from_body(body: dict[str, Any], *, mode: Mode, symbol: str)
     price = price_from_body(body)
     direction = str(body.get("signal_summary") or body.get("verdict") or "neutral").strip().lower()
     rr = body.get("risk_reward")
+    t1_rr = body.get("t1_risk_reward")
     min_rr = body.get("min_rr_desk")
+    stop = _float_or_none(body.get("reference_stop_level"))
+    stop_atr = _float_or_none(body.get("reference_stop_distance_atr"))
+    stop_pct: float | None = None
+    if price is not None and stop is not None and price > 0:
+        stop_pct = round(abs(price - stop) / price * 100.0, 2)
     if min_rr is None:
         min_rr = min_risk_reward_from_environment(
             body.get("market_environment") if isinstance(body.get("market_environment"), dict) else None,
@@ -348,10 +354,13 @@ def scenario_payload_from_body(body: dict[str, Any], *, mode: Mode, symbol: str)
         "price": price,
         "entry_zone_low": zone[0] if zone else None,
         "entry_zone_high": zone[1] if zone else None,
-        "stop": _float_or_none(body.get("reference_stop_level")),
+        "stop": stop,
         "target_1": _float_or_none(body.get("reference_target_1")),
         "target_2": _float_or_none(body.get("reference_target_2")),
         "risk_reward": float(rr) if isinstance(rr, (int, float)) else None,
+        "t1_risk_reward": float(t1_rr) if isinstance(t1_rr, (int, float)) else None,
+        "reference_stop_distance_atr": stop_atr,
+        "reference_stop_distance_pct": stop_pct,
         "min_rr": float(min_rr) if min_rr is not None else None,
         "environment_tier": str(env.get("environment_tier") or "normal"),
         "alignment_ratio": body.get("alignment_ratio"),

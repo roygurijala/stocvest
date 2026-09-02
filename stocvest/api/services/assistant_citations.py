@@ -2,9 +2,10 @@
 Source-citation builder for the STOCVEST Assistant.
 
 When the assistant answers a live-symbol question ("why is X moving?"), it has
-already fetched recent news + Benzinga coverage. We surface those underlying
-sources to the user as numbered citation chips so the synthesis is verifiable —
-the same transparency Aime provides with its [1][2] references.
+already fetched recent Polygon news (and optional Perplexity supplements). We
+surface those underlying sources to the user as numbered citation chips so the
+synthesis is verifiable — the same transparency Aime provides with its [1][2]
+references.
 
 Deliberately read-only and defensive: any malformed item is skipped, and we only
 emit items that carry a real http(s) URL the user can open.
@@ -72,7 +73,7 @@ def build_citations(ctx: "AssistantSymbolContext | None") -> list[dict] | None:
             )
         )
 
-    # Benzinga channel-tagged coverage is fetched per-symbol, so it's on-target.
+    # Legacy Benzinga channel-tagged coverage (manual/test payloads only).
     for art in getattr(ctx, "benzinga_news", []) or []:
         _add(
             title=getattr(art, "title", None),
@@ -81,6 +82,27 @@ def build_citations(ctx: "AssistantSymbolContext | None") -> list[dict] | None:
             published=getattr(art, "published_at", None),
             relevance=0,
         )
+    px_news = getattr(ctx, "perplexity_news", None)
+    if px_news is not None:
+        for cite in getattr(px_news, "citations", []) or []:
+            text = str(cite or "").strip()
+            if not text:
+                continue
+            url = text if _is_http_url(text) else None
+            if url is None and "http" in text:
+                # "Publisher — https://..." form from Perplexity JSON.
+                for part in text.replace("—", "-").split("-"):
+                    part = part.strip()
+                    if _is_http_url(part):
+                        url = part
+                        break
+            _add(
+                title=text.split("http", 1)[0].strip(" -—") or text[:80],
+                url=url,
+                source="Perplexity",
+                published=None,
+                relevance=1,
+            )
     for art in getattr(ctx, "news", []) or []:
         _add(
             title=getattr(art, "title", None),

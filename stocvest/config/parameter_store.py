@@ -55,10 +55,10 @@ def _coerce_dataclass(cls: type[T], raw: Any) -> T:
 def _parse_optional_composite_block(raw: Any) -> CompositeParameters | None:
     """Parse a per-mode composite override block from Secrets Manager JSON.
 
-    Returns ``None`` when the key is absent or explicitly ``null`` so back-compat
-    secrets (which never declare ``swing_composite`` / ``day_composite``) keep
-    falling back to the shared ``composite`` block — see
-    :func:`stocvest.signals.composite_score.resolve_composite_block`.
+    Returns ``None`` when the key is absent or explicitly ``null``. Swing mode
+    still picks up :func:`default_swing_composite_parameters` via
+    :func:`stocvest.signals.composite_score.resolve_composite_block` when unset.
+    Day mode falls back to the shared ``composite`` block.
 
     Returns a :class:`CompositeParameters` when a dict is provided; unknown keys
     in the dict are ignored (same contract as :func:`_coerce_dataclass`).

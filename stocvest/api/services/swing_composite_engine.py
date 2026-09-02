@@ -16,14 +16,16 @@ from stocvest.api.services.layer_verdict_bands import layer_verdict_band
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
 from stocvest.api.services.morning_brief_fetch import get_vix_snapshot_with_fallback
 from stocvest.api.services.real_composite_engine import (
-    _benzinga_articles_to_rows,
     _build_catalyst_headlines,
     _market_open_now,
-    _merge_benzinga_first_news_rows,
     _regime_for_engine,
     _safe_result,
     _score_to_layer_signal,
     _snapshot_mark_price,
+)
+from stocvest.api.services.swing_news_source import (
+    SWING_NEWS_SOURCE_POLYGON_PRIMARY,
+    swing_news_source_bundle,
 )
 from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.api.services.signal_snapshot_builders import build_real_composite_snapshot_payload
@@ -56,6 +58,10 @@ from stocvest.api.services.benzinga_feed_health import (
     composite_layers_meta,
     layer_available_for_composite,
 )
+from stocvest.api.services.composite_perplexity_gate import (
+    SwingPerplexityMode,
+    resolve_swing_perplexity_invocation,
+)
 from stocvest.api.services.symbol_perplexity_enrichment import (
     maybe_apply_perplexity_layers,
     perplexity_risk_factor_lines,
@@ -63,7 +69,6 @@ from stocvest.api.services.symbol_perplexity_enrichment import (
 )
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
-from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult, benzinga_multi_shell, ensure_analyst_feed
 from stocvest.api.services.user_profile_store import get_user_profile_store
 from stocvest.data.earnings_calendar import merge_earnings_horizon_into_response, resolve_upcoming_earnings_horizon
 from stocvest.signals.fundamental_context import build_fundamental_context
@@ -150,6 +155,7 @@ async def build_swing_composite_response(
     user_email: str | None,
     params: SignalParameters,
     ledger_capture: bool = False,
+    perplexity_mode: SwingPerplexityMode = "off",
 ) -> dict[str, Any]:
     # Polygon's REST endpoints reject the dash form of class-share tickers
     # (BRK-B → 404), so canonicalise once at engine entry. Without this
@@ -159,7 +165,6 @@ async def build_swing_composite_response(
     sym = to_polygon_symbol(symbol)
     settings = get_settings()
     sector_cache = DynamoSectorCache(settings.dynamodb_sector_cache_table)
-    benzinga = BenzingaClient()
     # Swing news window: five-session headline context (not intraday 8h).
     news_since = datetime.now(timezone.utc) - timedelta(hours=float(SWING_NEWS_LOOKBACK_HOURS))
     econ_end = date.today() + timedelta(days=max(0, int(params.swing_macro_events_days) - 1))
@@ -169,7 +174,7 @@ async def build_swing_composite_response(
     earnings_horizon = None
 
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
-        daily_r, sym_r, news_r, spy_r, qqq_r, vix_r, econ_r, bz_r, ref_r = await asyncio.gather(
+        daily_r, sym_r, news_r, spy_r, qqq_r, vix_r, econ_r, ref_r = await asyncio.gather(
             client.get_bars(sym, Timeframe.DAY_1, limit=params.swing_technical.daily_bars_lookback),
             client.get_snapshot(sym),
             client.get_market_news(tickers=[sym], limit=50, published_utc_gte=news_since),
@@ -177,7 +182,6 @@ async def build_swing_composite_response(
             client.get_snapshot("QQQ"),
             get_vix_snapshot_with_fallback(client),
             client.get_economic_calendar_range(date.today(), econ_end),
-            benzinga.get_multi(sym, mode="swing"),
             get_ticker_reference(client, sym),
             return_exceptions=True,
         )
@@ -185,9 +189,8 @@ async def build_swing_composite_response(
         daily_bars: list[Bar] = _safe_result(daily_r, [])
         sym_snap: Snapshot | None = _safe_result(sym_r, None)
         news_polygon: list[dict[str, Any]] = _safe_result(news_r, [])
-        bz_data: BenzingaMultiResult = _safe_result(bz_r, benzinga_multi_shell())
-        bz_data = await ensure_analyst_feed(benzinga, sym, bz_data)
-        news_rows = _merge_benzinga_first_news_rows(news_polygon, _benzinga_articles_to_rows(bz_data.news))
+        bz_data = swing_news_source_bundle()
+        news_rows = list(news_polygon)
         enrich_rows_with_cached_sentiment(news_rows)
         enrich_rows_with_cached_impact(news_rows)
         await prime_missing_news_sentiment(news_rows)
@@ -308,6 +311,12 @@ async def build_swing_composite_response(
         events_lookback_days=params.swing_macro_events_days,
         macro_context=macro_ctx,
     )
+    perplexity_invocation = resolve_swing_perplexity_invocation(
+        perplexity_mode,
+        user_id=user_id,
+        symbol=sym,
+        news=news,
+    )
     news, macro, perplexity_news, perplexity_macro = await maybe_apply_perplexity_layers(
         symbol=sym,
         ticker_ref=ticker_ref,
@@ -317,6 +326,10 @@ async def build_swing_composite_response(
         economic_event_count=len(econ) if isinstance(econ, list) else 0,
         news_bullish_threshold=params.news.bullish_threshold,
         news_bearish_threshold=params.news.bearish_threshold,
+        enabled=perplexity_invocation.apply_layers,
+        news_only=perplexity_invocation.news_only,
+        watchlist_thin=perplexity_invocation.watchlist_thin,
+        on_demand=perplexity_invocation.on_demand,
     )
     perplexity_headwinds = perplexity_risk_factor_lines(perplexity_news)
     if perplexity_macro is not None:
@@ -557,7 +570,7 @@ async def build_swing_composite_response(
         "sector_technical_calibration": sector_technical_calibration_payload(sic_bucket_for_geo),
     }
     response_body.update(composite_layers_meta(layer_results, layer_ids))
-    response_body["benzinga_feed_health"] = bz_data.feed_health.as_dict()
+    response_body["news_source"] = SWING_NEWS_SOURCE_POLYGON_PRIMARY
     if damp_meta:
         response_body["market_context_dampening"] = damp_meta
     response_body["alignment"] = alignment_to_response_dict(alignment)
@@ -698,6 +711,7 @@ async def build_swing_composite_response(
         ticker_ref=ticker_ref,
         ratings=list(getattr(bz_data, "ratings", None) or []),
         current_price=last_px if last_px > 0 else None,
+        allow_perplexity=perplexity_invocation.allow_analyst_perplexity,
     )
     payload_stub: dict[str, Any] = {
         "symbol": sym,
@@ -1023,6 +1037,7 @@ def swing_composite_body_sync(
     user_email: str | None = None,
     params: SignalParameters | None = None,
     ledger_capture: bool = False,
+    perplexity_mode: SwingPerplexityMode = "off",
 ) -> dict[str, Any]:
     p = params or ParameterStore.get_parameters_sync()
     return asyncio.run(
@@ -1032,5 +1047,6 @@ def swing_composite_body_sync(
             user_email=user_email,
             params=p,
             ledger_capture=ledger_capture,
+            perplexity_mode=perplexity_mode,
         )
     )
