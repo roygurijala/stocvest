@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { BarChart3, CalendarClock, Compass, Eye, LineChart, Newspaper, Target } from "lucide-react";
 import { useTheme } from "@/lib/theme-provider";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
@@ -18,7 +18,13 @@ import {
   type BriefSessionPhase
 } from "@/lib/dashboard/trading-room/brief-session-copy";
 import type { WatchlistAtCloseItem } from "@/lib/hooks/use-watchlist-at-close";
-import type { FeedCard, FeedState } from "@/lib/dashboard/trading-room/feed-model";
+import type { FeedCard, FeedLane } from "@/lib/dashboard/trading-room/feed-model";
+import {
+  buildSectorDeskRows,
+  feedStateLabel,
+  sectorMomentumTradingNote,
+  type SectorDeskRow
+} from "@/lib/dashboard/trading-room/market-brief-navigation";
 import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
@@ -40,6 +46,8 @@ export interface BriefHeadline {
 }
 
 export interface BriefSector {
+  /** Sector ETF symbol, e.g. XLF. */
+  symbol: string;
   label: string;
   /** Primary value shown (1-day when the tape is shut, 5-day average while open). */
   pct: number;
@@ -53,6 +61,7 @@ export interface BriefMover {
   symbol: string;
   company: string | null;
   changePct: number;
+  lane: FeedLane;
 }
 
 export interface BriefWeekEvent {
@@ -142,7 +151,10 @@ interface MarketBriefProps {
   swingDesk?: DeskTodayData | null;
   swingSetups?: readonly IntradaySetupPayload[];
   nearQualification?: readonly ScannerNearQualificationRow[];
-  onSelectSwingSymbol?: (symbol: string) => void;
+  /** Opens in-panel Deep Dive for a symbol (movers, watchlist, sector names, swing table). */
+  onSelectSymbol?: (symbol: string, company?: string | null, lane?: FeedLane) => void;
+  /** Tracked feed cards — used to populate sector desk lists. */
+  trackedCards?: readonly FeedCard[];
 }
 
 function greeting(): string {
@@ -192,9 +204,11 @@ export function MarketBrief({
   swingDesk = null,
   swingSetups = [],
   nearQualification = [],
-  onSelectSwingSymbol
+  onSelectSymbol,
+  trackedCards = []
 }: MarketBriefProps) {
   const { theme, colors } = useTheme();
+  const [selectedSectorEtf, setSelectedSectorEtf] = useState<string | null>(null);
   const updated = relativeFrom(data.updatedAtIso);
   const top = data.topCard;
   const topActionable = data.counts.actionable > 0;
@@ -342,9 +356,9 @@ export function MarketBrief({
           </span>
         ) : null}
         <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], marginTop: spacing[1] }}>
-          <IndexChip label="SPY" pct={data.spyPct} colors={colors} />
-          <IndexChip label="QQQ" pct={data.qqqPct} colors={colors} />
-          <IndexChip label="IWM" pct={data.iwmPct} colors={colors} />
+          <IndexChip label="SPY" pct={data.spyPct} colors={colors} onSelect={onSelectSymbol ? () => onSelectSymbol("SPY", null, "swing") : undefined} />
+          <IndexChip label="QQQ" pct={data.qqqPct} colors={colors} onSelect={onSelectSymbol ? () => onSelectSymbol("QQQ", null, "swing") : undefined} />
+          <IndexChip label="IWM" pct={data.iwmPct} colors={colors} onSelect={onSelectSymbol ? () => onSelectSymbol("IWM", null, "swing") : undefined} />
           <VixChip level={data.vixLevel} pct={data.vixPct} colors={colors} />
         </div>
         {data.breadthLine ? (
@@ -352,7 +366,7 @@ export function MarketBrief({
         ) : null}
       </div>
 
-      {onSelectSwingSymbol
+      {onSelectSymbol
         ? tile(
             <Target size={15} />,
             "Swing setups from market scan",
@@ -361,7 +375,7 @@ export function MarketBrief({
               swingDesk={swingDesk}
               swingSetups={swingSetups}
               nearQualification={nearQualification}
-              onSelectSymbol={onSelectSwingSymbol}
+              onSelectSymbol={(sym) => onSelectSymbol(sym, null, "swing")}
               colors={colors}
               embedded
             />,
@@ -381,9 +395,16 @@ export function MarketBrief({
               <div style={{ display: "flex", flexDirection: "column", gap: spacing[3] }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
                   <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2] }}>
-                    <span style={{ fontSize: typography.scale.lg, fontWeight: 700 }}>
-                      {data.topSwingCard.symbol}
-                    </span>
+                    {onSelectSymbol ? (
+                      <BriefSymbolButton
+                        symbol={data.topSwingCard.symbol}
+                        onClick={() => onSelectSymbol(data.topSwingCard!.symbol, data.topSwingCard!.company, "swing")}
+                        colors={colors}
+                        style={{ fontSize: typography.scale.lg, fontWeight: 700 }}
+                      />
+                    ) : (
+                      <span style={{ fontSize: typography.scale.lg, fontWeight: 700 }}>{data.topSwingCard.symbol}</span>
+                    )}
                     <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
                       {data.topSwingCard.price != null ? `$${data.topSwingCard.price.toFixed(2)}` : ""}
                     </span>
@@ -463,13 +484,31 @@ export function MarketBrief({
               colors.accent,
               <>
                 <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, opacity: 0.85, marginTop: -2 }}>
-                  Each chip shows both the 1-day move and the 5-day average.
+                  Tap a sector for desk names and a trading read. Each chip shows 1-day and 5-day moves.
                 </span>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
                   {data.sectors.map((s) => (
-                    <SectorChip key={s.label} sector={s} colors={colors} />
+                    <SectorChip
+                      key={s.symbol}
+                      sector={s}
+                      colors={colors}
+                      selected={selectedSectorEtf === s.symbol}
+                      interactive={Boolean(onSelectSymbol)}
+                      onClick={() => {
+                        if (!onSelectSymbol) return;
+                        setSelectedSectorEtf((prev) => (prev === s.symbol ? null : s.symbol));
+                      }}
+                    />
                   ))}
                 </div>
+                {selectedSectorEtf && onSelectSymbol ? (
+                  <SectorDeskPanel
+                    sector={data.sectors.find((s) => s.symbol === selectedSectorEtf) ?? null}
+                    rows={buildSectorDeskRows(trackedCards, selectedSectorEtf)}
+                    colors={colors}
+                    onSelectSymbol={onSelectSymbol}
+                  />
+                ) : null}
               </>
             )
           : null}
@@ -480,8 +519,20 @@ export function MarketBrief({
               "Notable movers on the desk",
               colors.bullish,
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: spacing[3] }}>
-                <MoverColumn title="Leading" movers={data.movers.up} positive colors={colors} />
-                <MoverColumn title="Lagging" movers={data.movers.down} positive={false} colors={colors} />
+                <MoverColumn
+                  title="Leading"
+                  movers={data.movers.up}
+                  positive
+                  colors={colors}
+                  onSelectSymbol={onSelectSymbol}
+                />
+                <MoverColumn
+                  title="Lagging"
+                  movers={data.movers.down}
+                  positive={false}
+                  colors={colors}
+                  onSelectSymbol={onSelectSymbol}
+                />
               </div>
             )
           : null}
@@ -519,9 +570,18 @@ export function MarketBrief({
                   const rowTone = w.changePct == null ? colors.textMuted : w.changePct >= 0 ? colors.bullish : colors.bearish;
                   return (
                     <div key={w.symbol} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2] }}>
-                      <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text, width: 56, flexShrink: 0 }}>
-                        {w.symbol}
-                      </span>
+                      {onSelectSymbol ? (
+                        <BriefSymbolButton
+                          symbol={w.symbol}
+                          onClick={() => onSelectSymbol(w.symbol, null, "swing")}
+                          colors={colors}
+                          style={{ width: 56, flexShrink: 0, fontSize: typography.scale.sm, fontWeight: 600 }}
+                        />
+                      ) : (
+                        <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text, width: 56, flexShrink: 0 }}>
+                          {w.symbol}
+                        </span>
+                      )}
                       <span style={{ fontSize: typography.scale.sm, color: colors.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                         {w.price != null ? `$${w.price.toFixed(2)}` : "—"}
                       </span>
@@ -774,30 +834,44 @@ function MarketStatusChip({
 function IndexChip({
   label,
   pct,
-  colors
+  colors,
+  onSelect
 }: {
   label: string;
   pct: number | null;
   colors: ReturnType<typeof useTheme>["colors"];
+  onSelect?: () => void;
 }) {
   const tone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "baseline",
-        gap: spacing[1],
-        fontSize: typography.scale.sm,
-        padding: `${spacing[1]} ${spacing[2]}`,
-        borderRadius: borderRadius.md,
-        border: `1px solid ${colors.border}`,
-        background: colors.surfaceMuted
-      }}
-    >
+  const body = (
+    <>
       <span style={{ color: colors.textMuted, fontWeight: 600 }}>{label}</span>
       <span style={{ color: tone, fontWeight: 700 }}>{fmtPct(pct)}</span>
-    </span>
+    </>
   );
+  const style = {
+    display: "inline-flex",
+    alignItems: "baseline",
+    gap: spacing[1],
+    fontSize: typography.scale.sm,
+    padding: `${spacing[1]} ${spacing[2]}`,
+    borderRadius: borderRadius.md,
+    border: `1px solid ${colors.border}`,
+    background: colors.surfaceMuted
+  };
+  if (onSelect) {
+    return (
+      <button
+        type="button"
+        data-testid={`market-brief-index-${label}`}
+        onClick={onSelect}
+        style={{ ...style, cursor: "pointer", color: "inherit" }}
+      >
+        {body}
+      </button>
+    );
+  }
+  return <span style={style}>{body}</span>;
 }
 
 function VixChip({
@@ -834,29 +908,24 @@ function VixChip({
 
 function SectorChip({
   sector,
-  colors
+  colors,
+  selected = false,
+  interactive = false,
+  onClick
 }: {
   sector: BriefSector;
   colors: ReturnType<typeof useTheme>["colors"];
+  selected?: boolean;
+  interactive?: boolean;
+  onClick?: () => void;
 }) {
   const tone = sector.pct >= 0 ? colors.bullish : colors.bearish;
   const has1d = sector.pct1d != null;
   const has5d = sector.pct5d != null;
   const toneFor = (n: number | null | undefined) =>
     n == null ? colors.textMuted : n >= 0 ? colors.bullish : colors.bearish;
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        flexDirection: "column",
-        gap: 1,
-        fontSize: typography.scale.sm,
-        padding: `${spacing[1]} ${spacing[2]}`,
-        borderRadius: borderRadius.md,
-        border: `1px solid ${tone}55`,
-        background: `${tone}14`
-      }}
-    >
+  const body = (
+    <>
       <span style={{ color: colors.text, fontWeight: 600 }}>{sector.label}</span>
       {has1d || has5d ? (
         <span style={{ display: "inline-flex", gap: spacing[2], fontSize: typography.scale.xs }}>
@@ -874,7 +943,173 @@ function SectorChip({
       ) : (
         <span style={{ color: tone, fontWeight: 700, fontSize: typography.scale.xs }}>{fmtPct(sector.pct)}</span>
       )}
-    </span>
+    </>
+  );
+  const style = {
+    display: "inline-flex",
+    flexDirection: "column" as const,
+    gap: 1,
+    fontSize: typography.scale.sm,
+    padding: `${spacing[1]} ${spacing[2]}`,
+    borderRadius: borderRadius.md,
+    border: `1px solid ${selected ? tone : `${tone}55`}`,
+    background: selected ? `${tone}28` : `${tone}14`,
+    cursor: interactive ? "pointer" : undefined,
+    textAlign: "left" as const
+  };
+  if (interactive) {
+    return (
+      <button
+        type="button"
+        data-testid={`market-brief-sector-${sector.symbol}`}
+        aria-pressed={selected}
+        onClick={onClick}
+        style={{ ...style, color: "inherit" }}
+      >
+        {body}
+      </button>
+    );
+  }
+  return <span style={style}>{body}</span>;
+}
+
+function SectorDeskPanel({
+  sector,
+  rows,
+  colors,
+  onSelectSymbol
+}: {
+  sector: BriefSector | null;
+  rows: SectorDeskRow[];
+  colors: ReturnType<typeof useTheme>["colors"];
+  onSelectSymbol: (symbol: string, company?: string | null, lane?: FeedLane) => void;
+}) {
+  if (!sector) return null;
+  const note = sectorMomentumTradingNote(sector);
+  return (
+    <div
+      data-testid={`market-brief-sector-panel-${sector.symbol}`}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: spacing[2],
+        marginTop: spacing[1],
+        padding: spacing[3],
+        borderRadius: borderRadius.md,
+        border: `1px solid ${colors.border}`,
+        background: colors.surfaceMuted
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
+        <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: colors.text }}>
+          {sector.label} ({sector.symbol}) · desk names
+        </span>
+        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>{note}</span>
+      </div>
+      {rows.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
+          {rows.slice(0, 8).map((row) => {
+            const moveTone =
+              row.changePct == null ? colors.textMuted : row.changePct >= 0 ? colors.bullish : colors.bearish;
+            const biasTone =
+              row.bias === "bull" ? colors.bullish : row.bias === "bear" ? colors.bearish : colors.textMuted;
+            return (
+              <button
+                key={`${row.lane}:${row.symbol}`}
+                type="button"
+                data-testid={`market-brief-sector-row-${row.symbol}`}
+                onClick={() => onSelectSymbol(row.symbol, row.company, row.lane)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(3.5rem, auto) minmax(4.5rem, auto) minmax(3.5rem, auto) minmax(0, 1fr)",
+                  gap: spacing[2],
+                  alignItems: "baseline",
+                  width: "100%",
+                  padding: `${spacing[1]} ${spacing[2]}`,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: borderRadius.sm,
+                  background: colors.surface,
+                  color: colors.text,
+                  textAlign: "left",
+                  cursor: "pointer"
+                }}
+              >
+                <span style={{ fontWeight: 700, fontFamily: typography.fontFamilyMono }}>{row.symbol}</span>
+                <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{feedStateLabel(row.state)}</span>
+                <span style={{ fontSize: typography.scale.sm, color: moveTone, fontWeight: 600 }}>{fmtPct(row.changePct)}</span>
+                <span
+                  style={{
+                    fontSize: typography.scale.xs,
+                    color: biasTone,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  {row.verdict}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+          No tracked names in {sector.label} on your desk right now.
+        </span>
+      )}
+      <button
+        type="button"
+        data-testid={`market-brief-sector-etf-${sector.symbol}`}
+        onClick={() => onSelectSymbol(sector.symbol, `${sector.label} sector ETF`, "swing")}
+        style={{
+          alignSelf: "flex-start",
+          border: `1px solid ${colors.border}`,
+          background: "transparent",
+          color: colors.accent,
+          fontSize: typography.scale.xs,
+          fontWeight: 600,
+          padding: `${spacing[1]} ${spacing[2]}`,
+          borderRadius: borderRadius.sm,
+          cursor: "pointer"
+        }}
+      >
+        View {sector.symbol} sector ETF →
+      </button>
+    </div>
+  );
+}
+
+function BriefSymbolButton({
+  symbol,
+  onClick,
+  colors,
+  style
+}: {
+  symbol: string;
+  onClick: () => void;
+  colors: ReturnType<typeof useTheme>["colors"];
+  style?: CSSProperties;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={`market-brief-symbol-${symbol}`}
+      onClick={onClick}
+      style={{
+        border: "none",
+        background: "transparent",
+        padding: 0,
+        color: colors.accent,
+        fontFamily: typography.fontFamilyMono,
+        cursor: "pointer",
+        textDecoration: "underline",
+        textDecorationColor: `${colors.accent}66`,
+        textUnderlineOffset: 3,
+        ...style
+      }}
+    >
+      {symbol}
+    </button>
   );
 }
 
@@ -882,12 +1117,14 @@ function MoverColumn({
   title,
   movers,
   positive,
-  colors
+  colors,
+  onSelectSymbol
 }: {
   title: string;
   movers: BriefMover[];
   positive: boolean;
   colors: ReturnType<typeof useTheme>["colors"];
+  onSelectSymbol?: (symbol: string, company?: string | null, lane?: FeedLane) => void;
 }) {
   const tone = positive ? colors.bullish : colors.bearish;
   return (
@@ -901,7 +1138,16 @@ function MoverColumn({
         movers.map((m) => (
           <div key={m.symbol} style={{ display: "flex", justifyContent: "space-between", gap: spacing[2], minWidth: 0 }}>
             <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text }}>{m.symbol}</span>
+              {onSelectSymbol ? (
+                <BriefSymbolButton
+                  symbol={m.symbol}
+                  onClick={() => onSelectSymbol(m.symbol, m.company, m.lane)}
+                  colors={colors}
+                  style={{ fontSize: typography.scale.sm, fontWeight: 600 }}
+                />
+              ) : (
+                <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text }}>{m.symbol}</span>
+              )}
               {m.company ? (
                 <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}> · {m.company}</span>
               ) : null}
