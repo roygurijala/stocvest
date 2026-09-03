@@ -94,6 +94,7 @@ import {
 } from "@/lib/nav/dashboard-trading-room-deeplink";
 import {
   buildFeedCards,
+  findFeedCardForSymbolLane,
   groupFeedByLane,
   rankAndCapFeed,
   type FeedBias,
@@ -331,6 +332,11 @@ function TradingRoomBody({
     return { swingSetups: swing, daySetups: day };
   }, [scannerOverview.setups]);
 
+  const swingNearQualification = useMemo(
+    () => (scannerOverview.scanSummary?.near_qualification ?? []).filter((r) => r.desk === "swing"),
+    [scannerOverview.scanSummary?.near_qualification]
+  );
+
   const companyBySymbol = useMemo(() => {
     const map = new Map<string, string>();
     for (const s of scannerOverview.setups) {
@@ -530,8 +536,7 @@ function TradingRoomBody({
   const openSymbol = (symbol: string, company?: string | null, lane: FeedLane = "swing") => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    const existing =
-      allCards.find((c) => c.symbol === sym && c.lane === lane) ?? allCards.find((c) => c.symbol === sym);
+    const existing = findFeedCardForSymbolLane(allCards, sym, lane);
     if (existing) {
       selectCard(existing);
       return;
@@ -1039,7 +1044,7 @@ function TradingRoomBody({
       onSearch={undefined}
       swingDesk={swingDesk?.data ?? null}
       swingSetups={swingSetups}
-      nearQualification={scannerOverview.scanSummary?.near_qualification ?? []}
+      nearQualification={swingNearQualification}
       onSelectSwingSymbol={(sym) => openSymbol(sym, null, "swing")}
     />
   );

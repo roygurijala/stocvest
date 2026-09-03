@@ -422,3 +422,14 @@ export function groupFeedByLane(cards: FeedCard[]): { day: FeedCard[]; swing: Fe
   }
   return { day, swing };
 }
+
+/** Match feed cards by symbol + lane only — never cross lanes (swing table → swing deep dive). */
+export function findFeedCardForSymbolLane(
+  cards: readonly FeedCard[],
+  symbol: string,
+  lane: FeedLane
+): FeedCard | undefined {
+  const sym = symbol.trim().toUpperCase();
+  if (!sym) return undefined;
+  return cards.find((c) => c.symbol === sym && c.lane === lane);
+}
