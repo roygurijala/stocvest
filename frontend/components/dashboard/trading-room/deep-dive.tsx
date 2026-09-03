@@ -5,7 +5,7 @@
  *
  * Fetches the composite payload on select (`useSignalComposite`) and renders the
  * decision in the trading-room's own visual language: a verdict header, a
- * decisive plain-English brief, and Setup / Layers / Evolution segmented tabs.
+ * decisive plain-English brief, and a single scroll: Setup → Layers → Evolution → Chart.
  *
  * It deliberately reuses the PURE composite libs (`parseSwingCompositeInsight`,
  * `compositeToSignalsLayerRows`) and the self-contained `SetupEvolutionPanel`
@@ -118,9 +118,10 @@ import {
 } from "@/lib/trade-plan/tracked-plan-store";
 import { pushTrackedPlanRemovalToServer, pushTrackedPlanToServer } from "@/lib/trade-plan/tracked-plan-sync";
 import { TrackPlanPanel } from "@/components/trade-plan/track-plan-panel";
+import { buildGeometryHonestyPresent } from "@/lib/dashboard/geometry-honesty-present";
+import { GeometryHonestyPanel } from "@/components/dashboard/trading-room/geometry-honesty-panel";
 
 type Colors = ReturnType<typeof useTheme>["colors"];
-type DeepDiveTab = "setup" | "layers" | "evolution" | "charts";
 
 function fmtPrice(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -517,95 +518,6 @@ function LaneToggle({
 }
 
 
-function SegTabs({
-  value,
-  onSelect,
-  chartsDot,
-  colors
-}: {
-  value: DeepDiveTab;
-  onSelect: (v: DeepDiveTab) => void;
-  /** Optional status dot on the Charts tab: "entry" (green) | "caution" (amber). */
-  chartsDot?: "entry" | "caution" | null;
-  colors: Colors;
-}) {
-  const opts: { id: DeepDiveTab; label: string }[] = [
-    { id: "setup", label: "Setup" },
-    { id: "layers", label: "Layers" },
-    { id: "evolution", label: "Evolution" },
-    { id: "charts", label: "Charts" }
-  ];
-  return (
-    <div
-      role="tablist"
-      className="deep-dive-seg-tabs"
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
-        gap: 4,
-        padding: 4,
-        background: colors.surface,
-        border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.sm
-      }}
-    >
-      {opts.map((opt) => {
-        const active = opt.id === value;
-        const dot = opt.id === "charts" ? chartsDot : null;
-        const dotColor = dot === "entry" ? colors.bullish : dot === "caution" ? colors.caution : null;
-        const dotTitle =
-          dot === "entry"
-            ? "Price is inside the entry zone"
-            : dot === "caution"
-              ? "Price is near the stop / setup is approaching"
-              : undefined;
-        return (
-          <button
-            key={opt.id}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onSelect(opt.id)}
-            title={dotTitle}
-            style={{
-              minHeight: 40,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-              border: active ? `1px solid ${colors.accent}` : "1px solid transparent",
-              background: active ? "rgba(46,139,255,.16)" : "transparent",
-              color: active ? "#cfe2ff" : colors.textMuted,
-              fontSize: typography.scale.sm,
-              fontWeight: active ? 700 : 600,
-              padding: `0 ${spacing[2]}`,
-              borderRadius: 7,
-              cursor: "pointer",
-              boxShadow: active ? "inset 0 0 0 1px rgba(46,139,255,.35)" : "none",
-              transition: "background .12s, color .12s, border-color .12s"
-            }}
-          >
-            {opt.label}
-            {dotColor ? (
-              <span
-                aria-hidden
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: "50%",
-                  background: dotColor,
-                  display: "inline-block",
-                  boxShadow: `0 0 4px ${dotColor}`
-                }}
-              />
-            ) : null}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function SectionLabel({ children, colors }: { children: string; colors: Colors }) {
   return (
     <span
@@ -621,7 +533,64 @@ function SectionLabel({ children, colors }: { children: string; colors: Colors }
   );
 }
 
-/** Semi-circle SVG gauge matching the prototype Risk/Reward panel. */
+function DeepDiveSection({
+  id,
+  title,
+  statusDot,
+  colors,
+  children,
+  first = false
+}: {
+  id: string;
+  title: string;
+  statusDot?: "entry" | "caution" | null;
+  colors: Colors;
+  children: ReactNode;
+  first?: boolean;
+}) {
+  const dotColor =
+    statusDot === "entry" ? colors.bullish : statusDot === "caution" ? colors.caution : null;
+  const dotTitle =
+    statusDot === "entry"
+      ? "Price is inside the entry zone"
+      : statusDot === "caution"
+        ? "Price is near the stop / setup is approaching"
+        : undefined;
+  return (
+    <section
+      id={id}
+      data-testid={id}
+      aria-label={title}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: spacing[3],
+        paddingTop: first ? 0 : spacing[4],
+        borderTop: first ? undefined : `1px solid ${colors.border}`
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
+        <SectionLabel colors={colors}>{title}</SectionLabel>
+        {dotColor ? (
+          <span
+            aria-hidden
+            title={dotTitle}
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: "50%",
+              background: dotColor,
+              display: "inline-block",
+              boxShadow: `0 0 4px ${dotColor}`
+            }}
+          />
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function RiskRewardGauge({
   rr,
   minRr,
@@ -757,10 +726,9 @@ export function DeepDive({
   onBackToBrief: () => void;
   isMobile?: boolean;
   colors: Colors;
-  /** Bumped by periodic or per-card refresh to re-fetch all tab data. */
+  /** Bumped by periodic or per-card refresh to re-fetch deep-dive data. */
   dataRefreshNonce?: number;
 }) {
-  const [tab, setTab] = useState<DeepDiveTab>("setup");
   const [showBriefDetails, setShowBriefDetails] = useState(false);
   // activeLane allows switching Day/Swing within the deep dive
   const [activeLane, setActiveLane] = useState<"day" | "swing">(card.lane);
@@ -1076,7 +1044,7 @@ export function DeepDive({
     };
   }, [composite, isInsufficient]);
 
-  // Charts-tab status dot. "entry" (green) when price is inside the entry zone
+  // Chart section status dot. "entry" (green) when price is inside the entry zone
   // OR either lane is actionable; "caution" (amber) when price is near the stop
   // OR either lane is near. Reflects evaluation-time price, not a live tick —
   // kept conservative so it never implies real-time precision it doesn't have.
@@ -1116,6 +1084,15 @@ export function DeepDive({
     const raw = (composite as Record<string, unknown>).geometry_block_reason;
     return typeof raw === "string" && raw.trim() ? raw.trim() : null;
   }, [composite, isInsufficient]);
+
+  const geometryHonesty = useMemo(() => {
+    if (isInsufficient) return null;
+    return buildGeometryHonestyPresent({
+      body: composite as Record<string, unknown>,
+      tradingMode: activeLane,
+      price: displayPrice
+    });
+  }, [composite, isInsufficient, activeLane, displayPrice]);
 
   // Single source of truth for the scenario panel: stop / entry zone / target,
   // the current-price marker, and the dollar risk/reward. Prefers the engine's
@@ -1853,7 +1830,7 @@ export function DeepDive({
         />
       ) : null}
 
-      {/* ── Tabs + tab content: one card ── */}
+      {/* ── Symbol analysis: one-page scroll (Setup → Layers → Evolution → Chart) ── */}
       <div
         style={{
           background: colors.surface,
@@ -1865,10 +1842,10 @@ export function DeepDive({
           gap: spacing[3]
         }}
       >
-      <SegTabs value={tab} onSelect={setTab} chartsDot={chartsDot} colors={colors} />
-
-      {/* ── Tab panels — identical to the Signals page ──────────────────── */}
-      <div style={{ minHeight: loading ? 220 : 120 }}>
+      <div
+        data-testid="deep-dive-one-page"
+        style={{ minHeight: loading ? 220 : 120, display: "flex", flexDirection: "column", gap: spacing[4] }}
+      >
         {loading ? (
           <div
             data-testid="deep-dive-loading"
@@ -1909,7 +1886,9 @@ export function DeepDive({
             </p>
           </div>
         ) : null}
-        {tab === "setup" && !loading ? (
+        {!loading ? (
+          <>
+            <DeepDiveSection id="deep-dive-section-setup" title="Setup" colors={colors} first>
           <div style={{ display: "flex", flexDirection: "column", gap: spacing[4] }}>
             {!allowsScenarioGeometry ? (
               <SessionMoverContext
@@ -1974,6 +1953,9 @@ export function DeepDive({
                     dataQualityFlags={dataQualityFlags}
                     colors={colors}
                   />
+                ) : null}
+                {geometryHonesty?.showPanel ? (
+                  <GeometryHonestyPanel present={geometryHonesty} colors={colors} />
                 ) : null}
                 {/* 6. Scenario geometry + R/R gauge side-by-side + Copy scenario */}
                 {displayPrice != null ? (
@@ -2333,7 +2315,8 @@ export function DeepDive({
               </div>
             ) : null}
           </div>
-        ) : tab === "layers" && !loading ? (
+            </DeepDiveSection>
+            <DeepDiveSection id="deep-dive-section-layers" title="Layers" colors={colors}>
           <SignalsLayerBreakdown
             symbol={card.symbol}
             tradingMode={activeLane}
@@ -2345,14 +2328,20 @@ export function DeepDive({
             causalNarrative={causalNarrative}
             alignmentRatio={compositeAlignmentRatio}
           />
-        ) : tab === "evolution" && !loading ? (
+            </DeepDiveSection>
+            <DeepDiveSection id="deep-dive-section-evolution" title="Evolution" colors={colors}>
           <SetupEvolutionPanel
             key={`evolution-${card.symbol}-${activeLane}-${dataRefreshNonce}`}
             symbol={card.symbol}
             tradingMode={activeLane}
           />
-        ) : tab === "charts" && !loading ? (
-          /* Charts tab — full day/swing trading chart */
+            </DeepDiveSection>
+            <DeepDiveSection
+              id="deep-dive-section-charts"
+              title="Chart"
+              colors={colors}
+              statusDot={chartsDot}
+            >
           <article
             style={{
               background: colors.surface,
@@ -2376,9 +2365,11 @@ export function DeepDive({
               currentPrice={card.price ?? null}
             />
           </article>
+            </DeepDiveSection>
+          </>
         ) : null}
       </div>
-      </div>{/* end tabs card */}
+      </div>{/* end one-page card */}
     </div>
   );
 }

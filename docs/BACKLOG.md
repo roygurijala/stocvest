@@ -52,6 +52,24 @@ _Next major lane when soak completes: **P1 (Phase 7 hardening)**._
 | DBZ-7 | **De-Benzinga Phase 7 — day desk + infra** | **DONE 2026-09-02.** `STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED` default off; day composite Polygon-primary + Perplexity gating parity; signals Lambda env via Terraform. **Next:** DBZ-8 (deprecate `benzinga_feed_health` on swing). |
 | DBZ-8 | **De-Benzinga Phase 8 — cleanup** | **DONE 2026-09-02.** Removed `benzinga_feed_health` from swing composite responses; documented deprecation in API_CONTRACTS §4.3. **ADR-001 complete.** |
 
+## ADR-002 — Personal swing-first + ops (active)
+
+**Master plan:** [`adr/ADR-002-personal-swing-first-product-ops.md`](./adr/ADR-002-personal-swing-first-product-ops.md). **ADR-002 complete 2026-09-03** (OPS-0/1/2, GEO-1–3, UX-2/3, VAL-1).
+
+| ID | Theme | Status |
+|----|-------|--------|
+| OPS-0 | Incident stabilization (503 / concurrency starvation) | **DONE 2026-09-03** |
+| OPS-1 | Terraform concurrency guards (`news_consumer` max concurrency, gap-intel tick) | **DONE 2026-09-02** |
+| OPS-2 | Re-enable schedulers after quota approved + alarms | **DONE 2026-09-03** |
+| GEO-1 | Swing stop merge policy v2 (wider, not tighter) | **DONE 2026-09-02** |
+| GEO-2 | Exclude leveraged/inverse from swing alerts/desk | **DONE 2026-09-02** |
+| GEO-3 | Email + UI geometry honesty (T1 vs T2 R/R) | DONE 2026-09-02 |
+| UX-1 | Personal mode nav + swing defaults | **SUPERSEDED 2026-09-02** — removed; use main app |
+| UX-2 | Market swing setups table on dashboard brief | **DONE 2026-09-02** — `buildMarketSwingRankedRows`, market brief section |
+| UX-3 | Symbol one-page deep dive scroll | **DONE 2026-09-02** — Setup → Layers → Evolution → Chart in `deep-dive.tsx` |
+| VAL-1 | Personal validation loop + email discipline | **DONE 2026-09-03** |
+| DBZ-9 | *(Optional)* Retire day Benzinga flag entirely | Pending |
+
 ---
 
 | A1-tests | **A1 follow-up test coverage** | **DONE 2026-06-02.** (1) `tests/utils/test_symbol_detector.py` — `detect_symbol` dollar-sign priority, blocklist correctness, `detect_symbol_from_messages` multi-turn fallback, empty/None input. (2) `tests/api/services/test_assistant_symbol_context.py` — `fetch_assistant_symbol_context` timeout returns partial data, empty symbol returns None, all sub-calls wrapped in try/except. (3) `tests/api/handlers/test_signals_assistant_chat.py` — image MIME validation (accepts PNG/JPG/WebP, rejects PDF), symbol detection wiring (mock `fetch_assistant_symbol_context`, verify it's called with detected symbol), `symbol_context` passed to `svc.reply`. (4) `frontend/tests/use-voice-input.test.ts` — `isSupported` false when SpeechRecognition absent, toggle start/stop, `onTranscript` called with result, FRIENDLY_ERRORS map. (5) `frontend/tests/assistant-panel-redesign.test.tsx` — placeholder text "Ask me anything about stocks", + button triggers file input, mic button present, image preview shows when attachment set, remove clears attachment. |

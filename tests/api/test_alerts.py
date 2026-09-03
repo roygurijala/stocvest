@@ -62,6 +62,7 @@ def test_alert_preferences_default_values(brokers: None) -> None:
     assert b.get("on_watchlist_maturation", False) is False
     assert b.get("on_execution_actionable", True) is True
     assert b.get("on_signal_fired", False) is False
+    assert b.get("on_tracked_plan_thesis", False) is False
     assert b["watchlist_only"] is False
 
 

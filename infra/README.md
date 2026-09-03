@@ -76,3 +76,32 @@ If `validate` reports missing backend `bucket` / `key`, run step 3 again so `.te
   - `env = development`
 
 For **new** resources or env changes, update Terraform here and **`docs/CONTEXT.md` §3** so deploy checklists stay accurate.
+
+## Lambda concurrency (ADR-002 OPS-1)
+
+**Incident (2026-09-02):** Development account had **Lambda concurrent execution quota = 10** (default is 1000). The **`news_consumer`** SQS event source drained **`stocvest-news-triage-queue`** and pegged all slots, causing **503** on user-facing routes (`health`, composite).
+
+**Terraform guards:**
+
+| Control | Location | Default |
+| --- | --- | --- |
+| `news_consumer_sqs_max_concurrency` | `news_pipeline.tf` → SQS event source `scaling_config` | **2** |
+| `news_consumer_sqs_event_source_enabled` | same | **false** (enable in OPS-2 after quota increase) |
+| Gap-intel cache tick | `eventbridge.tf` | **`rate(5 minutes)`** (was 2 min) |
+
+**Recommended account quota:** **≥ 100** concurrent executions before re-enabling all EventBridge Scheduler jobs and the news triage consumer. Request increase via **Service Quotas → AWS Lambda → Concurrent executions**.
+
+**OPS-2 re-enable (after quota approved):**
+
+1. Verify quota: `python scripts/verify_lambda_concurrency_quota.py` (expects ≥ 100).
+2. Terraform: set in `terraform.tfvars`:
+   - `news_consumer_sqs_event_source_enabled = true`
+   - `news_consumer_sqs_max_concurrency = 2`
+   - `lambda_account_concurrent_execution_quota = <approved quota>`
+3. `cd infra && terraform apply -var-file=terraform.tfvars` — enables news consumer ESM (capped), EventBridge rules (`signal_resolution`, `gap_intel_cache_tick`), and CloudWatch alarms (`lambda_concurrent_executions_high`, `lambda_throttles`) on the alert-email SNS topic.
+4. Re-enable Scheduler jobs disabled during OPS-0: `python scripts/enable_scheduler_jobs.py`
+5. Smoke: `GET /v1/health` → 200; watch CloudWatch **ConcurrentExecutions** and **Throttles** for 15 minutes.
+
+**Re-enable order (if applying manually in stages):** confirm quota → news_consumer with cap → low-frequency EventBridge rules → scheduler jobs → gap-intel tick last → monitor alarms.
+
+See [`docs/adr/ADR-002-personal-swing-first-product-ops.md`](../docs/adr/ADR-002-personal-swing-first-product-ops.md).

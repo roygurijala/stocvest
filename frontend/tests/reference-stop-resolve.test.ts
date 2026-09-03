@@ -97,4 +97,30 @@ describe("reference-stop-resolve", () => {
     expect(7.78 - (merged.stop ?? 0)).toBeGreaterThanOrEqual(0.466);
     expect(merged.stop!).toBeLessThan(7.59);
   });
+
+  test("swing keeps wider structural stop when ATR band is tighter", () => {
+    const merged = resolveMergedReferenceStop({
+      direction: "bullish",
+      entry: 100,
+      structuralStop: 93,
+      atr: 2,
+      atrK: 2,
+      tradingMode: "swing"
+    });
+    expect(merged.stop).toBeCloseTo(93, 4);
+    expect(merged.usedAtrFloor).toBe(false);
+  });
+
+  test("day allows tighter ATR band when structure is already wide", () => {
+    const merged = resolveMergedReferenceStop({
+      direction: "bullish",
+      entry: 100,
+      structuralStop: 95,
+      atr: 2,
+      atrK: 0.85,
+      tradingMode: "day"
+    });
+    expect(merged.stop).toBeCloseTo(98.3, 4);
+    expect(merged.usedAtrFloor).toBe(true);
+  });
 });

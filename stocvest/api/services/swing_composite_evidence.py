@@ -1273,8 +1273,10 @@ def build_swing_composite_evidence_fields(
     geometry_eligible, geometry_block_reason = geometry_tradeability(
         out,
         mode="day" if mode_for_env == "day" else "swing",  # type: ignore[arg-type]
+        symbol=sym,
     )
     out["geometry_tradeable"] = geometry_eligible
     out["geometry_block_reason"] = geometry_block_reason
     out["desk_surface_eligible"] = geometry_eligible
+    out["symbol"] = sym
     return out

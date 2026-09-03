@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from stocvest.api.services.geometry_tradeability import geometry_tradeability
 from stocvest.api.services.market_environment import min_risk_reward_from_environment
+from stocvest.api.services.swing_universe_filter import swing_exclusion_reason
 from stocvest.api.services.signal_validation_eligibility import (
     DECISION_STATE_ACTIONABLE,
     DECISION_STATE_BLOCKED,
@@ -119,11 +121,26 @@ def evaluate_entry_zone_gate(body: dict[str, Any]) -> tuple[bool, dict[str, Any]
     }
 
 
-def evaluate_geometry_gate(body: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+def evaluate_geometry_gate(body: dict[str, Any], *, mode: Mode) -> tuple[bool, dict[str, Any]]:
     """Block execution when reference-level geometry cannot support desk R/R."""
+    sym_raw = body.get("symbol")
+    sym = str(sym_raw).strip().upper() if sym_raw else None
+
+    if mode == "swing":
+        excluded = swing_exclusion_reason(sym)
+        if excluded:
+            return False, {"pass": False, "reason": excluded}
+
     if body.get("desk_surface_eligible") is False or body.get("geometry_tradeable") is False:
         reason = str(body.get("geometry_block_reason") or "geometry_insufficient").strip()
         return False, {"pass": False, "reason": reason or "geometry_insufficient"}
+
+    # Fail closed when geometry flags were never computed (partial/stale body).
+    if body.get("desk_surface_eligible") is None and body.get("geometry_tradeable") is None:
+        eligible, reason = geometry_tradeability(body, mode=mode, symbol=sym)
+        if not eligible:
+            return False, {"pass": False, "reason": reason or "geometry_insufficient"}
+
     return True, {"pass": True}
 
 
@@ -216,7 +233,7 @@ def evaluate_execution_actionable(
 
     ``execution_actionable`` requires ledger gates **and** price inside entry zone **and** tradable geometry.
     """
-    geom_ok, geom_gate = evaluate_geometry_gate(body)
+    geom_ok, geom_gate = evaluate_geometry_gate(body, mode=mode)
     ledger_ok, gates = evaluate_ledger_gates(body, mode=mode, verdict=verdict)
     gates["geometry_tradeable"] = geom_gate
     zone_ok, zone_gate = evaluate_entry_zone_gate(body)

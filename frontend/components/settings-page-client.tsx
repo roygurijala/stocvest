@@ -345,7 +345,7 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
                 type="checkbox"
                 className="h-6 w-6 shrink-0"
                 disabled={!prefs.email_enabled}
-                checked={prefs.on_watchlist_maturation ?? true}
+                checked={prefs.on_watchlist_maturation ?? false}
                 onChange={(e) => void patchPref({ on_watchlist_maturation: e.target.checked })}
               />
             </label>
@@ -364,9 +364,8 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
               />
             </label>
             <p className="text-xs" style={{ margin: `-${spacing[2]} 0 0`, color: colors.textMuted }}>
-              Email when any symbol on the opportunity desk passes ledger gates (qualified) or becomes
-              execution-ready (price in entry zone). Applies to the whole desk — not limited by your watchlist.
-              One email per symbol per desk per day.
+              Recommended primary alert for validation: email when a desk symbol passes ledger + geometry gates and price is
+              inside the entry zone. Includes stop distance and T1 R/R in the message. One email per symbol per desk per day.
             </p>
             <label className={`flex min-h-11 items-center justify-between gap-3 ${!prefs.email_enabled ? "opacity-50" : ""}`}>
               <span>Tracked plan thesis changes</span>
@@ -374,7 +373,7 @@ export function SettingsPageClient({ email }: SettingsPageClientProps) {
                 type="checkbox"
                 className="h-6 w-6 shrink-0"
                 disabled={!prefs.email_enabled}
-                checked={prefs.on_tracked_plan_thesis ?? true}
+                checked={prefs.on_tracked_plan_thesis ?? false}
                 onChange={(e) => void patchPref({ on_tracked_plan_thesis: e.target.checked })}
               />
             </label>

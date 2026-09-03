@@ -14,6 +14,14 @@ export function subscriptionAllowsDayTradingSurfaces(
   return plan !== "swing_pro";
 }
 
+/** Server + client helper — single entry for desk visibility. */
+export function dayTradingSurfacesEnabled(
+  plan: SubscriptionPlan | undefined,
+  hasFullAccess: boolean | undefined
+): boolean {
+  return subscriptionAllowsDayTradingSurfaces(plan, hasFullAccess);
+}
+
 /** Scanner payload mode for dashboard server fetch — avoids day setup API work for Swing Pro. */
 export function scannerSetupLoadModeForSubscription(
   plan: SubscriptionPlan | undefined,

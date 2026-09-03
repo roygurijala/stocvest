@@ -20,8 +20,11 @@ import {
 import type { WatchlistAtCloseItem } from "@/lib/hooks/use-watchlist-at-close";
 import type { FeedCard, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
+import type { DeskTodayData } from "@/lib/api/desk-today";
+import { MarketSwingSetupsTable } from "@/components/dashboard/personal-ranked-home-table";
 
 const BRIEF_NAME_STORAGE_KEY = "stocvest:brief-name";
+const SWING_ACCENT = "#8B5CF6";
 
 export interface BriefHeadline {
   id: string;
@@ -134,6 +137,8 @@ interface MarketBriefProps {
   data: MarketBriefData;
   onViewTopSetup: () => void;
   onSearch?: () => void;
+  swingDesk?: DeskTodayData | null;
+  onSelectSwingSymbol?: (symbol: string) => void;
 }
 
 function greeting(): string {
@@ -176,7 +181,13 @@ function fmtPct(n: number | null): string {
   return `${sign}${n.toFixed(1)}%`;
 }
 
-export function MarketBrief({ data, onViewTopSetup, onSearch }: MarketBriefProps) {
+export function MarketBrief({
+  data,
+  onViewTopSetup,
+  onSearch,
+  swingDesk = null,
+  onSelectSwingSymbol
+}: MarketBriefProps) {
   const { theme, colors } = useTheme();
   const updated = relativeFrom(data.updatedAtIso);
   const top = data.topCard;
@@ -334,6 +345,21 @@ export function MarketBrief({ data, onViewTopSetup, onSearch }: MarketBriefProps
           <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>{data.breadthLine}</span>
         ) : null}
       </div>
+
+      {onSelectSwingSymbol
+        ? tile(
+            <Target size={15} />,
+            "Swing setups from market scan",
+            SWING_ACCENT,
+            <MarketSwingSetupsTable
+              swingDesk={swingDesk}
+              onSelectSymbol={onSelectSwingSymbol}
+              colors={colors}
+              embedded
+            />,
+            { span: true }
+          )
+        : null}
 
       <div className="brief-bento" style={{ gap: spacing[3], alignItems: "start" }}>
         {/* Weekend / after-hours swing highlight — shown when swing data is active during prep.

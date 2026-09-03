@@ -224,6 +224,17 @@ What the engine does **today** around Fed and macro events:
 
 **Product posture:** STOCVEST surfaces macro event risk as **data and score friction**, not as a trade call. Planned P1 work adds contextual boosts, layer-card polarity consistency, and optional user feedback — not a directional "Fed play" engine.
 
+## Swing geometry & desk surface (ADR-002 GEO, 2026-09)
+
+Swing desk cards, discovery rows, and execution-actionable emails share **`geometry_tradeability`** (`stocvest/api/services/geometry_tradeability.py`):
+
+| Gate | Swing rule |
+|------|------------|
+| Stop merge | **`reference_stop_policy.py`** — swing always picks the **wider** stop; day may use a tighter ATR band when structure already offers room. Min width: **`max(1.5×ATR, 6% of entry)`**. |
+| Stop distance | Block when **`reference_stop_distance_atr < 1.5`** (`stop_too_tight_for_swing`). |
+| R/R | **`structure_risk_reward_for_mode(..., trading_mode="swing")`** uses **T1 only** (no T2 promotion). |
+| Universe | **`swing_universe_filter.py`** — leveraged/inverse ETFs (e.g. **NVDQ**, **SQQQ**) blocked from swing **surface** only; composite scoring unchanged. |
+
 ## Future enhancements (non-blocking)
 
 These are **intentional backlog themes**, not corrections to current behavior:

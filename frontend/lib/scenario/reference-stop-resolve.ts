@@ -1,8 +1,11 @@
 /**
  * Two-layer reference stop: session structure anchor + ATR floor, then min-width policy.
  *
- * Long: final = min(structural, entry − k×ATR) — wider (lower) stop wins.
- * Short: final = max(structural, entry + k×ATR).
+ * Long: lower stop price = wider cushion below entry.
+ * Short: higher stop price = wider cushion above entry.
+ *
+ * Swing always picks the wider stop; day widens to ATR when structure is too tight,
+ * otherwise allows a tighter ATR band when structure already offers room.
  */
 
 import { applyMinStopDistance } from "@/lib/scenario/scenario-stop-policy";
@@ -115,6 +118,50 @@ export type MergedReferenceStopResult = {
   usedAtrFloor: boolean;
 };
 
+function mergeStructuralAndAtrStop(args: {
+  direction: ScenarioDirection;
+  structural: number;
+  atrStop: number;
+  tradingMode?: ReferenceStopTradingMode | null;
+}): { merged: number; usedAtrFloor: boolean } {
+  const swing = args.tradingMode !== "day";
+  const { structural, atrStop } = args;
+
+  if (args.direction === "bullish") {
+    if (swing) {
+      const merged = round4(Math.min(structural, atrStop));
+      return {
+        merged,
+        usedAtrFloor: merged <= atrStop + 1e-8 && structural > atrStop + 1e-8
+      };
+    }
+    if (structural > atrStop + 1e-8) {
+      return { merged: atrStop, usedAtrFloor: true };
+    }
+    const merged = round4(Math.max(structural, atrStop));
+    return {
+      merged,
+      usedAtrFloor: merged >= atrStop - 1e-8 && structural < atrStop - 1e-8
+    };
+  }
+
+  if (swing) {
+    const merged = round4(Math.max(structural, atrStop));
+    return {
+      merged,
+      usedAtrFloor: merged >= atrStop - 1e-8 && structural < atrStop - 1e-8
+    };
+  }
+  if (structural < atrStop - 1e-8) {
+    return { merged: atrStop, usedAtrFloor: true };
+  }
+  const merged = round4(Math.min(structural, atrStop));
+  return {
+    merged,
+    usedAtrFloor: merged <= atrStop + 1e-8 && structural > atrStop + 1e-8
+  };
+}
+
 export function resolveMergedReferenceStop(args: {
   direction: ScenarioDirection;
   entry: number;
@@ -143,13 +190,14 @@ export function resolveMergedReferenceStop(args: {
   let merged: number | null = structural;
   let usedAtrFloor = false;
   if (structural != null && atrStop != null) {
-    if (args.direction === "bullish") {
-      merged = round4(Math.min(structural, atrStop));
-      usedAtrFloor = merged < structural - 1e-8;
-    } else {
-      merged = round4(Math.max(structural, atrStop));
-      usedAtrFloor = merged > structural + 1e-8;
-    }
+    const pick = mergeStructuralAndAtrStop({
+      direction: args.direction,
+      structural,
+      atrStop,
+      tradingMode: args.tradingMode
+    });
+    merged = pick.merged;
+    usedAtrFloor = pick.usedAtrFloor;
   } else if (structural == null && atrStop != null) {
     merged = atrStop;
     usedAtrFloor = true;
@@ -160,7 +208,12 @@ export function resolveMergedReferenceStop(args: {
   }
 
   const stop = applyMinStopDistance(args.direction, entry, merged, atr, args.tradingMode ?? null);
-  return { stop, structuralStop: structural, atrStop, usedAtrFloor };
+  let usedAtrFloorFinal = usedAtrFloor;
+  if (stop != null && merged != null) {
+    if (args.direction === "bullish" && stop < merged - 1e-8) usedAtrFloorFinal = true;
+    else if (args.direction === "bearish" && stop > merged + 1e-8) usedAtrFloorFinal = true;
+  }
+  return { stop, structuralStop: structural, atrStop, usedAtrFloor: usedAtrFloorFinal };
 }
 
 export function formatMergedStopProvenance(

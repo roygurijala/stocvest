@@ -131,7 +131,7 @@ function biasFromSignalVerdict(verdict: string | null | undefined): FeedBias | n
  * direction is available the pill stays neutral so the card cannot contradict the deep-dive
  * (which re-runs the composite on open).
  */
-function leaderBias(leader: DeskDiscoveryLeader): FeedBias {
+export function presentDeskLeaderBias(leader: DeskDiscoveryLeader): FeedBias {
   return biasFromSignalVerdict(leader.verdict) ?? "neutral";
 }
 
@@ -144,7 +144,7 @@ function setupFeedEligible(setup: IntradaySetupPayload): boolean {
 }
 
 /** Map a desk leader's composite status / alignment into a single verdict state. */
-function leaderState(leader: DeskDiscoveryLeader): FeedState {
+export function presentDeskLeaderState(leader: DeskDiscoveryLeader): FeedState {
   const hint = (leader.execution_hint || "").trim().toLowerCase();
   if (hint.includes("execution blocked")) return "near";
   if (leader.execution_actionable === true) return "actionable";
@@ -186,7 +186,7 @@ function setupState(setup: IntradaySetupPayload): FeedState {
   return "potential";
 }
 
-function leaderVerdict(leader: DeskDiscoveryLeader): string {
+export function presentDeskLeaderVerdict(leader: DeskDiscoveryLeader): string {
   const hint = leader.execution_hint?.trim();
   if (hint) return hint;
   const verdict = leader.verdict?.trim();
@@ -233,9 +233,9 @@ function cardFromLeader(
     symbol,
     company,
     lane,
-    state: leaderState(leader),
-    bias: leaderBias(leader),
-    verdict: leaderVerdict(leader),
+    state: presentDeskLeaderState(leader),
+    bias: presentDeskLeaderBias(leader),
+    verdict: presentDeskLeaderVerdict(leader),
     phase: leader.composite_status?.trim() || null,
     price: cleanNum(leader.session_price) ?? priceFromSnapshot(snap),
     changePct: cleanNum(leader.gap_percent) ?? snapChangePct(snap),

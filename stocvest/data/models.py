@@ -343,7 +343,7 @@ class AlertPreferences(BaseModel):
     on_gap_detected: bool = False
     on_watchlist_maturation: bool = False
     on_execution_actionable: bool = True
-    on_tracked_plan_thesis: bool = True
+    on_tracked_plan_thesis: bool = False
     watchlist_only: bool = False
     quiet_hours_enabled: bool = False
     quiet_hours_start: str = "22:00"

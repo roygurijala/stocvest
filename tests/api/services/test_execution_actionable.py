@@ -23,6 +23,14 @@ def _active_body(*, price: float = 100.0, rr: float = 2.5) -> dict:
         "market_regime": "neutral",
         "last_trade_price": price,
         "historical_entry_zone": {"low": 99.0, "high": 101.0},
+        "reference_stop_level": 105.0,
+        "reference_target_1": 92.0,
+        "reference_target_2": 88.0,
+        "reference_target_2_provenance": "resistance",
+        "reference_stop_distance_atr": 2.0,
+        "atr": 2.5,
+        "desk_surface_eligible": True,
+        "geometry_tradeable": True,
         "layers": [
             {"layer": "technical", "score": 0.4},
             {"layer": "sector", "score": 55.0},
@@ -92,6 +100,32 @@ def test_apply_entry_gates_blocked_when_rr_below_threshold() -> None:
     assert body["ledger_qualified"] is False
     assert body["execution_actionable"] is False
     assert body["decision_state"] == "blocked"
+
+
+def test_execution_actionable_blocks_nvdq_even_when_stale_eligible_flag() -> None:
+    body = _active_body()
+    body["symbol"] = "NVDQ"
+    body["desk_surface_eligible"] = True
+    body["geometry_tradeable"] = True
+    _, exec_ok, gates = evaluate_execution_actionable(body, mode="swing")
+    assert exec_ok is False
+    assert gates["geometry_tradeable"]["reason"] == "leveraged_inverse_excluded"
+
+
+def test_execution_actionable_blocks_nvdq_when_geometry_recomputed() -> None:
+    body = _active_body()
+    body["verdict"] = "bullish"
+    body["signal_summary"] = "bullish"
+    body["symbol"] = "NVDQ"
+    body.pop("desk_surface_eligible", None)
+    body.pop("geometry_tradeable", None)
+    body["reference_stop_level"] = 8.20
+    body["reference_target_1"] = 9.20
+    body["last_trade_price"] = 8.83
+    body["reference_stop_distance_atr"] = 2.8
+    _, exec_ok, gates = evaluate_execution_actionable(body, mode="swing")
+    assert exec_ok is False
+    assert gates["geometry_tradeable"]["reason"] == "leveraged_inverse_excluded"
 
 
 def test_scenario_payload_maps_strength_and_pattern() -> None:
