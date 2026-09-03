@@ -68,3 +68,49 @@ export function structureRiskRewardShort(
   if (rrT1 < 1.0 && rrT2 > rrT1) return rrT2;
   return rrT1;
 }
+
+/** Swing desk uses T1-only R/R — keep in sync with `risk_reward_structure.py`. */
+export function structureRiskRewardForMode(
+  entry: number,
+  target1: number,
+  stop: number,
+  target2?: number | null,
+  target2Provenance?: Target2Provenance | string | null,
+  opts?: { tradingMode?: "swing" | "day"; useLong?: boolean }
+): number | null {
+  const useLong = opts?.useLong !== false;
+  const mode = opts?.tradingMode ?? "swing";
+  if (mode === "swing") {
+    const rrT1 = useLong
+      ? rrFromLevelsLong(entry, target1, stop)
+      : rrFromLevelsShort(entry, target1, stop);
+    if (rrT1 != null && rrT1 < 1.0) return null;
+    return rrT1;
+  }
+  return useLong
+    ? structureRiskRewardLong(entry, target1, stop, target2, target2Provenance)
+    : structureRiskRewardShort(entry, target1, stop, target2, target2Provenance);
+}
+
+/** True when plan R/R would promote to T2 (day-mode gate logic). */
+export function planUsesT2Promotion(
+  entry: number,
+  target1: number,
+  stop: number,
+  target2?: number | null,
+  target2Provenance?: Target2Provenance | string | null,
+  opts?: { useLong?: boolean }
+): boolean {
+  const useLong = opts?.useLong !== false;
+  const provenance = parseTarget2Provenance(target2Provenance);
+  if (target2 == null || !Number.isFinite(target2) || !target2EligibleForGate(provenance)) {
+    return false;
+  }
+  const rrT1 = useLong
+    ? rrFromLevelsLong(entry, target1, stop)
+    : rrFromLevelsShort(entry, target1, stop);
+  const rrT2 = useLong
+    ? rrFromLevelsLong(entry, target2, stop)
+    : rrFromLevelsShort(entry, target2, stop);
+  return rrT1 != null && rrT1 < 1.0 && rrT2 != null && rrT2 > rrT1;
+}

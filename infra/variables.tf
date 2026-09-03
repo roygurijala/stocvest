@@ -150,3 +150,53 @@ variable "weight_rotation_degradation_threshold_pp" {
     error_message = "weight_rotation_degradation_threshold_pp must be between 1 and 50."
   }
 }
+
+# ADR-002 OPS-1 — news_consumer SQS event source (concurrency guard; see docs/adr/ADR-002-*.md)
+variable "news_consumer_sqs_max_concurrency" {
+  description = <<-EOT
+    Maximum concurrent Lambda executions for news_consumer when draining
+    stocvest-news-triage-queue. Prevents a single SQS consumer from starving
+    user-facing API Lambdas on low account concurrency limits.
+  EOT
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.news_consumer_sqs_max_concurrency >= 1 && var.news_consumer_sqs_max_concurrency <= 100
+    error_message = "news_consumer_sqs_max_concurrency must be between 1 and 100."
+  }
+}
+
+variable "news_consumer_sqs_event_source_enabled" {
+  description = <<-EOT
+    Enable the news_consumer SQS event source mapping. Keep false until
+    Lambda account concurrent execution quota is raised (ADR-002 OPS-2).
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "lambda_account_concurrent_execution_quota" {
+  description = <<-EOT
+    AWS Lambda account concurrent execution quota (Service Quotas value).
+    Used to compute the OPS-2 CloudWatch alarm threshold (80% default).
+  EOT
+  type        = number
+  default     = 1000
+
+  validation {
+    condition     = var.lambda_account_concurrent_execution_quota >= 10
+    error_message = "lambda_account_concurrent_execution_quota must be at least 10."
+  }
+}
+
+variable "lambda_concurrent_executions_alarm_threshold_percent" {
+  description = "Alarm when account ConcurrentExecutions exceeds this percent of quota for 5 minutes."
+  type        = number
+  default     = 80
+
+  validation {
+    condition     = var.lambda_concurrent_executions_alarm_threshold_percent >= 50 && var.lambda_concurrent_executions_alarm_threshold_percent <= 100
+    error_message = "lambda_concurrent_executions_alarm_threshold_percent must be between 50 and 100."
+  }
+}

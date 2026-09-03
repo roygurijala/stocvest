@@ -28,8 +28,8 @@ resource "aws_lambda_permission" "eventbridge_signal_resolution" {
 # Gap Intelligence — warm Dynamo read-through cache + keep anchor symbols fresh.
 resource "aws_cloudwatch_event_rule" "gap_intel_cache_tick" {
   name                = "stocvest-gap-intel-cache-tick"
-  description         = "Warm gap-intel DynamoDB cache every 2 minutes"
-  schedule_expression = "rate(2 minutes)"
+  description         = "Warm gap-intel DynamoDB cache every 5 minutes (ADR-002 OPS-1: reduced from 2 min to limit signals Lambda load)"
+  schedule_expression = "rate(5 minutes)"
   state               = "ENABLED"
 
   tags = merge(local.common_tags, {

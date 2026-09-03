@@ -11,6 +11,7 @@ from typing import Any, Literal
 from stocvest.api.services.market_environment import min_risk_reward_from_environment
 from stocvest.api.services.reference_stop_policy import MIN_SWING_STOP_DISTANCE_ATR
 from stocvest.api.services.risk_reward_structure import structure_risk_reward_for_mode
+from stocvest.api.services.swing_universe_filter import swing_exclusion_reason
 from stocvest.signals.composite_score import CompositeVerdict
 
 Mode = Literal["day", "swing"]
@@ -110,10 +111,16 @@ def geometry_tradeability(
     body: dict[str, Any] | None,
     *,
     mode: Mode,
+    symbol: str | None = None,
 ) -> tuple[bool, str | None]:
     """Return ``(desk_surface_eligible, block_reason)``."""
     if not body or not isinstance(body, dict):
         return False, "missing_composite"
+    if mode == "swing":
+        sym = symbol or body.get("symbol")
+        excluded = swing_exclusion_reason(str(sym) if sym else None)
+        if excluded:
+            return False, excluded
     status = str(body.get("status") or "").strip().lower()
     if status in ("incomplete", "insufficient_data"):
         return False, status or "incomplete"
@@ -164,7 +171,7 @@ def annotate_setup_rows_surface_eligibility(
         envelope = read_dashboard_cache(evidence_cache_key(sym, mode))
         body = envelope.get("data") if isinstance(envelope, dict) else None
         if isinstance(body, dict) and not body.get("error"):
-            eligible, reason = geometry_tradeability(body, mode=mode)
+            eligible, reason = geometry_tradeability(body, mode=mode, symbol=sym)
             copy["desk_surface_eligible"] = eligible
             copy["geometry_block_reason"] = reason
         else:

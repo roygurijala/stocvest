@@ -187,3 +187,5 @@ python scripts/signal_history_readiness.py --since-days 90
 **1st of month** — run monthly report for prior month  
 
 Keep the `reports/ledger/` folder; compare week-over-week qualified counts for day vs swing.
+
+For the **VAL-1 personal validation loop** (daily desk workflow, email discipline, weekly checklist), see [`VALIDATION_LOOP.md`](./VALIDATION_LOOP.md). Weekly reports include a VAL-1 section when you pass `--period weekly`.

@@ -8,6 +8,7 @@ from scripts.ledger_signal_report import (
     DeskTally,
     _describe_gate_failure,
     _failed_gates_from_item,
+    _format_val1_weekly_section,
     _is_ledger_row,
     _period_window,
     _primary_gate_failure,
@@ -100,3 +101,25 @@ def test_desk_tally_accumulates_gate_failures() -> None:
     assert st.shadow_with_gate_detail == 1
     assert st.failed_gate_counts["decision_state"] == 1
     assert st.symbol_primary_blocker["AAPL"]
+
+
+def test_val1_weekly_section_flags_high_email_volume() -> None:
+    text = "\n".join(
+        _format_val1_weekly_section(
+            desks={"swing": DeskTally(), "day": DeskTally()},
+            email_stats={"total": 8, "swing": 5, "day": 3, "other_mode": 0},
+        )
+    )
+    assert "REVIEW" in text
+    assert "8" in text
+
+
+def test_val1_weekly_section_passes_within_target() -> None:
+    text = "\n".join(
+        _format_val1_weekly_section(
+            desks={"swing": DeskTally(), "day": DeskTally()},
+            email_stats={"total": 2, "swing": 2, "day": 0, "other_mode": 0},
+        )
+    )
+    assert "PASS" in text
+    assert "REVIEW" not in text

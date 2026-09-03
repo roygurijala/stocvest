@@ -31,6 +31,8 @@ _ET = ZoneInfo("America/New_York")
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_OUT = _REPO_ROOT / "reports" / "ledger"
 _SHADOW_SUFFIX = ":ledger_capture_shadow"
+VAL1_WEEKLY_EXECUTION_EMAIL_TARGET = 5
+_ALERT_HIST_PREFIX = "hist#"
 
 # Order used to pick the "primary" blocker when multiple gates failed.
 _GATE_PRIMARY_ORDER: tuple[str, ...] = (
@@ -431,6 +433,96 @@ def _maturation_actionable_counts(start: date, end: date) -> dict[str, int]:
     return out
 
 
+def _resolve_alerts_table_name() -> str:
+    table_name = (os.environ.get("DYNAMODB_ALERTS") or "").strip()
+    if table_name:
+        return table_name
+    try:
+        from stocvest.utils.config import get_settings
+
+        return (get_settings().dynamodb_alerts or "").strip()
+    except Exception:
+        return ""
+
+
+def _execution_actionable_email_stats(start: date, end: date) -> dict[str, int]:
+    """Count sent execution-actionable emails in the ET date window (best-effort scan)."""
+    out = {"total": 0, "swing": 0, "day": 0, "other_mode": 0}
+    table_name = _resolve_alerts_table_name()
+    if not table_name:
+        return out
+    region = os.environ.get("AWS_REGION", "us-east-1")
+    tbl = boto3.resource("dynamodb", region_name=region).Table(table_name)
+    scan_kwargs: dict[str, Any] = {}
+    while True:
+        resp = tbl.scan(**scan_kwargs)
+        for item in resp.get("Items") or []:
+            aid = str(item.get("alertId") or "")
+            if not aid.startswith(_ALERT_HIST_PREFIX):
+                continue
+            if str(item.get("alertType") or "").strip().lower() != "execution_actionable":
+                continue
+            if str(item.get("status") or "").strip().lower() != "sent":
+                continue
+            ts = _parse_dt(item.get("createdAt") or item.get("sentAt"))
+            if ts is None:
+                continue
+            d = ts.astimezone(_ET).date()
+            if d < start or d > end:
+                continue
+            out["total"] += 1
+            mode = ""
+            body_raw = item.get("body")
+            if isinstance(body_raw, str) and body_raw.strip():
+                try:
+                    body = json.loads(body_raw)
+                    if isinstance(body, dict):
+                        mode = str(body.get("mode") or "").strip().lower()
+                except json.JSONDecodeError:
+                    mode = ""
+            if mode == "swing":
+                out["swing"] += 1
+            elif mode == "day":
+                out["day"] += 1
+            else:
+                out["other_mode"] += 1
+        lek = resp.get("LastEvaluatedKey")
+        if not lek:
+            break
+        scan_kwargs["ExclusiveStartKey"] = lek
+    return out
+
+
+def _format_val1_weekly_section(
+    *,
+    desks: dict[str, DeskTally],
+    email_stats: dict[str, int],
+) -> list[str]:
+    lines: list[str] = []
+    target = VAL1_WEEKLY_EXECUTION_EMAIL_TARGET
+    total = int(email_stats.get("total") or 0)
+    swing_q = (desks.get("swing") or DeskTally()).qualified
+    day_q = (desks.get("day") or DeskTally()).qualified
+    lines.append("--- VAL-1 WEEKLY CHECKLIST ---")
+    lines.append(f"  Execution emails sent     : {total}  (target <= {target}/week)")
+    lines.append(f"    Swing                   : {email_stats.get('swing', 0)}")
+    lines.append(f"    Day                     : {email_stats.get('day', 0)}")
+    if email_stats.get("other_mode"):
+        lines.append(f"    Mode unknown            : {email_stats.get('other_mode', 0)}")
+    lines.append(f"  Ledger qualified swing  : {swing_q}")
+    lines.append(f"  Ledger qualified day      : {day_q}")
+    if total <= target:
+        lines.append(f"  Email volume              : PASS (<= {target})")
+    else:
+        lines.append(f"  Email volume              : REVIEW — exceeds {target}; check alert prefs (execution-only)")
+    lines.append("  Manual checks:")
+    lines.append("    [ ] Each execution email matched deep-dive Geometry honesty rows")
+    lines.append("    [ ] Top shadow blockers reviewed before any gate tuning")
+    lines.append("  See docs/VALIDATION_LOOP.md")
+    lines.append("")
+    return lines
+
+
 def _format_gate_breakdown(desk: str, st: DeskTally) -> list[str]:
     lines: list[str] = []
     lines.append(f"--- {desk.upper()} DESK - TRACKING & GATE FAILURES ---")
@@ -494,6 +586,7 @@ def _format_report(
     desks: dict[str, DeskTally],
     maturation: dict[str, int],
     sample_rows: list[dict[str, Any]],
+    email_stats: dict[str, int] | None = None,
 ) -> str:
     lines: list[str] = []
     now_et = datetime.now(_ET).strftime("%Y-%m-%d %H:%M %Z")
@@ -535,6 +628,9 @@ def _format_report(
     lines.append(f"  Day actionable rows     : {maturation.get('day', 0)}")
     lines.append(f"  Swing actionable rows   : {maturation.get('swing', 0)}")
     lines.append("")
+    if period == "weekly":
+        stats = email_stats or {"total": 0, "swing": 0, "day": 0, "other_mode": 0}
+        lines.extend(_format_val1_weekly_section(desks=desks, email_stats=stats))
     if sample_rows:
         lines.append("--- SAMPLE ROWS (up to 15, newest first) ---")
         for item in sample_rows[:15]:
@@ -623,6 +719,7 @@ def main() -> int:
         reverse=True,
     )
     maturation = _maturation_actionable_counts(start, end)
+    email_stats = _execution_actionable_email_stats(start, end) if args.period == "weekly" else None
     body = _format_report(
         period=args.period,
         window_label=window_label,
@@ -632,6 +729,7 @@ def main() -> int:
         desks=desks,
         maturation=maturation,
         sample_rows=sample,
+        email_stats=email_stats,
     )
 
     out_dir = Path(args.output_dir)

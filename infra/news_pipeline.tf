@@ -46,6 +46,11 @@ resource "aws_lambda_event_source_mapping" "news_consumer_sqs" {
   event_source_arn = aws_sqs_queue.news_triage.arn
   function_name    = aws_lambda_function.api["news_consumer"].arn
   batch_size       = 5
+  enabled          = var.news_consumer_sqs_event_source_enabled
+
+  scaling_config {
+    maximum_concurrency = var.news_consumer_sqs_max_concurrency
+  }
 
   function_response_types = ["ReportBatchItemFailures"]
 

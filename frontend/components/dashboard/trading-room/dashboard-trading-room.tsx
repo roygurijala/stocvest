@@ -1033,7 +1033,13 @@ function TradingRoomBody({
       dataRefreshNonce={centerDataRefreshNonce}
     />
   ) : (
-    <MarketBrief data={briefData} onViewTopSetup={() => topCard && selectCard(topCard)} onSearch={undefined} />
+    <MarketBrief
+      data={briefData}
+      onViewTopSetup={() => topCard && selectCard(topCard)}
+      onSearch={undefined}
+      swingDesk={swingDesk?.data ?? null}
+      onSelectSwingSymbol={(sym) => openSymbol(sym, null, "swing")}
+    />
   );
   // Build live bias map from current desk data for watchlist rail
   const liveBiasBySymbol = useMemo(() => {

@@ -145,6 +145,53 @@ def _apply_min_stop_distance(
     return _round4(stop)
 
 
+def _merge_structural_and_atr_stop(
+    *,
+    direction: Direction,
+    structural: float | None,
+    atr_stop: float | None,
+    trading_mode: TradingMode | None,
+) -> tuple[float | None, bool]:
+    """Pick merged stop before min-width policy.
+
+    Long (stop below entry): lower price = wider cushion.
+    Short (stop above entry): higher price = wider cushion.
+
+    Swing always prefers the **wider** stop (multi-day noise).
+    Day prefers the **tighter** stop when structure already offers room,
+    but still widens to the ATR floor when structure is too tight.
+    """
+    if structural is None and atr_stop is None:
+        return None, False
+    if structural is None:
+        return atr_stop, True
+    if atr_stop is None:
+        return structural, False
+
+    swing = trading_mode != "day"
+    if direction == "bullish":
+        if swing:
+            merged = _round4(min(structural, atr_stop))
+            used_atr = merged <= atr_stop + 1e-8 and structural > atr_stop + 1e-8
+        elif structural > atr_stop + 1e-8:
+            merged = atr_stop
+            used_atr = True
+        else:
+            merged = _round4(max(structural, atr_stop))
+            used_atr = merged >= atr_stop - 1e-8 and structural < atr_stop - 1e-8
+    elif swing:
+        merged = _round4(max(structural, atr_stop))
+        used_atr = merged >= atr_stop - 1e-8 and structural < atr_stop - 1e-8
+    elif structural < atr_stop - 1e-8:
+        merged = atr_stop
+        used_atr = True
+    else:
+        merged = _round4(min(structural, atr_stop))
+        used_atr = merged <= atr_stop + 1e-8 and structural > atr_stop + 1e-8
+
+    return merged, used_atr
+
+
 def resolve_merged_reference_stop(
     *,
     direction: Direction,
@@ -174,12 +221,12 @@ def resolve_merged_reference_stop(
     merged = structural
     used_atr_floor = False
     if structural is not None and atr_stop is not None:
-        if direction == "bullish":
-            merged = _round4(min(structural, atr_stop))
-            used_atr_floor = merged < structural - 1e-8
-        else:
-            merged = _round4(max(structural, atr_stop))
-            used_atr_floor = merged > structural + 1e-8
+        merged, used_atr_floor = _merge_structural_and_atr_stop(
+            direction=direction,
+            structural=structural,
+            atr_stop=atr_stop,
+            trading_mode=trading_mode,
+        )
     elif structural is None and atr_stop is not None:
         merged = atr_stop
         used_atr_floor = True
@@ -187,7 +234,13 @@ def resolve_merged_reference_stop(
     if merged is None:
         return None, False
 
-    return _apply_min_stop_distance(direction, entry, merged, atr, trading_mode=trading_mode), used_atr_floor
+    final_stop = _apply_min_stop_distance(direction, entry, merged, atr, trading_mode=trading_mode)
+    if final_stop is not None and merged is not None:
+        if direction == "bullish" and final_stop < merged - 1e-8:
+            used_atr_floor = True
+        elif direction == "bearish" and final_stop > merged + 1e-8:
+            used_atr_floor = True
+    return final_stop, used_atr_floor
 
 
 def format_merged_stop_provenance(base_label: str, *, atr_k: float, used_atr_floor: bool) -> str:

@@ -11,10 +11,12 @@ from stocvest.api.services.risk_reward_display import positive_risk_reward
 DeskMode = Literal["swing", "day"]
 
 
-def execution_hint_from_composite(body: dict[str, Any] | None, *, mode: DeskMode) -> str | None:
+def execution_hint_from_composite(
+    body: dict[str, Any] | None, *, mode: DeskMode, symbol: str | None = None
+) -> str | None:
     if not body or not isinstance(body, dict):
         return None
-    eligible, reason = geometry_tradeability(body, mode=mode)
+    eligible, reason = geometry_tradeability(body, mode=mode, symbol=symbol)
     if not eligible:
         if reason == "no_clean_entry":
             return "Not tradable — no clean entry band at current structure."
@@ -93,14 +95,16 @@ def discovery_row_from_mover(
         if "desk_surface_eligible" in composite:
             desk_surface_eligible = bool(composite.get("desk_surface_eligible"))
         else:
-            eligible, block = geometry_tradeability(composite, mode=mode)
+            eligible, block = geometry_tradeability(composite, mode=mode, symbol=mover.symbol)
             desk_surface_eligible = eligible
             geometry_block_reason = block
         raw_reason = composite.get("geometry_block_reason")
         if isinstance(raw_reason, str) and raw_reason.strip():
             geometry_block_reason = raw_reason.strip()
         elif desk_surface_eligible is False and geometry_block_reason is None:
-            _, geometry_block_reason = geometry_tradeability(composite, mode=mode)
+            _, geometry_block_reason = geometry_tradeability(
+                composite, mode=mode, symbol=mover.symbol
+            )
 
     row: dict[str, Any] = {
         "symbol": mover.symbol,
@@ -116,7 +120,7 @@ def discovery_row_from_mover(
         "structure_risk_reward": structure_rr,
         "entry_zone_worst_case_rr": entry_zone_rr,
         "composite_status": status,
-        "execution_hint": execution_hint_from_composite(composite, mode=mode),
+        "execution_hint": execution_hint_from_composite(composite, mode=mode, symbol=mover.symbol),
         "execution_actionable": execution_actionable,
         "decision_state": decision_state,
         "direction_confidence": direction_confidence,

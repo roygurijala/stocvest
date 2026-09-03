@@ -169,9 +169,10 @@ export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
   const pathname = usePathname();
   const { theme, colors } = useTheme();
   const { profile } = useContext(UserProfileContext);
+  const adminNavVisible = isAdmin;
   const pathInAdmin = pathname === "/dashboard/admin" || pathname.startsWith("/dashboard/admin/");
-  const [adminExpanded, setAdminExpanded] = useAdminNavExpanded(pathInAdmin && isAdmin);
-  const adminActive = isAdmin && pathInAdmin;
+  const [adminExpanded, setAdminExpanded] = useAdminNavExpanded(pathInAdmin && adminNavVisible);
+  const adminActive = adminNavVisible && pathInAdmin;
 
   // Status orb reflects the live session phase rather than a fixed "live" state.
   const sessionPhase = useMarketSessionPhase();
@@ -214,7 +215,9 @@ export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
 
         <div className="lnav-scroll">
           {NAV_SECTIONS.map((section) => {
-            const items = section.items.filter(isDashboardNavItemEnabled);
+            const items = section.items.filter(
+              (item) => isDashboardNavItemEnabled(item)
+            );
             if (items.length === 0 && section.id !== "system") return null;
             return (
               <Fragment key={section.id}>
@@ -232,7 +235,7 @@ export function Sidebar({ userLabel, isAdmin = false }: SidebarProps) {
                   );
                 })}
 
-                {section.id === "system" && isAdmin ? (
+                {section.id === "system" && adminNavVisible ? (
                   <>
                     <button
                       type="button"

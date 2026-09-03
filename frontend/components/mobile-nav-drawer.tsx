@@ -32,10 +32,11 @@ export function MobileNavDrawer({
 }: MobileNavDrawerProps) {
   const pathname = usePathname();
   const { colors } = useTheme();
-  const adminItems = isAdmin ? DASHBOARD_ADMIN_NAV_ITEMS : [];
+  const adminNavVisible = isAdmin;
+  const adminItems = adminNavVisible ? DASHBOARD_ADMIN_NAV_ITEMS : [];
   const pathInAdmin =
     pathname === "/dashboard/admin" || pathname.startsWith("/dashboard/admin/");
-  const adminActive = isAdmin && pathInAdmin;
+  const adminActive = adminNavVisible && pathInAdmin;
   const [adminExpanded, setAdminExpanded] = useState<boolean>(false);
   useEffect(() => {
     if (pathInAdmin) setAdminExpanded(true);
@@ -113,7 +114,9 @@ export function MobileNavDrawer({
               style={{ padding: spacing[4], display: "grid", gap: spacing[3], alignContent: "start" }}
             >
               {NAV_SECTIONS.map((section) => {
-                const items = section.items.filter(isDashboardNavItemEnabled);
+                const items = section.items.filter(
+                  (item) => isDashboardNavItemEnabled(item)
+                );
                 if (items.length === 0) return null;
                 return (
                   <div key={section.id} style={{ display: "grid", gap: spacing[1] }}>
