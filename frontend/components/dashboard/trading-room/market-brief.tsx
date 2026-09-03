@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { BarChart3, CalendarClock, Compass, Eye, LineChart, Newspaper, Target } from "lucide-react";
 import { useTheme } from "@/lib/theme-provider";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
@@ -209,6 +209,12 @@ export function MarketBrief({
 }: MarketBriefProps) {
   const { theme, colors } = useTheme();
   const [selectedSectorEtf, setSelectedSectorEtf] = useState<string | null>(null);
+  const sectorPanelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!selectedSectorEtf || !sectorPanelRef.current) return;
+    sectorPanelRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedSectorEtf]);
   const updated = relativeFrom(data.updatedAtIso);
   const top = data.topCard;
   const topActionable = data.counts.actionable > 0;
@@ -503,6 +509,7 @@ export function MarketBrief({
                 </div>
                 {selectedSectorEtf && onSelectSymbol ? (
                   <SectorDeskPanel
+                    panelRef={sectorPanelRef}
                     sector={data.sectors.find((s) => s.symbol === selectedSectorEtf) ?? null}
                     rows={buildSectorDeskRows(trackedCards, selectedSectorEtf)}
                     colors={colors}
@@ -568,20 +575,49 @@ export function MarketBrief({
               <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
                 {data.watchlistAtClose.slice(0, 6).map((w) => {
                   const rowTone = w.changePct == null ? colors.textMuted : w.changePct >= 0 ? colors.bullish : colors.bearish;
-                  return (
-                    <div key={w.symbol} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2] }}>
-                      {onSelectSymbol ? (
-                        <BriefSymbolButton
-                          symbol={w.symbol}
-                          onClick={() => onSelectSymbol(w.symbol, null, "swing")}
-                          colors={colors}
-                          style={{ width: 56, flexShrink: 0, fontSize: typography.scale.sm, fontWeight: 600 }}
-                        />
-                      ) : (
-                        <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text, width: 56, flexShrink: 0 }}>
+                  if (onSelectSymbol) {
+                    return (
+                      <button
+                        key={w.symbol}
+                        type="button"
+                        data-testid={`market-brief-watchlist-row-${w.symbol}`}
+                        onClick={() => onSelectSymbol(w.symbol, null, "swing")}
+                        style={{
+                          display: "flex",
+                          alignItems: "baseline",
+                          justifyContent: "space-between",
+                          gap: spacing[2],
+                          width: "100%",
+                          padding: `${spacing[1]} ${spacing[2]}`,
+                          margin: `0 -${spacing[2]}`,
+                          border: "none",
+                          borderRadius: borderRadius.sm,
+                          background: "transparent",
+                          color: colors.text,
+                          textAlign: "left",
+                          cursor: "pointer"
+                        }}
+                      >
+                        <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.accent, width: 56, flexShrink: 0, fontFamily: typography.fontFamilyMono }}>
                           {w.symbol}
                         </span>
-                      )}
+                        <span style={{ fontSize: typography.scale.sm, color: colors.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                          {w.price != null ? `$${w.price.toFixed(2)}` : "—"}
+                        </span>
+                        <span style={{ fontSize: typography.scale.sm, color: rowTone, flexShrink: 0, width: 64, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                          {fmtPct(w.changePct)}
+                        </span>
+                        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {w.stateLabel}
+                        </span>
+                      </button>
+                    );
+                  }
+                  return (
+                    <div key={w.symbol} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2] }}>
+                      <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text, width: 56, flexShrink: 0 }}>
+                        {w.symbol}
+                      </span>
                       <span style={{ fontSize: typography.scale.sm, color: colors.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                         {w.price != null ? `$${w.price.toFixed(2)}` : "—"}
                       </span>
@@ -974,11 +1010,13 @@ function SectorChip({
 }
 
 function SectorDeskPanel({
+  panelRef,
   sector,
   rows,
   colors,
   onSelectSymbol
 }: {
+  panelRef?: RefObject<HTMLDivElement | null>;
   sector: BriefSector | null;
   rows: SectorDeskRow[];
   colors: ReturnType<typeof useTheme>["colors"];
@@ -988,6 +1026,7 @@ function SectorDeskPanel({
   const note = sectorMomentumTradingNote(sector);
   return (
     <div
+      ref={panelRef}
       data-testid={`market-brief-sector-panel-${sector.symbol}`}
       style={{
         display: "flex",
@@ -1135,28 +1174,55 @@ function MoverColumn({
       {movers.length === 0 ? (
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>—</span>
       ) : (
-        movers.map((m) => (
-          <div key={m.symbol} style={{ display: "flex", justifyContent: "space-between", gap: spacing[2], minWidth: 0 }}>
-            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {onSelectSymbol ? (
-                <BriefSymbolButton
-                  symbol={m.symbol}
-                  onClick={() => onSelectSymbol(m.symbol, m.company, m.lane)}
-                  colors={colors}
-                  style={{ fontSize: typography.scale.sm, fontWeight: 600 }}
-                />
-              ) : (
+        movers.map((m) =>
+          onSelectSymbol ? (
+            <button
+              key={m.symbol}
+              type="button"
+              data-testid={`market-brief-mover-row-${m.symbol}`}
+              onClick={() => onSelectSymbol(m.symbol, m.company, m.lane)}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: spacing[2],
+                minWidth: 0,
+                width: "100%",
+                padding: `${spacing[1]} ${spacing[1]}`,
+                margin: `0 -${spacing[1]}`,
+                border: "none",
+                borderRadius: borderRadius.sm,
+                background: "transparent",
+                color: colors.text,
+                textAlign: "left",
+                cursor: "pointer"
+              }}
+            >
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.accent, fontFamily: typography.fontFamilyMono }}>
+                  {m.symbol}
+                </span>
+                {m.company ? (
+                  <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}> · {m.company}</span>
+                ) : null}
+              </span>
+              <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: tone, flexShrink: 0 }}>
+                {fmtPct(m.changePct)}
+              </span>
+            </button>
+          ) : (
+            <div key={m.symbol} style={{ display: "flex", justifyContent: "space-between", gap: spacing[2], minWidth: 0 }}>
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text }}>{m.symbol}</span>
-              )}
-              {m.company ? (
-                <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}> · {m.company}</span>
-              ) : null}
-            </span>
-            <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: tone, flexShrink: 0 }}>
-              {fmtPct(m.changePct)}
-            </span>
-          </div>
-        ))
+                {m.company ? (
+                  <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}> · {m.company}</span>
+                ) : null}
+              </span>
+              <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: tone, flexShrink: 0 }}>
+                {fmtPct(m.changePct)}
+              </span>
+            </div>
+          )
+        )
       )}
     </div>
   );

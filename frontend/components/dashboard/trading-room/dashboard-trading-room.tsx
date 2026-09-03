@@ -503,6 +503,8 @@ function TradingRoomBody({
     setSelectedId(card.id);
     setOverrideCard(card);
     setLastSelectedId(card.id);
+    recordTradingRoomVisit();
+    selectionBootstrappedRef.current = true;
     syncSymbolInUrl(card);
   };
   const select = (id: string | null) => {
@@ -635,21 +637,24 @@ function TradingRoomBody({
     const freshTradingDay = !pendingHandoff && isFirstVisitOfTradingDay();
     const freshAfterLogin = !pendingHandoff && consumeTradingRoomPostLoginFresh();
 
+    // Card clicks update the URL via `replaceState`, which does not refresh
+    // `useSearchParams`. When the user already has a selection, keep it and heal
+    // the address bar — never stomp a fresh click with stale hook params or a
+    // first-visit-of-day reset.
+    if (selectedId) {
+      const active =
+        selected ?? (overrideCard && overrideCard.id === selectedId ? overrideCard : null);
+      if (active) syncSymbolInUrl(active);
+      clearTradingRoomOpenIntent();
+      recordTradingRoomVisit();
+      selectionBootstrappedRef.current = true;
+      return;
+    }
+
     // First open each NY day, or first dashboard load after logout → login, lands
     // on Market Brief — even when a symbol is still in the URL or sessionStorage.
     if (freshTradingDay || freshAfterLogin) {
       resetToMarketBrief();
-      return;
-    }
-
-    // Card clicks update the URL via `replaceState`, which does not refresh
-    // `useSearchParams`. When the user already has a selection, keep it and heal
-    // the address bar — never stomp a fresh click with stale hook params.
-    if (selectedId && selected) {
-      syncSymbolInUrl(selected);
-      clearTradingRoomOpenIntent();
-      recordTradingRoomVisit();
-      selectionBootstrappedRef.current = true;
       return;
     }
 
@@ -691,12 +696,12 @@ function TradingRoomBody({
 
   useLayoutEffect(() => {
     applyDeepLinkOrRestoreSelection();
-  }, [openIntent, searchParams, allCards, selectedId]);
+  }, [openIntent, searchParams, allCards, selectedId, selected, overrideCard]);
 
   // Safety net: `useSearchParams` can hydrate one frame after `window.location`.
   useEffect(() => {
     applyDeepLinkOrRestoreSelection();
-  }, [openIntent, searchParams, allCards, selectedId]);
+  }, [openIntent, searchParams, allCards, selectedId, selected, overrideCard]);
 
   // Tabs left open overnight keep React state — reset when the calendar day turns.
   useEffect(() => {
@@ -1037,12 +1042,14 @@ function TradingRoomBody({
       trackedPlanKeys={trackedPlanKeys}
     />
   );
-  const centerPanel = selected ? (
+  const centerCard =
+    selected ?? (overrideCard && overrideCard.id === selectedId ? overrideCard : null);
+  const centerPanel = centerCard ? (
     <DeepDive
-      card={selected}
+      card={centerCard}
       allCards={cardsWithNames}
       companyBySymbol={resolvedCompanyBySymbol}
-      snapshot={snapshotsBySymbol.get(selected.symbol) ?? null}
+      snapshot={snapshotsBySymbol.get(centerCard.symbol) ?? null}
       onBackToBrief={() => select(null)}
       isMobile={isMobile}
       colors={colors}
