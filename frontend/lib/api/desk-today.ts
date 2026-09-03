@@ -74,6 +74,8 @@ export type DeskTodayData = {
   rejected_samples?: Array<{ symbol: string; reason: string; seen_at?: string }>;
   recently_hot?: DeskRecentlyHotRow[];
   quiet_leaders?: DeskQuietLeader[];
+  /** Swing composite rows that failed geometry gates — shown when discovery is empty. */
+  developing_setups?: DeskDiscoveryLeader[];
 };
 
 export type DeskWhyMissingDiagnostic = {

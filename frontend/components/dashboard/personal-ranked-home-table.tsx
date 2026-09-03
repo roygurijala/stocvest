@@ -1,14 +1,17 @@
 "use client";
 
 import { useMemo } from "react";
+import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import {
-  buildMarketSwingRankedRows,
+  buildMarketSwingRankedRowsResult,
+  marketSwingTableSourceDisclaimer,
   type PersonalRankedRow
 } from "@/lib/dashboard/personal-ranked-home-present";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type { useTheme } from "@/lib/theme-provider";
 import type { FeedState } from "@/lib/dashboard/trading-room/feed-model";
+import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
 
 const SWING_ACCENT = "#8B5CF6";
 
@@ -18,19 +21,32 @@ type ThemeColors = ReturnType<typeof useTheme>["colors"];
 
 export function MarketSwingSetupsTable({
   swingDesk,
+  swingSetups = [],
+  nearQualification = [],
   onSelectSymbol,
   colors,
   isMobile = false,
   embedded = false
 }: {
   swingDesk: DeskTodayData | null | undefined;
+  swingSetups?: readonly IntradaySetupPayload[];
+  nearQualification?: readonly ScannerNearQualificationRow[];
   onSelectSymbol: (symbol: string) => void;
   colors: ThemeColors;
   isMobile?: boolean;
   /** When true, omit outer title — parent section supplies the header. */
   embedded?: boolean;
 }) {
-  const rows = useMemo(() => buildMarketSwingRankedRows(swingDesk), [swingDesk]);
+  const { rows, source } = useMemo(
+    () =>
+      buildMarketSwingRankedRowsResult({
+        swingDesk,
+        swingSetups,
+        nearQualification
+      }),
+    [swingDesk, swingSetups, nearQualification]
+  );
+  const sourceDisclaimer = marketSwingTableSourceDisclaimer(source);
 
   return (
     <div
@@ -66,12 +82,32 @@ export function MarketSwingSetupsTable({
       ) : (
         <div
           style={{
-            border: `1px solid ${colors.border}`,
-            borderRadius: borderRadius.md,
-            overflow: isMobile ? "auto" : "hidden",
-            background: colors.surface
+            display: "flex",
+            flexDirection: "column",
+            gap: spacing[2]
           }}
         >
+          {sourceDisclaimer ? (
+            <p
+              data-testid="market-swing-setups-fallback-note"
+              style={{
+                margin: 0,
+                fontSize: typography.scale.xs,
+                color: colors.textMuted,
+                lineHeight: 1.45
+              }}
+            >
+              {sourceDisclaimer}
+            </p>
+          ) : null}
+          <div
+            style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: borderRadius.md,
+              overflow: isMobile ? "auto" : "hidden",
+              background: colors.surface
+            }}
+          >
           <div
             role="row"
             style={{
@@ -108,6 +144,7 @@ export function MarketSwingSetupsTable({
               />
             ))}
           </ol>
+        </div>
         </div>
       )}
     </div>

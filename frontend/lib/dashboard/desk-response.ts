@@ -22,3 +22,23 @@ export function isDeskCacheStale(res: DeskTodayResponse | null | undefined): boo
 export function deskDataFromResponse(res: DeskTodayResponse | null | undefined): DeskTodayData | null {
   return res?.data ?? null;
 }
+
+/**
+ * True when movers radar is fresh but the last full composite batch never populated
+ * discovery / quiet / developing — triggers a one-time desk refresh, not when a full
+ * batch ran and geometry legitimately filtered everything.
+ */
+export function swingDeskNeedsDiscoveryRefresh(res: DeskTodayResponse | null | undefined): boolean {
+  const data = res?.data;
+  if (!data) return false;
+  const tier = String(data.tier ?? "")
+    .trim()
+    .toLowerCase();
+  if (tier !== "movers") return false;
+  const movers = Array.isArray(data.movers_radar) ? data.movers_radar.length : 0;
+  if (movers === 0) return false;
+  const discovery = Array.isArray(data.discovery) ? data.discovery.length : 0;
+  const quiet = Array.isArray(data.quiet_leaders) ? data.quiet_leaders.length : 0;
+  const developing = Array.isArray(data.developing_setups) ? data.developing_setups.length : 0;
+  return discovery + quiet + developing === 0;
+}
