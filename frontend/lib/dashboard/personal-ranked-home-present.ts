@@ -8,14 +8,13 @@ import type { DeskDiscoveryLeader, DeskQuietLeader, DeskTodayData } from "@/lib/
 import { formatWatchlistMaturationDisplayLine } from "@/lib/alignment-display-tier";
 import { resolveRiskReward } from "@/lib/dashboard/hot-in-market-card-present";
 import {
-  FEED_STATE_LABEL,
   presentDeskLeaderBias,
   presentDeskLeaderState,
   presentDeskLeaderVerdict,
   type FeedBias,
   type FeedState
 } from "@/lib/dashboard/trading-room/feed-model";
-import { feedCardStateLabel } from "@/lib/dashboard/trading-room/feed-state-present";
+import { FEED_STATE_LABEL, feedCardStateLabel } from "@/lib/dashboard/trading-room/feed-state-present";
 import {
   groupSymbolsIntoAttentionTiers,
   sortSymbolsInAttentionTier,
