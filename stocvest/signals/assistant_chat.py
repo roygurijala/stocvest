@@ -75,12 +75,47 @@ _DETERMINISTIC_CONTEXTUAL_REPLY = (
     "describing what it represents and what it is not."
 )
 
+_ASSISTANT_SERVICE_UNAVAILABLE_REPLY = (
+    "I couldn't reach the explanation service just now. Please try again in a moment. "
+    "STOCVEST's Decision line and column tooltips on screen always carry the "
+    "authoritative reasoning."
+)
+
 _DETERMINISTIC_PUBLIC_REPLY = (
     "I'm the STOCVEST Assistant. STOCVEST is a market analysis and decision-support "
     "system: it explains why a signal is in Monitor, Blocked, or Actionable rather than "
-    "telling you what to trade. The explanation service is briefly unavailable; please "
-    "try again in a moment."
+    f"telling you what to trade. {_ASSISTANT_SERVICE_UNAVAILABLE_REPLY}"
 )
+
+
+def _anthropic_fallback_message(status_code: int, body_text: str) -> str:
+    """Map Anthropic HTTP failures to a calm user-facing fallback (never raw API text)."""
+    msg = ""
+    try:
+        parsed = json.loads(body_text)
+        err = parsed.get("error") if isinstance(parsed, dict) else None
+        if isinstance(err, dict):
+            msg = str(err.get("message") or "")
+    except (TypeError, json.JSONDecodeError):
+        msg = body_text[:240]
+
+    low = msg.lower()
+    if "credit balance" in low or "purchase credits" in low:
+        _LOG.error("assistant_chat: Anthropic billing/credits exhausted (http %s)", status_code)
+        return (
+            "AI explanations are paused right now while the explanation provider is restored. "
+            "STOCVEST's Decision line and column tooltips on your screen still show the "
+            "authoritative reasoning for this setup."
+        )
+    if status_code == 429 or "rate limit" in low:
+        _LOG.warning("assistant_chat: Anthropic rate limited (http %s)", status_code)
+    else:
+        _LOG.warning(
+            "assistant_chat: Anthropic request failed (http %s): %s",
+            status_code,
+            msg[:240] or body_text[:240],
+        )
+    return _ASSISTANT_SERVICE_UNAVAILABLE_REPLY
 
 
 HISTORICAL_VALIDATION_BLOCK_HEADER = "=== HISTORICAL VALIDATION ==="
@@ -722,7 +757,7 @@ class AssistantChatService:
             max_tokens = 900
         else:
             max_tokens = 380
-        ai_text = await self._claude_chat_or_none(
+        ai_text, fallback_text = await self._claude_chat_or_none(
             system=system_text,
             messages=clean,
             max_tokens=max_tokens,
@@ -737,11 +772,7 @@ class AssistantChatService:
             )
 
         return AssistantChatResult(
-            text=(
-                "I couldn't reach the explanation service just now. Please try again in a "
-                "moment. STOCVEST's Decision line and column tooltips on screen always "
-                "carry the authoritative reasoning."
-            ),
+            text=fallback_text or _ASSISTANT_SERVICE_UNAVAILABLE_REPLY,
             source="deterministic",
             mode=mode,
             upgrade_available=False,
@@ -782,7 +813,7 @@ class AssistantChatService:
             system_text += "\n" + serialize_page_context(marketing_ctx)
         else:
             system_text += "\n=== PAGE CONTEXT ===\nmode=general\nsession_mode=public\n"
-        ai_text = await self._claude_chat_or_none(
+        ai_text, fallback_text = await self._claude_chat_or_none(
             system=system_text,
             messages=clean,
             max_tokens=400,
@@ -796,7 +827,7 @@ class AssistantChatService:
             )
 
         return AssistantChatResult(
-            text=_DETERMINISTIC_PUBLIC_REPLY,
+            text=fallback_text or _DETERMINISTIC_PUBLIC_REPLY,
             source="deterministic",
             mode="general",
             upgrade_available=True,
@@ -809,11 +840,12 @@ class AssistantChatService:
         messages: list[dict[str, str]],
         max_tokens: int,
         attached_image: dict[str, str] | None = None,
-    ) -> str | None:
+    ) -> tuple[str | None, str | None]:
         settings = get_settings()
         api_key = (settings.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY") or "").strip()
         if not api_key:
-            return None
+            _LOG.error("assistant_chat: ANTHROPIC_API_KEY missing — returning deterministic fallback")
+            return None, _ASSISTANT_SERVICE_UNAVAILABLE_REPLY
 
         # When an image is attached, upgrade the last user message to a
         # multi-part content block so Claude vision can inspect it.
@@ -860,17 +892,16 @@ class AssistantChatService:
             async with httpx.AsyncClient(timeout=20.0) as client:
                 res = await client.post(ANTHROPIC_API_URL, headers=headers, json=payload)
             if res.status_code >= 400:
-                _LOG.debug("assistant_chat claude http %s", res.status_code)
-                return None
+                return None, _anthropic_fallback_message(res.status_code, res.text)
             body = res.json()
             blocks = body.get("content")
             if not isinstance(blocks, list) or not blocks:
-                return None
+                return None, _ASSISTANT_SERVICE_UNAVAILABLE_REPLY
             text = str(blocks[0].get("text") or "").strip()
-            return text or None
+            return (text, None) if text else (None, _ASSISTANT_SERVICE_UNAVAILABLE_REPLY)
         except (httpx.HTTPError, TypeError, KeyError, json.JSONDecodeError, asyncio.TimeoutError) as exc:
-            _LOG.debug("assistant_chat claude skip: %s", type(exc).__name__)
-            return None
+            _LOG.warning("assistant_chat: Anthropic transport error: %s", type(exc).__name__)
+            return None, _ASSISTANT_SERVICE_UNAVAILABLE_REPLY
 
 
 def _mode_from_context(ctx: dict[str, Any] | None) -> AssistantMode:
