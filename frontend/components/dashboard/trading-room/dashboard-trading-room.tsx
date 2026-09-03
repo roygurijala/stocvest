@@ -1136,19 +1136,6 @@ function TradingRoomBody({
         <TrackedPlansAlertStrip />
       </div>
 
-      {/* Hide the filter bar when the desk is quiet — there's nothing to filter,
-          and the feed shows the "building structure / session activity" view. */}
-      {allCards.length > 0 ? (
-        <FilterBar
-          filters={filters}
-          onChange={setFilters}
-          showDay={dayTradingSurfaces}
-          bleed={bleed}
-          isMobile={isMobile}
-          colors={colors}
-        />
-      ) : null}
-
       <div
         className="trading-room-layout"
         style={{
@@ -1163,7 +1150,23 @@ function TradingRoomBody({
           overflow: isMobile ? undefined : "hidden"
         }}
       >
-        {wrapPanel(feedPanel, "feed")}
+        {wrapPanel(
+          <>
+            {allCards.length > 0 ? (
+              <FilterBar
+                filters={filters}
+                onChange={setFilters}
+                showDay={dayTradingSurfaces}
+                isMobile={isMobile}
+                colors={colors}
+                visibleCount={ranked.length}
+                totalCount={cardsWithNames.length}
+              />
+            ) : null}
+            {feedPanel}
+          </>,
+          "feed"
+        )}
         {wrapPanel(centerPanel, "center")}
         {wrapPanel(railPanel, "rail")}
       </div>
@@ -1177,16 +1180,18 @@ function FilterBar({
   filters,
   onChange,
   showDay,
-  bleed,
   isMobile = false,
-  colors
+  colors,
+  visibleCount,
+  totalCount
 }: {
   filters: FeedFilters;
   onChange: (f: FeedFilters) => void;
   showDay: boolean;
-  bleed: string;
   isMobile?: boolean;
   colors: ReturnType<typeof useTheme>["colors"];
+  visibleCount: number;
+  totalCount: number;
 }) {
   // Lane = the prototype's mode pillset: Day reads electric-blue, Swing violet.
   const laneOpts: SegOption<FeedFilters["lane"]>[] = showDay
@@ -1213,39 +1218,65 @@ function FilterBar({
 
   return (
     <div
+      data-testid="trading-room-feed-filters"
       style={{
         display: "flex",
-        gap: spacing[4],
-        alignItems: "center",
-        // Mobile: keep the pillsets on one line and let them scroll horizontally
-        // rather than wrapping into a tall stack.
-        flexWrap: isMobile ? "nowrap" : "wrap",
-        overflowX: isMobile ? "auto" : "visible",
-        padding: `${spacing[2]} ${bleed}`,
-        marginLeft: `-${bleed}`,
-        marginRight: `-${bleed}`,
-        background: colors.background,
-        borderBottom: `1px solid ${colors.border}`
+        flexDirection: "column",
+        gap: spacing[2],
+        paddingBottom: spacing[3],
+        marginBottom: spacing[3],
+        borderBottom: `1px solid ${colors.border}`,
+        flexShrink: 0
       }}
     >
-      <SegGroup
-        value={filters.lane}
-        options={laneOpts}
-        onSelect={(v) => onChange({ ...filters, lane: v })}
-        colors={colors}
-      />
-      <SegGroup
-        value={filters.state}
-        options={stateOpts}
-        onSelect={(v) => onChange({ ...filters, state: v })}
-        colors={colors}
-      />
-      <SegGroup
-        value={filters.bias}
-        options={biasOpts}
-        onSelect={(v) => onChange({ ...filters, bias: v })}
-        colors={colors}
-      />
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: colors.textMuted
+          }}
+        >
+          Desk feed
+        </span>
+        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>
+          {visibleCount === totalCount
+            ? "Filters apply to setups in this column only."
+            : `Showing ${visibleCount} of ${totalCount} setups in this column.`}
+        </span>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: spacing[2],
+          alignItems: "stretch"
+        }}
+      >
+        <SegGroup
+          value={filters.lane}
+          options={laneOpts}
+          onSelect={(v) => onChange({ ...filters, lane: v })}
+          colors={colors}
+          fullWidth={!isMobile}
+        />
+        <SegGroup
+          value={filters.state}
+          options={stateOpts}
+          onSelect={(v) => onChange({ ...filters, state: v })}
+          colors={colors}
+          fullWidth={!isMobile}
+        />
+        <SegGroup
+          value={filters.bias}
+          options={biasOpts}
+          onSelect={(v) => onChange({ ...filters, bias: v })}
+          colors={colors}
+          fullWidth={!isMobile}
+        />
+      </div>
     </div>
   );
 }
@@ -1263,22 +1294,27 @@ function SegGroup<T extends string>({
   value,
   options,
   onSelect,
-  colors
+  colors,
+  fullWidth = false
 }: {
   value: T;
   options: SegOption<T>[];
   onSelect: (v: T) => void;
   colors: ReturnType<typeof useTheme>["colors"];
+  fullWidth?: boolean;
 }) {
   return (
     <div
       style={{
-        display: "inline-flex",
+        display: "flex",
         gap: 4,
         padding: 3,
         background: colors.surface,
         border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.full
+        borderRadius: borderRadius.full,
+        width: fullWidth ? "100%" : undefined,
+        overflowX: fullWidth ? "auto" : undefined,
+        flexWrap: fullWidth ? "nowrap" : undefined
       }}
     >
       {options.map((opt) => {
@@ -1300,7 +1336,9 @@ function SegGroup<T extends string>({
               borderRadius: borderRadius.full,
               cursor: "pointer",
               transition: "color .14s, background .14s",
-              whiteSpace: "nowrap"
+              whiteSpace: "nowrap",
+              flex: fullWidth ? "1 1 0" : undefined,
+              minWidth: fullWidth ? 0 : undefined
             }}
           >
             {opt.icon ? <span style={{ marginRight: 5 }}>{opt.icon}</span> : null}
@@ -1655,7 +1693,8 @@ function SignalFeed({
           </>
         ) : (
           <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
-            No setups match the current filters. Try widening the filters above — the desk has names in other lanes.
+            No setups match the desk feed filters. Try widening lane, state, or direction above — the desk has
+            names in other lanes.
           </p>
         )
       ) : null}
