@@ -811,7 +811,13 @@ function TradingRoomBody({
     for (const row of sectorRotation) {
       const pct = useDaily ? (row.pct1d ?? row.pct5d) : (row.pct5d ?? row.pct1d);
       if (pct == null) continue;
-      result.push({ label: row.label, pct, pct1d: row.pct1d ?? null, pct5d: row.pct5d ?? null });
+      result.push({
+        symbol: row.symbol,
+        label: row.label,
+        pct,
+        pct1d: row.pct1d ?? null,
+        pct5d: row.pct5d ?? null
+      });
     }
     return result.sort((a, b) => b.pct - a.pct);
   }, [sectorRotation, marketOpen]);
@@ -821,7 +827,12 @@ function TradingRoomBody({
   const movers = useMemo(() => {
     const withPct = allCards
       .filter((c) => typeof c.changePct === "number" && Number.isFinite(c.changePct))
-      .map((c) => ({ symbol: c.symbol, company: c.company ?? null, changePct: c.changePct as number }));
+      .map((c) => ({
+        symbol: c.symbol,
+        company: c.company ?? null,
+        changePct: c.changePct as number,
+        lane: c.lane
+      }));
     const seen = new Set<string>();
     const dedup: BriefMover[] = [];
     for (const m of withPct) {
@@ -1045,7 +1056,8 @@ function TradingRoomBody({
       swingDesk={swingDesk?.data ?? null}
       swingSetups={swingSetups}
       nearQualification={swingNearQualification}
-      onSelectSwingSymbol={(sym) => openSymbol(sym, null, "swing")}
+      onSelectSymbol={(sym, company, lane) => openSymbol(sym, company, lane ?? "swing")}
+      trackedCards={allCards}
     />
   );
   // Build live bias map from current desk data for watchlist rail
