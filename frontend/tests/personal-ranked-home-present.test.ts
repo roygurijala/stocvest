@@ -58,6 +58,30 @@ describe("collectMarketSwingSymbols", () => {
     };
     expect(collectMarketSwingSymbols(swingDesk)).toEqual([]);
   });
+
+  test("excludes day-desk leaders even when present on swing cache payload", () => {
+    const swingDesk: DeskTodayData = {
+      discovery: [
+        {
+          symbol: "TSLA",
+          gap_percent: 3,
+          direction: "up",
+          rank_score: 88,
+          desk: "day",
+          desk_surface_eligible: true
+        },
+        {
+          symbol: "AAPL",
+          gap_percent: 0.4,
+          direction: "up",
+          rank_score: 72,
+          desk: "swing",
+          desk_surface_eligible: true
+        }
+      ]
+    };
+    expect(collectMarketSwingSymbols(swingDesk)).toEqual(["AAPL"]);
+  });
 });
 
 describe("buildMarketSwingRankedRows", () => {

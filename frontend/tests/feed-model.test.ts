@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { buildFeedCards } from "@/lib/dashboard/trading-room/feed-model";
+import { buildFeedCards, findFeedCardForSymbolLane } from "@/lib/dashboard/trading-room/feed-model";
+import type { FeedCard } from "@/lib/dashboard/trading-room/feed-model";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 
 const swingDesk: DeskTodayData = {
@@ -230,5 +231,54 @@ describe("buildFeedCards", () => {
     });
     const snxx = cards.find((c) => c.symbol === "SNXX");
     expect(snxx?.state).toBe("near");
+  });
+});
+
+describe("findFeedCardForSymbolLane", () => {
+  const cards: FeedCard[] = [
+    {
+      id: "day:NVDA",
+      symbol: "NVDA",
+      company: null,
+      lane: "day",
+      state: "actionable",
+      bias: "bull",
+      verdict: "Day setup",
+      phase: null,
+      price: null,
+      changePct: null,
+      alignment: null,
+      rankScore: 90,
+      source: "desk",
+      setupTier: "setup",
+      lastEvaluatedAt: null
+    },
+    {
+      id: "swing:NVDA",
+      symbol: "NVDA",
+      company: null,
+      lane: "swing",
+      state: "near",
+      bias: "bull",
+      verdict: "Swing setup",
+      phase: null,
+      price: null,
+      changePct: null,
+      alignment: null,
+      rankScore: 80,
+      source: "desk",
+      setupTier: "setup",
+      lastEvaluatedAt: null
+    }
+  ];
+
+  test("returns the card for the requested lane only", () => {
+    expect(findFeedCardForSymbolLane(cards, "NVDA", "swing")?.verdict).toBe("Swing setup");
+    expect(findFeedCardForSymbolLane(cards, "NVDA", "day")?.verdict).toBe("Day setup");
+  });
+
+  test("does not fall back to another lane for the same symbol", () => {
+    expect(findFeedCardForSymbolLane(cards, "NVDA", "swing")?.lane).toBe("swing");
+    expect(findFeedCardForSymbolLane([cards[0]], "NVDA", "swing")).toBeUndefined();
   });
 });

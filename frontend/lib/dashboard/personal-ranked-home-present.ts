@@ -88,16 +88,20 @@ const FEED_STATE_ORDER: Record<FeedState, number> = {
   cooling: 3
 };
 
+function isSwingDeskLeader(leader: DeskLeader): boolean {
+  return leader.desk !== "day";
+}
+
 function indexEligibleSwingDeskLeaders(desk: DeskTodayData | null | undefined): Map<string, DeskLeader> {
   const map = new Map<string, DeskLeader>();
   for (const leader of desk?.discovery ?? []) {
     const sym = leader.symbol.trim().toUpperCase();
-    if (!sym || leader.desk_surface_eligible === false) continue;
+    if (!sym || !isSwingDeskLeader(leader) || leader.desk_surface_eligible === false) continue;
     map.set(sym, leader);
   }
   for (const leader of desk?.quiet_leaders ?? []) {
     const sym = leader.symbol.trim().toUpperCase();
-    if (!sym || leader.desk_surface_eligible === false) continue;
+    if (!sym || !isSwingDeskLeader(leader) || leader.desk_surface_eligible === false) continue;
     if (!map.has(sym)) map.set(sym, leader);
   }
   return map;
@@ -107,7 +111,7 @@ function indexDevelopingSwingDeskLeaders(desk: DeskTodayData | null | undefined)
   const map = new Map<string, DeskLeader>();
   for (const leader of desk?.developing_setups ?? []) {
     const sym = leader.symbol.trim().toUpperCase();
-    if (!sym) continue;
+    if (!sym || !isSwingDeskLeader(leader)) continue;
     map.set(sym, leader);
   }
   return map;
