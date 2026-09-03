@@ -15,6 +15,7 @@ from stocvest.data.models import UserProfile
 from stocvest.signals.assistant_chat import (
     AssistantChatService,
     HISTORICAL_VALIDATION_BLOCK_HEADER,
+    _anthropic_fallback_message,
     serialize_historical_validation_summary,
 )
 from stocvest.signals.historical_validation import (
@@ -50,7 +51,7 @@ def test_reply_public_calls_claude_with_public_mode_marker(
         captured["system"] = system
         captured["messages"] = list(messages)
         captured["max_tokens"] = max_tokens
-        return "STOCVEST is a market analysis and decision-support platform."
+        return ("STOCVEST is a market analysis and decision-support platform.", None)
 
     monkeypatch.setattr(
         "stocvest.signals.assistant_chat.AssistantChatService._claude_chat_or_none",
@@ -89,7 +90,7 @@ def test_reply_public_falls_back_to_deterministic_on_claude_outage(
     the marketing surface must never appear broken."""
 
     async def fake_claude(self, *, system, messages, max_tokens, **_kwargs):  # type: ignore[no-untyped-def]
-        return None
+        return (None, None)
 
     monkeypatch.setattr(
         "stocvest.signals.assistant_chat.AssistantChatService._claude_chat_or_none",
@@ -102,6 +103,16 @@ def test_reply_public_falls_back_to_deterministic_on_claude_outage(
     assert result.source == "deterministic"
     assert result.mode == "general"
     assert "STOCVEST" in result.text
+
+
+def test_anthropic_billing_error_maps_to_calm_user_message() -> None:
+    body = (
+        '{"type":"error","error":{"type":"invalid_request_error",'
+        '"message":"Your credit balance is too low to access the Anthropic API."}}'
+    )
+    msg = _anthropic_fallback_message(400, body)
+    assert "paused right now" in msg
+    assert "Decision line" in msg
 
 
 def test_reply_public_sanitizes_marketing_page_context_only(service: AssistantChatService) -> None:
@@ -251,7 +262,7 @@ def test_reply_authenticated_appends_block_when_summary_provided(
 
     async def fake_claude(self, *, system, messages, max_tokens, **_kwargs):  # type: ignore[no-untyped-def]
         captured["system"] = system
-        return "Explained."
+        return ("Explained.", None)
 
     monkeypatch.setattr(
         "stocvest.signals.assistant_chat.AssistantChatService._claude_chat_or_none",
@@ -290,7 +301,7 @@ def test_reply_authenticated_omits_block_when_summary_absent(
 
     async def fake_claude(self, *, system, messages, max_tokens, **_kwargs):  # type: ignore[no-untyped-def]
         captured["system"] = system
-        return "Explained."
+        return ("Explained.", None)
 
     monkeypatch.setattr(
         "stocvest.signals.assistant_chat.AssistantChatService._claude_chat_or_none",
@@ -327,7 +338,7 @@ def test_reply_public_never_receives_historical_validation_block(
 
     async def fake_claude(self, *, system, messages, max_tokens, **_kwargs):  # type: ignore[no-untyped-def]
         captured["system"] = system
-        return "STOCVEST explanation."
+        return ("STOCVEST explanation.", None)
 
     monkeypatch.setattr(
         "stocvest.signals.assistant_chat.AssistantChatService._claude_chat_or_none",

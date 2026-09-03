@@ -13,6 +13,8 @@ import { stocvestAuthedFetch } from "@/lib/bff/stocvest-authed";
 
 const MAX_IMAGE_BASE64_CHARS = 6_400_000; // ~4.8 MB raw
 
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   const payload = await req.json().catch(() => ({}));
 
@@ -30,10 +32,21 @@ export async function POST(req: Request) {
     );
   }
 
-  const res = await stocvestAuthedFetch("/v1/signals/assistant/chat", {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
+  let res: Response;
+  try {
+    res = await stocvestAuthedFetch("/v1/signals/assistant/chat", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        error: "upstream_unreachable",
+        text: "I couldn't reach the explanation service right now. Please try again in a moment."
+      },
+      { status: 502 }
+    );
+  }
   const body = await res.json().catch(() => ({}));
   return NextResponse.json(body, { status: res.status });
 }

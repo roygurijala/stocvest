@@ -260,7 +260,36 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
         }
 
         const data = (await res.json().catch(() => ({}))) as Partial<AssistantChatResponse>;
-        if (!res.ok || typeof data.text !== "string" || !data.text) {
+        const replyText = typeof data.text === "string" ? data.text.trim() : "";
+        if (replyText) {
+          setMessages((cur) =>
+            cur.map((m) =>
+              m.id === pendingId
+                ? {
+                    ...m,
+                    pending: false,
+                    fresh: res.ok,
+                    mode: data.mode === "contextual" ? "contextual" : "general",
+                    content: replyText,
+                    navigate_to: data.navigate_to ?? null,
+                    action: data.action ?? null,
+                    chart: data.chart ?? null,
+                    discovery: data.discovery ?? null,
+                    citations: data.citations ?? null,
+                    clarify: data.clarify ?? null
+                  }
+                : { ...m, fresh: false }
+            )
+          );
+          if (data.upgrade_available && isAuthenticated) {
+            setNotice(
+              "Conversational, page-aware explanations are part of Swing Pro. Free accounts see general product help."
+            );
+          }
+          if (!open) setHasUnread(true);
+          return;
+        }
+        if (!res.ok || !replyText) {
           if (typeof console !== "undefined") {
             // eslint-disable-next-line no-console
             console.warn(
@@ -287,32 +316,6 @@ export function StocvestAssistant({ isAuthenticated }: StocvestAssistantProps) {
           );
           return;
         }
-
-        setMessages((cur) =>
-          cur.map((m) =>
-            m.id === pendingId
-              ? {
-                  ...m,
-                  pending: false,
-                  fresh: true,
-                  mode: data.mode === "contextual" ? "contextual" : "general",
-                  content: data.text!,
-                  navigate_to: data.navigate_to ?? null,
-                  action: data.action ?? null,
-                  chart: data.chart ?? null,
-                  discovery: data.discovery ?? null,
-                  citations: data.citations ?? null,
-                  clarify: data.clarify ?? null,
-                }
-              : { ...m, fresh: false }
-          )
-        );
-        if (data.upgrade_available && isAuthenticated) {
-          setNotice(
-            "Conversational, page-aware explanations are part of Swing Pro. Free accounts see general product help."
-          );
-        }
-        if (!open) setHasUnread(true);
       } catch (err) {
         const aborted = err instanceof DOMException && err.name === "AbortError";
         if (!aborted) {
