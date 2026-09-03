@@ -2,8 +2,10 @@
  * ADR-002 UX-2 — swing setup ranked table presentation.
  *
  * Market mode: read-mostly from cached swing desk (discovery + quiet leaders).
- * Watchlist mode (legacy): watchlist maturation + desk overlay.
+ * When geometry-eligible desk rows are empty, falls back to developing desk rows,
+ * scanner swing setups, then building-structure near-ready rows.
  */
+import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import type { DeskDiscoveryLeader, DeskQuietLeader, DeskTodayData } from "@/lib/api/desk-today";
 import { formatWatchlistMaturationDisplayLine } from "@/lib/alignment-display-tier";
 import { resolveRiskReward } from "@/lib/dashboard/hot-in-market-card-present";
@@ -22,6 +24,11 @@ import {
 } from "@/lib/watchlist-decision-card-present";
 import { missingLayerNames } from "@/lib/watchlist-alignment-present";
 import { dedupeWatchlistSymbolsUpper, formatWatchlistMaturationLabel, type WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
+import {
+  resolveBuildingStructureRows,
+  type BuildingStructureRow
+} from "@/lib/dashboard/building-structure-present";
+import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
 
 export type PersonalRankedRow = {
   symbol: string;
@@ -41,6 +48,37 @@ export type BuildPersonalRankedRowsInput = {
   swingDesk: DeskTodayData | null | undefined;
 };
 
+export type BuildMarketSwingRankedRowsInput = {
+  swingDesk: DeskTodayData | null | undefined;
+  /** Scanner swing qualifying setups — fallback when desk leaders are empty. */
+  swingSetups?: readonly IntradaySetupPayload[];
+  /** Near-qualification swing rows from scan summary — last-resort fallback. */
+  nearQualification?: readonly ScannerNearQualificationRow[];
+};
+
+/** Which data tier populated the market swing table (for honest UX copy). */
+export type MarketSwingTableSource = "eligible" | "developing" | "scanner" | "structure";
+
+export type MarketSwingRankedResult = {
+  rows: PersonalRankedRow[];
+  source: MarketSwingTableSource;
+};
+
+export function marketSwingTableSourceDisclaimer(source: MarketSwingTableSource): string | null {
+  switch (source) {
+    case "eligible":
+      return null;
+    case "developing":
+      return "Developing setups — geometry gates not yet cleared. Review Why before acting.";
+    case "scanner":
+      return "From platform scan — confirm structure in deep dive before sizing.";
+    case "structure":
+      return "Near-ready structure — not yet geometry-qualified for desk.";
+    default:
+      return null;
+  }
+}
+
 type DeskLeader = DeskDiscoveryLeader | DeskQuietLeader;
 
 const FEED_STATE_ORDER: Record<FeedState, number> = {
@@ -50,7 +88,7 @@ const FEED_STATE_ORDER: Record<FeedState, number> = {
   cooling: 3
 };
 
-function indexSwingDeskLeaders(desk: DeskTodayData | null | undefined): Map<string, DeskLeader> {
+function indexEligibleSwingDeskLeaders(desk: DeskTodayData | null | undefined): Map<string, DeskLeader> {
   const map = new Map<string, DeskLeader>();
   for (const leader of desk?.discovery ?? []) {
     const sym = leader.symbol.trim().toUpperCase();
@@ -65,13 +103,23 @@ function indexSwingDeskLeaders(desk: DeskTodayData | null | undefined): Map<stri
   return map;
 }
 
+function indexDevelopingSwingDeskLeaders(desk: DeskTodayData | null | undefined): Map<string, DeskLeader> {
+  const map = new Map<string, DeskLeader>();
+  for (const leader of desk?.developing_setups ?? []) {
+    const sym = leader.symbol.trim().toUpperCase();
+    if (!sym) continue;
+    map.set(sym, leader);
+  }
+  return map;
+}
+
 /** Desk discovery + quiet leaders only (no watchlist). */
 export function collectMarketSwingSymbols(desk: DeskTodayData | null | undefined): string[] {
-  return Array.from(indexSwingDeskLeaders(desk).keys());
+  return Array.from(indexEligibleSwingDeskLeaders(desk).keys());
 }
 
 export function collectPersonalRankedSymbols(input: BuildPersonalRankedRowsInput): string[] {
-  const leaders = indexSwingDeskLeaders(input.swingDesk);
+  const leaders = indexEligibleSwingDeskLeaders(input.swingDesk);
   return dedupeWatchlistSymbolsUpper([
     ...input.watchlistSymbols,
     ...Object.keys(input.swingBySymbol),
@@ -220,16 +268,181 @@ function rankScore(leader: DeskLeader): number {
   return typeof leader.rank_score === "number" && Number.isFinite(leader.rank_score) ? leader.rank_score : 0;
 }
 
-/** Rank swing desk discovery + quiet leaders for the market-sourced table. */
-export function buildMarketSwingRankedRows(swingDesk: DeskTodayData | null | undefined): PersonalRankedRow[] {
-  const leaders = indexSwingDeskLeaders(swingDesk);
-  const ordered = Array.from(leaders.values()).sort((a, b) => {
-    const byState = FEED_STATE_ORDER[presentDeskLeaderState(a)] - FEED_STATE_ORDER[presentDeskLeaderState(b)];
+function sortLeaderRows(rows: PersonalRankedRow[], leaders: Map<string, DeskLeader>): PersonalRankedRow[] {
+  return [...rows].sort((a, b) => {
+    const leaderA = leaders.get(a.symbol);
+    const leaderB = leaders.get(b.symbol);
+    const byState =
+      FEED_STATE_ORDER[(leaderA ? presentDeskLeaderState(leaderA) : a.feedState) as FeedState] -
+      FEED_STATE_ORDER[(leaderB ? presentDeskLeaderState(leaderB) : b.feedState) as FeedState];
     if (byState !== 0) return byState;
-    if (rankScore(b) !== rankScore(a)) return rankScore(b) - rankScore(a);
+    if (leaderA && leaderB && rankScore(leaderB) !== rankScore(leaderA)) {
+      return rankScore(leaderB) - rankScore(leaderA);
+    }
     return a.symbol.localeCompare(b.symbol);
   });
-  return ordered.map(buildMarketRow);
+}
+
+function rowsFromDeskLeaders(leaders: Map<string, DeskLeader>): PersonalRankedRow[] {
+  return sortLeaderRows(Array.from(leaders.values()).map(buildMarketRow), leaders);
+}
+
+function biasFromSetupDirection(direction: string | null | undefined): FeedBias {
+  const d = (direction ?? "").trim().toLowerCase();
+  if (d.includes("long") || d.includes("bull")) return "bull";
+  if (d.includes("short") || d.includes("bear")) return "bear";
+  return "neutral";
+}
+
+function feedStateFromSetup(setup: IntradaySetupPayload): FeedState {
+  if (setup.qualification_tier === "near") return "near";
+  const aligned = setup.alignment?.aligned ?? null;
+  const total = setup.alignment?.total ?? null;
+  if (aligned != null && total != null && total > 0) {
+    const ratio = aligned / total;
+    if (ratio >= 0.8) return "actionable";
+    if (ratio >= 0.55) return "near";
+    return "potential";
+  }
+  const score = setup.score;
+  if (typeof score === "number" && Number.isFinite(score)) {
+    if (score >= 75) return "actionable";
+    if (score >= 55) return "near";
+  }
+  return "potential";
+}
+
+function rowFromSwingSetup(setup: IntradaySetupPayload): PersonalRankedRow {
+  const symbol = setup.symbol.trim().toUpperCase();
+  const feedState = feedStateFromSetup(setup);
+  const aligned = setup.alignment?.aligned;
+  const total = setup.alignment?.total;
+  const readiness =
+    setup.alignment?.label?.trim() ||
+    (aligned != null && total != null ? `${aligned}/${total} aligned` : "Scanner qualifying");
+  const directionLabel =
+    biasFromSetupDirection(setup.direction) === "bull"
+      ? "Long"
+      : biasFromSetupDirection(setup.direction) === "bear"
+        ? "Short"
+        : "Neutral";
+  return {
+    symbol,
+    readiness,
+    direction: directionLabel,
+    riskReward: null,
+    state: FEED_STATE_LABEL[feedState],
+    why: setup.alignment?.label?.trim() || "Qualifying in platform scan",
+    feedState,
+    bias: biasFromSetupDirection(setup.direction)
+  };
+}
+
+function rowFromNearQual(row: ScannerNearQualificationRow): PersonalRankedRow {
+  const symbol = row.symbol.trim().toUpperCase();
+  const aligned = row.alignment?.aligned ?? 0;
+  const total = row.alignment?.total ?? 6;
+  const away =
+    typeof row.layers_away === "number" && Number.isFinite(row.layers_away)
+      ? row.layers_away
+      : Math.max(0, 5 - aligned);
+  return {
+    symbol,
+    readiness: row.alignment?.label?.trim() || `${aligned}/${total} aligned`,
+    direction:
+      biasFromSetupDirection(row.direction) === "bull"
+        ? "Long"
+        : biasFromSetupDirection(row.direction) === "bear"
+          ? "Short"
+          : "Neutral",
+    riskReward: null,
+    state: away <= 1 ? "Near ready" : FEED_STATE_LABEL.near,
+    why:
+      away <= 1
+        ? "Close to desk gates — structure before velocity"
+        : "Structure building — not a session mover",
+    feedState: "near",
+    bias: biasFromSetupDirection(row.direction)
+  };
+}
+
+function rowFromBuildingStructure(row: BuildingStructureRow): PersonalRankedRow | null {
+  if (row.source === "quiet_leader" && row.quietLeader) {
+    return buildMarketRow(row.quietLeader);
+  }
+  if (row.source === "near_qualification" && row.nearQual) {
+    return rowFromNearQual(row.nearQual);
+  }
+  return null;
+}
+
+function rowsFromSwingSetups(setups: readonly IntradaySetupPayload[]): PersonalRankedRow[] {
+  const seen = new Set<string>();
+  const out: PersonalRankedRow[] = [];
+  for (const setup of setups) {
+    if (setup.scanner_mode !== "swing_daily") continue;
+    if (setup.desk_surface_eligible === false) continue;
+    const sym = setup.symbol.trim().toUpperCase();
+    if (!sym || seen.has(sym)) continue;
+    seen.add(sym);
+    out.push(rowFromSwingSetup(setup));
+  }
+  out.sort((a, b) => {
+    const byState = FEED_STATE_ORDER[a.feedState] - FEED_STATE_ORDER[b.feedState];
+    if (byState !== 0) return byState;
+    return a.symbol.localeCompare(b.symbol);
+  });
+  return out;
+}
+
+function rowsFromBuildingStructure(input: BuildMarketSwingRankedRowsInput): PersonalRankedRow[] {
+  const structureRows = resolveBuildingStructureRows({
+    deskData: input.swingDesk,
+    nearQualification: [...(input.nearQualification ?? [])]
+  });
+  const out: PersonalRankedRow[] = [];
+  const seen = new Set<string>();
+  for (const row of structureRows) {
+    if (row.source === "low_velocity" || row.source === "moderate_velocity") continue;
+    const built = rowFromBuildingStructure(row);
+    if (!built || seen.has(built.symbol)) continue;
+    seen.add(built.symbol);
+    out.push(built);
+  }
+  return out;
+}
+
+function normalizeMarketSwingInput(
+  input: DeskTodayData | null | undefined | BuildMarketSwingRankedRowsInput
+): BuildMarketSwingRankedRowsInput {
+  return input != null && typeof input === "object" && "swingDesk" in input
+    ? input
+    : { swingDesk: input as DeskTodayData | null | undefined };
+}
+
+/** Rank swing desk rows with source tier for honest fallback UX. */
+export function buildMarketSwingRankedRowsResult(
+  input: DeskTodayData | null | undefined | BuildMarketSwingRankedRowsInput
+): MarketSwingRankedResult {
+  const normalized = normalizeMarketSwingInput(input);
+
+  const eligible = rowsFromDeskLeaders(indexEligibleSwingDeskLeaders(normalized.swingDesk));
+  if (eligible.length > 0) return { rows: eligible, source: "eligible" };
+
+  const developing = rowsFromDeskLeaders(indexDevelopingSwingDeskLeaders(normalized.swingDesk));
+  if (developing.length > 0) return { rows: developing, source: "developing" };
+
+  const fromScanner = rowsFromSwingSetups(normalized.swingSetups ?? []);
+  if (fromScanner.length > 0) return { rows: fromScanner, source: "scanner" };
+
+  return { rows: rowsFromBuildingStructure(normalized), source: "structure" };
+}
+
+/** Rank swing desk discovery + quiet leaders for the market-sourced table. */
+export function buildMarketSwingRankedRows(
+  input: DeskTodayData | null | undefined | BuildMarketSwingRankedRowsInput
+): PersonalRankedRow[] {
+  return buildMarketSwingRankedRowsResult(input).rows;
 }
 
 /** Rank watchlist + desk symbols into table rows (attention tier order). */
@@ -237,7 +450,7 @@ export function buildPersonalRankedRows(input: BuildPersonalRankedRowsInput): Pe
   const symbols = collectPersonalRankedSymbols(input);
   if (symbols.length === 0) return [];
 
-  const leaders = indexSwingDeskLeaders(input.swingDesk);
+  const leaders = indexEligibleSwingDeskLeaders(input.swingDesk);
   const rowForSymbol = (sym: string) => input.swingBySymbol[sym];
   const buckets = groupSymbolsIntoAttentionTiers(symbols, rowForSymbol);
   const ordered = [

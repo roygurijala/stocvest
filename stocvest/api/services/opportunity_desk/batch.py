@@ -470,9 +470,11 @@ async def run_opportunity_desk_batch(
                 concurrency=cfg.composite_concurrency,
             )
             composite_failures_total += composite_failures
+            developing = [r for r in discovery if r.get("desk_surface_eligible") is not True]
             discovery = [r for r in discovery if r.get("desk_surface_eligible") is True]
             # Do not pad discovery with funnel-only rows lacking validated geometry —
             # those symbols remain on movers_radar / retained_pool as context only.
+            developing = developing[: cfg.funnel.discovery_display_limit]
             discovery = discovery[: cfg.funnel.discovery_display_limit]
             retained_tracked = await _track_retained_pool_symbols(
                 funnel.movers,
@@ -493,24 +495,24 @@ async def run_opportunity_desk_batch(
                 payload["quiet_leaders"] = [
                     row for row in quiet_leaders_swing if row.get("desk_surface_eligible") is True
                 ]
+                payload["developing_setups"] = developing
             else:
                 payload["quiet_leaders"] = []
+                payload["developing_setups"] = []
         else:
             if isinstance(previous_data, dict):
                 payload["discovery"] = previous_data.get("discovery") or []
+                payload["developing_setups"] = list(previous_data.get("developing_setups") or [])
                 payload["recently_hot"] = _prune_recently_hot(
                     _parse_recently_hot(previous_data),
                     now=now,
                 )
-                payload["quiet_leaders"] = (
-                    quiet_leaders_swing
-                    if mode_lit == "swing"
-                    else list(previous_data.get("quiet_leaders") or [])
-                )
+                payload["quiet_leaders"] = list(previous_data.get("quiet_leaders") or [])
             else:
                 payload["discovery"] = []
+                payload["developing_setups"] = []
                 payload["recently_hot"] = []
-                payload["quiet_leaders"] = quiet_leaders_swing if mode_lit == "swing" else []
+                payload["quiet_leaders"] = []
 
         written = write_dashboard_cache(
             key,

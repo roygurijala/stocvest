@@ -1038,6 +1038,8 @@ function TradingRoomBody({
       onViewTopSetup={() => topCard && selectCard(topCard)}
       onSearch={undefined}
       swingDesk={swingDesk?.data ?? null}
+      swingSetups={swingSetups}
+      nearQualification={scannerOverview.scanSummary?.near_qualification ?? []}
       onSelectSwingSymbol={(sym) => openSymbol(sym, null, "swing")}
     />
   );

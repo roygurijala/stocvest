@@ -12,7 +12,7 @@ import {
 } from "@/lib/dashboard/desk-manual-refresh";
 import { formatDeskRefreshErrorMessage } from "@/lib/dashboard/desk-refresh-present";
 import { DESK_MANUAL_REFRESH_COOLDOWN_MS } from "@/lib/dashboard/desk-refresh-tiers";
-import { deskResponseHasLeaders, isDeskCacheMiss } from "@/lib/dashboard/desk-response";
+import { deskResponseHasLeaders, isDeskCacheMiss, swingDeskNeedsDiscoveryRefresh } from "@/lib/dashboard/desk-response";
 
 const SESSION_KEY = "stocvest:trading-room:desk:auto-refresh";
 
@@ -54,7 +54,7 @@ export function useTradingRoomDeskAutoLoad(opts: {
   const [manualBusy, setManualBusy] = useState(false);
   const [cooldownMs, setCooldownMs] = useState(0);
 
-  const swingCold = needsDeskWarmup(swingDesk, gapFallbackCount);
+  const swingCold = needsDeskWarmup(swingDesk, gapFallbackCount) || swingDeskNeedsDiscoveryRefresh(swingDesk);
   const dayCold = dayTradingSurfaces && needsDeskWarmup(dayDesk, gapFallbackCount);
   const anyCold = swingCold || dayCold;
 

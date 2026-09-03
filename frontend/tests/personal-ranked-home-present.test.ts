@@ -3,9 +3,11 @@ import { describe, expect, test } from "vitest";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import {
   buildMarketSwingRankedRows,
+  buildMarketSwingRankedRowsResult,
   buildPersonalRankedRows,
   collectMarketSwingSymbols,
-  collectPersonalRankedSymbols
+  collectPersonalRankedSymbols,
+  marketSwingTableSourceDisclaimer
 } from "@/lib/dashboard/personal-ranked-home-present";
 import type { WatchlistMaturationRow } from "@/lib/watchlist-page-utils";
 
@@ -116,6 +118,126 @@ describe("buildMarketSwingRankedRows", () => {
     });
     expect(rows).toHaveLength(1);
     expect(rows[0].why).toBe("Leveraged product excluded from swing universe");
+  });
+
+  test("falls back to developing desk rows when eligible discovery is empty", () => {
+    const rows = buildMarketSwingRankedRows({
+      discovery: [],
+      developing_setups: [
+        {
+          symbol: "EVC",
+          gap_percent: 0.5,
+          direction: "up",
+          rank_score: 60,
+          desk: "swing",
+          desk_surface_eligible: false,
+          alignment_ratio: 0.67,
+          decision_state: "monitor",
+          geometry_block_reason: "Structure R/R below desk minimum",
+          verdict: "Developing swing setup"
+        }
+      ]
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].symbol).toBe("EVC");
+    expect(rows[0].why).toBe("Structure R/R below desk minimum");
+  });
+
+  test("falls back to near-qualification swing rows when desk and scanner are empty", () => {
+    const rows = buildMarketSwingRankedRows({
+      swingDesk: { discovery: [], quiet_leaders: [] },
+      nearQualification: [
+        {
+          symbol: "NEAR1",
+          desk: "swing",
+          score: 0.42,
+          direction: "long",
+          alignment: { aligned: 4, total: 6, label: "4/6 layers aligned" },
+          layers_away: 1
+        }
+      ]
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].symbol).toBe("NEAR1");
+    expect(rows[0].state).toBe("Near ready");
+  });
+
+  test("prefers eligible desk rows over developing fallbacks", () => {
+    const result = buildMarketSwingRankedRowsResult({
+      discovery: [
+        {
+          symbol: "NVDA",
+          gap_percent: 1.2,
+          direction: "up",
+          rank_score: 95,
+          desk: "swing",
+          desk_surface_eligible: true,
+          verdict: "Bullish swing setup"
+        }
+      ],
+      developing_setups: [
+        {
+          symbol: "EVC",
+          gap_percent: 0.5,
+          direction: "up",
+          rank_score: 60,
+          desk: "swing",
+          desk_surface_eligible: false,
+          geometry_block_reason: "Structure R/R below desk minimum"
+        }
+      ]
+    });
+    expect(result.source).toBe("eligible");
+    expect(result.rows.map((r) => r.symbol)).toEqual(["NVDA"]);
+  });
+
+  test("falls back to scanner swing setups before structure rows", () => {
+    const result = buildMarketSwingRankedRowsResult({
+      swingDesk: { discovery: [], quiet_leaders: [] },
+      swingSetups: [
+        {
+          symbol: "SCAN1",
+          direction: "long",
+          score: 78,
+          triggers: ["ema_cross"],
+          timestamp_iso: "2026-09-03T12:00:00Z",
+          scanner_mode: "swing_daily",
+          alignment: { aligned: 5, total: 6, label: "5/6 layers aligned" }
+        }
+      ],
+      nearQualification: [
+        {
+          symbol: "NEAR1",
+          desk: "swing",
+          score: 0.42,
+          direction: "long",
+          alignment: { aligned: 4, total: 6, label: "4/6 layers aligned" }
+        }
+      ]
+    });
+    expect(result.source).toBe("scanner");
+    expect(result.rows[0]?.symbol).toBe("SCAN1");
+  });
+
+  test("structure fallback excludes raw low-velocity movers", () => {
+    const result = buildMarketSwingRankedRowsResult({
+      swingDesk: {
+        discovery: [],
+        quiet_leaders: [],
+        movers_radar: [
+          { symbol: "SLOW1", gap_percent: 0.4, direction: "up", rank_score: 40 },
+          { symbol: "SLOW2", gap_percent: -0.8, direction: "down", rank_score: 35 }
+        ]
+      },
+      nearQualification: []
+    });
+    expect(result.rows).toHaveLength(0);
+    expect(result.source).toBe("structure");
+  });
+
+  test("exposes disclaimer copy for non-eligible sources", () => {
+    expect(marketSwingTableSourceDisclaimer("eligible")).toBeNull();
+    expect(marketSwingTableSourceDisclaimer("developing")).toMatch(/geometry gates/i);
   });
 });
 

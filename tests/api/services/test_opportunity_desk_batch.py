@@ -86,7 +86,16 @@ async def test_run_opportunity_desk_batch_movers_tier(monkeypatch: pytest.Monkey
     )
     monkeypatch.setattr(
         "stocvest.api.services.opportunity_desk.batch.read_dashboard_cache",
-        lambda _k: {"data": {"rejected_samples": [{"symbol": "OLD", "reason": "gap_below_2.0pct", "seen_at": recent_seen_at}]}},
+        lambda _k: {
+            "data": {
+                "quiet_leaders": [{"symbol": "QL", "desk": "swing"}],
+                "discovery": [{"symbol": "DISC", "desk": "swing"}],
+                "developing_setups": [{"symbol": "DEV", "desk": "swing"}],
+                "rejected_samples": [
+                    {"symbol": "OLD", "reason": "gap_below_2.0pct", "seen_at": recent_seen_at}
+                ],
+            }
+        },
     )
 
     result = await run_opportunity_desk_batch(tier="movers")
@@ -98,6 +107,10 @@ async def test_run_opportunity_desk_batch_movers_tier(monkeypatch: pytest.Monkey
     assert "rejection_reason_counts" in writes[0][1]
     assert "rejected_samples" in writes[0][1]
     assert any(row.get("symbol") == "OLD" for row in writes[0][1]["rejected_samples"])
+    swing_payload = writes[0][1]
+    assert swing_payload["quiet_leaders"] == [{"symbol": "QL", "desk": "swing"}]
+    assert swing_payload["discovery"] == [{"symbol": "DISC", "desk": "swing"}]
+    assert swing_payload["developing_setups"] == [{"symbol": "DEV", "desk": "swing"}]
 
 
 def test_discovery_row_without_composite() -> None:

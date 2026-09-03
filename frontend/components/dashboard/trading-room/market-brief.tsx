@@ -21,6 +21,8 @@ import type { WatchlistAtCloseItem } from "@/lib/hooks/use-watchlist-at-close";
 import type { FeedCard, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
 import type { DeskTodayData } from "@/lib/api/desk-today";
+import type { IntradaySetupPayload } from "@/lib/api/scanner";
+import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
 import { MarketSwingSetupsTable } from "@/components/dashboard/personal-ranked-home-table";
 
 const BRIEF_NAME_STORAGE_KEY = "stocvest:brief-name";
@@ -138,6 +140,8 @@ interface MarketBriefProps {
   onViewTopSetup: () => void;
   onSearch?: () => void;
   swingDesk?: DeskTodayData | null;
+  swingSetups?: readonly IntradaySetupPayload[];
+  nearQualification?: readonly ScannerNearQualificationRow[];
   onSelectSwingSymbol?: (symbol: string) => void;
 }
 
@@ -186,6 +190,8 @@ export function MarketBrief({
   onViewTopSetup,
   onSearch,
   swingDesk = null,
+  swingSetups = [],
+  nearQualification = [],
   onSelectSwingSymbol
 }: MarketBriefProps) {
   const { theme, colors } = useTheme();
@@ -353,6 +359,8 @@ export function MarketBrief({
             SWING_ACCENT,
             <MarketSwingSetupsTable
               swingDesk={swingDesk}
+              swingSetups={swingSetups}
+              nearQualification={nearQualification}
               onSelectSymbol={onSelectSwingSymbol}
               colors={colors}
               embedded
