@@ -1035,6 +1035,7 @@ function SectorDeskPanel({
   const [constituentInputs, setConstituentInputs] = useState<SectorConstituentQuoteInput[]>([]);
   const [constituentSource, setConstituentSource] = useState<SectorConstituentSource>("curated");
   const [constituentsLoading, setConstituentsLoading] = useState(false);
+  const [holdingsAsOf, setHoldingsAsOf] = useState<string | null>(null);
 
   const sectorEtf = sector?.symbol ?? null;
 
@@ -1044,12 +1045,14 @@ function SectorDeskPanel({
       setConstituentSource("curated");
       setConstituentsLoading(false);
       setSnapshots(new Map());
+      setHoldingsAsOf(null);
       return;
     }
     const curated = getRepresentativeSymbolsForEtf(sectorEtf).map((symbol) => ({ symbol }));
     setConstituentInputs(curated);
     setConstituentSource("curated");
     setSnapshots(new Map());
+    setHoldingsAsOf(null);
     let cancelled = false;
     setConstituentsLoading(true);
     void (async () => {
@@ -1060,7 +1063,13 @@ function SectorDeskPanel({
         );
         const body = (await res.json().catch(() => ({}))) as {
           source?: string;
-          constituents?: Array<{ symbol?: string; name?: string | null; weight?: number | null }>;
+          holdings_as_of?: string | null;
+          constituents?: Array<{
+            symbol?: string;
+            name?: string | null;
+            weight?: number | null;
+            effective_date?: string | null;
+          }>;
         };
         const fromApi = (body.constituents ?? [])
           .map((row) => ({
@@ -1075,15 +1084,22 @@ function SectorDeskPanel({
           if (fromApi.length > 0 && body.source === "etf_global") {
             setConstituentInputs(fromApi);
             setConstituentSource("etf_global");
+            setHoldingsAsOf(
+              body.holdings_as_of?.trim() ||
+                body.constituents?.find((row) => row.effective_date)?.effective_date?.trim() ||
+                null
+            );
           } else {
             setConstituentInputs(curated);
             setConstituentSource("curated");
+            setHoldingsAsOf(null);
           }
         }
       } catch {
         if (!cancelled) {
           setConstituentInputs(curated);
           setConstituentSource("curated");
+          setHoldingsAsOf(null);
         }
       } finally {
         if (!cancelled) setConstituentsLoading(false);
@@ -1186,6 +1202,11 @@ function SectorDeskPanel({
       {representativeRows.length > 0 || constituentsLoading ? (
         <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
           {sectionHeading(namesSectionLabel)}
+          {holdingsAsOf && constituentSource === "etf_global" ? (
+            <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+              Holdings as of {holdingsAsOf}
+            </span>
+          ) : null}
           {constituentsLoading && representativeRows.length === 0 ? (
             <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Loading sector names…</span>
           ) : null}

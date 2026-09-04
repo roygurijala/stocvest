@@ -781,6 +781,7 @@ class TestAdditionalRestEndpoints:
                     "constituent_name": "Exxon Mobil Corporation",
                     "weight": 0.221,
                     "constituent_rank": 1,
+                    "effective_date": "2025-09-18",
                 },
                 {
                     "composite_ticker": "XLE",
@@ -788,6 +789,7 @@ class TestAdditionalRestEndpoints:
                     "constituent_name": "Chevron Corporation",
                     "weight": 0.165,
                     "constituent_rank": 2.0,
+                    "effective_date": "2025-09-18",
                 },
             ],
         }
@@ -799,14 +801,50 @@ class TestAdditionalRestEndpoints:
             rows = await client.get_etf_constituents("XLE", limit=8)
 
         request = respx.calls.last.request
-        assert request.url.params.get("sort") == "constituent_rank.asc"
         assert request.url.params.get("composite_ticker") == "XLE"
+        assert "sort" not in request.url.params
+        assert int(request.url.params.get("limit")) >= 8
 
         assert len(rows) == 2
         assert rows[0].symbol == "XOM"
         assert rows[0].etf_symbol == "XLE"
         assert rows[0].weight == pytest.approx(0.221)
         assert rows[0].rank == 1
+        assert rows[0].effective_date == "2025-09-18"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_etf_constituents_keeps_latest_effective_date(self):
+        payload = {
+            "status": "OK",
+            "results": [
+                {
+                    "composite_ticker": "XLE",
+                    "constituent_ticker": "OLD",
+                    "constituent_name": "Stale Holding",
+                    "weight": 0.5,
+                    "constituent_rank": 1,
+                    "effective_date": "2025-08-01",
+                },
+                {
+                    "composite_ticker": "XLE",
+                    "constituent_ticker": "XOM",
+                    "constituent_name": "Exxon Mobil Corporation",
+                    "weight": 0.221,
+                    "constituent_rank": 1,
+                    "effective_date": "2025-09-18",
+                },
+            ],
+        }
+        respx.get("https://api.polygon.io/etf-global/v1/constituents").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            rows = await client.get_etf_constituents("XLE", limit=8)
+
+        assert [row.symbol for row in rows] == ["XOM"]
+        assert rows[0].effective_date == "2025-09-18"
 
     @pytest.mark.asyncio
     @respx.mock

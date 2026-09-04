@@ -432,10 +432,12 @@ def etf_constituents_handler(
             rows = await client.get_etf_constituents(raw, limit=limit)
         if not rows:
             return ok({"etf": raw, "source": "unavailable", "constituents": [], "degraded": True})
+        holdings_as_of = next((row.effective_date for row in rows if row.effective_date), None)
         return ok(
             {
                 "etf": raw,
                 "source": "etf_global",
+                "holdings_as_of": holdings_as_of,
                 "constituents": [row.model_dump(mode="json") for row in rows],
             }
         )

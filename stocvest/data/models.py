@@ -198,6 +198,7 @@ class EtfConstituent(BaseModel):
     name: str | None = None
     weight: float | None = None
     rank: int | None = None
+    effective_date: str | None = None
 
 
 class EarningsEvent(BaseModel):

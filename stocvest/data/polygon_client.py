@@ -58,6 +58,42 @@ from stocvest.utils.logging import get_logger
 
 log = get_logger(__name__)
 
+_ETF_CONSTITUENTS_CACHE_TTL = 86400  # holdings refresh daily
+_ETF_CONSTITUENTS_FETCH_CAP = 50
+
+
+def _parse_etf_constituent_row(row: dict, etf_symbol: str) -> EtfConstituent | None:
+    constituent = str(row.get("constituent_ticker") or "").strip().upper()
+    if not constituent:
+        return None
+    weight_raw = row.get("weight")
+    weight = float(weight_raw) if isinstance(weight_raw, (int, float)) else None
+    rank_raw = row.get("constituent_rank")
+    rank: int | None = None
+    if isinstance(rank_raw, int):
+        rank = rank_raw
+    elif isinstance(rank_raw, float) and rank_raw.is_integer():
+        rank = int(rank_raw)
+    name = str(row.get("constituent_name") or "").strip() or None
+    effective_raw = row.get("effective_date")
+    effective_date = str(effective_raw).strip() if effective_raw else None
+    return EtfConstituent(
+        etf_symbol=etf_symbol,
+        symbol=constituent,
+        name=name,
+        weight=weight,
+        rank=rank,
+        effective_date=effective_date or None,
+    )
+
+
+def _latest_effective_constituent_rows(rows: list[dict]) -> list[dict]:
+    dated = [r for r in rows if isinstance(r, dict) and r.get("effective_date")]
+    if not dated:
+        return [r for r in rows if isinstance(r, dict)]
+    latest = max(str(r["effective_date"]) for r in dated)
+    return [r for r in dated if str(r.get("effective_date")) == latest]
+
 _POLYGON_REST_BASE = "https://api.polygon.io"
 _POLYGON_WS_BASE   = "wss://socket.polygon.io"
 _BENZINGA_NEWS_WS_BASE = "wss://api.benzinga.com/api/v1/news/stream"
@@ -1358,44 +1394,62 @@ class PolygonClient(_StreamingMixin):
 
         Requires the ETF Global add-on on the Polygon/Massive plan; callers should degrade
         gracefully when this returns an empty list or raises ``PolygonError``.
+
+        Uses a 24h Redis cache per (ETF, limit). When Polygon returns mixed
+        ``effective_date`` rows, keeps only the latest date before ranking.
         """
         sym = (etf_symbol or "").strip().upper()
         if not sym:
             return []
         lim = max(1, min(int(limit), 20))
+        cache_key = f"stocvest:etf_constituents:v1:{sym}:{lim}"
+
+        r = get_sync_redis()
+        if r is not None:
+            try:
+                cached = r.get(cache_key)
+                if cached:
+                    rows = json.loads(cached)
+                    if isinstance(rows, list):
+                        return [EtfConstituent.model_validate(row) for row in rows]
+            except Exception:
+                pass
+
+        fetch_limit = min(_ETF_CONSTITUENTS_FETCH_CAP, max(lim * 4, lim))
         params = {
             "composite_ticker": sym,
-            "limit": str(lim),
-            "sort": "constituent_rank.asc",
+            "limit": str(fetch_limit),
         }
         data = await self._get("/etf-global/v1/constituents", params)
-        out: list[EtfConstituent] = []
-        for row in data.get("results") or []:
-            if not isinstance(row, dict):
-                continue
-            constituent = str(row.get("constituent_ticker") or "").strip().upper()
-            if not constituent:
-                continue
-            weight_raw = row.get("weight")
-            weight = float(weight_raw) if isinstance(weight_raw, (int, float)) else None
-            rank_raw = row.get("constituent_rank")
-            rank: int | None = None
-            if isinstance(rank_raw, int):
-                rank = rank_raw
-            elif isinstance(rank_raw, float) and rank_raw.is_integer():
-                rank = int(rank_raw)
-            name = str(row.get("constituent_name") or "").strip() or None
-            out.append(
-                EtfConstituent(
-                    etf_symbol=sym,
-                    symbol=constituent,
-                    name=name,
-                    weight=weight,
-                    rank=rank,
-                )
+        raw_rows = [row for row in (data.get("results") or []) if isinstance(row, dict)]
+        scoped_rows = _latest_effective_constituent_rows(raw_rows)
+        scoped_rows.sort(
+            key=lambda row: (
+                row.get("constituent_rank")
+                if isinstance(row.get("constituent_rank"), (int, float))
+                else 9999,
+                str(row.get("constituent_ticker") or ""),
             )
+        )
+
+        out: list[EtfConstituent] = []
+        for row in scoped_rows:
+            parsed = _parse_etf_constituent_row(row, sym)
+            if parsed is None:
+                continue
+            out.append(parsed)
             if len(out) >= lim:
                 break
+
+        if r is not None and out:
+            try:
+                r.setex(
+                    cache_key,
+                    _ETF_CONSTITUENTS_CACHE_TTL,
+                    json.dumps([item.model_dump(mode="json") for item in out], default=str),
+                )
+            except Exception:
+                pass
         return out
 
     async def get_earnings_calendar(
