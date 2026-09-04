@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { FeedCard } from "@/lib/dashboard/trading-room/feed-model";
 import {
   buildSectorDeskRows,
+  buildSectorRepresentativeRows,
+  getRepresentativeSymbolsForEtf,
   preferredLaneForSymbol,
   sectorEtfForSymbol,
   sectorMomentumTradingNote
@@ -55,5 +57,23 @@ describe("market-brief-navigation", () => {
     const note = sectorMomentumTradingNote({ label: "Financials", pct5d: 1.8, pct1d: 0.4 });
     expect(note).toContain("leading rotation");
     expect(note).toContain("Financials");
+  });
+
+  it("returns curated representative symbols for sector ETFs", () => {
+    const energy = getRepresentativeSymbolsForEtf("XLE");
+    expect(energy.slice(0, 4)).toEqual(["XOM", "CVX", "OXY", "COP"]);
+    expect(getRepresentativeSymbolsForEtf("XLE", 3)).toEqual(["XOM", "CVX", "OXY"]);
+    expect(getRepresentativeSymbolsForEtf("UNKNOWN")).toEqual([]);
+  });
+
+  it("sorts representative rows by absolute move when quotes are present", () => {
+    const snapshots = new Map([
+      ["XOM", { change_percent: 0.4 }],
+      ["CVX", { change_percent: -2.1 }],
+      ["OXY", { change_percent: 1.2 }]
+    ]);
+    const rows = buildSectorRepresentativeRows("XLE", snapshots, 3);
+    expect(rows.map((r) => r.symbol)).toEqual(["CVX", "OXY", "XOM"]);
+    expect(rows[0]?.changePct).toBe(-2.1);
   });
 });

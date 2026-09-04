@@ -3,7 +3,28 @@
  * surface trading-relevant rows when a sector chip is opened.
  */
 import type { FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
+import {
+  type MarketSnapshotVixFields,
+  vixSnapshotSessionChangePct
+} from "@/lib/api/market-snapshot-helpers";
 import { SYMBOL_TO_SECTOR_ETF } from "@/lib/scanner/terminal/symbol-sector-etf-map";
+
+const DEFAULT_REPRESENTATIVE_LIMIT = 8;
+
+let symbolsBySectorEtfCache: Map<string, string[]> | null = null;
+
+function symbolsBySectorEtf(): Map<string, string[]> {
+  if (!symbolsBySectorEtfCache) {
+    symbolsBySectorEtfCache = new Map();
+    for (const [symbol, etf] of Object.entries(SYMBOL_TO_SECTOR_ETF)) {
+      const key = etf.trim().toUpperCase();
+      const list = symbolsBySectorEtfCache.get(key) ?? [];
+      list.push(symbol.trim().toUpperCase());
+      symbolsBySectorEtfCache.set(key, list);
+    }
+  }
+  return symbolsBySectorEtfCache;
+}
 
 const STATE_RANK: Record<FeedState, number> = {
   actionable: 0,
@@ -21,6 +42,17 @@ export interface SectorDeskRow {
   verdict: string;
   bias: FeedCard["bias"];
 }
+
+export interface SectorRepresentativeRow {
+  symbol: string;
+  company: string | null;
+  changePct: number | null;
+}
+
+export type SectorSnapshotQuote = MarketSnapshotVixFields & {
+  symbol?: string | null;
+  company_name?: string | null;
+};
 
 export interface BriefSectorMomentumInput {
   label: string;
@@ -42,6 +74,34 @@ export function preferredLaneForSymbol(cards: readonly FeedCard[], symbol: strin
 export function sectorEtfForSymbol(symbol: string): string | null {
   const etf = SYMBOL_TO_SECTOR_ETF[symbol.trim().toUpperCase()];
   return etf ?? null;
+}
+
+/** Curated liquid names for a sector ETF (map order), capped for the brief panel. */
+export function getRepresentativeSymbolsForEtf(sectorEtf: string, limit = DEFAULT_REPRESENTATIVE_LIMIT): string[] {
+  const etf = sectorEtf.trim().toUpperCase();
+  if (!etf || limit <= 0) return [];
+  return (symbolsBySectorEtf().get(etf) ?? []).slice(0, limit);
+}
+
+export function buildSectorRepresentativeRows(
+  sectorEtf: string,
+  snapshots: ReadonlyMap<string, SectorSnapshotQuote>,
+  limit = DEFAULT_REPRESENTATIVE_LIMIT
+): SectorRepresentativeRow[] {
+  return getRepresentativeSymbolsForEtf(sectorEtf, limit)
+    .map((symbol) => {
+      const snap = snapshots.get(symbol);
+      return {
+        symbol,
+        company: snap?.company_name?.trim() || null,
+        changePct: snap ? vixSnapshotSessionChangePct(snap) : null
+      };
+    })
+    .sort((a, b) => {
+      const aMove = Math.abs(a.changePct ?? 0);
+      const bMove = Math.abs(b.changePct ?? 0);
+      return bMove - aMove;
+    });
 }
 
 export function buildSectorDeskRows(cards: readonly FeedCard[], sectorEtf: string): SectorDeskRow[] {
