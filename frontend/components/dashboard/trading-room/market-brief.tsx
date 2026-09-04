@@ -30,6 +30,7 @@ import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
 import { MarketSwingSetupsTable } from "@/components/dashboard/personal-ranked-home-table";
+import { MarketBriefSymbolLink } from "@/components/dashboard/trading-room/market-brief-symbol-link";
 
 const BRIEF_NAME_STORAGE_KEY = "stocvest:brief-name";
 const SWING_ACCENT = "#8B5CF6";
@@ -577,11 +578,12 @@ export function MarketBrief({
                   const rowTone = w.changePct == null ? colors.textMuted : w.changePct >= 0 ? colors.bullish : colors.bearish;
                   if (onSelectSymbol) {
                     return (
-                      <button
+                      <MarketBriefSymbolLink
                         key={w.symbol}
-                        type="button"
+                        symbol={w.symbol}
+                        lane="swing"
+                        onSelect={onSelectSymbol}
                         data-testid={`market-brief-watchlist-row-${w.symbol}`}
-                        onClick={() => onSelectSymbol(w.symbol, null, "swing")}
                         style={{
                           display: "flex",
                           alignItems: "baseline",
@@ -590,13 +592,10 @@ export function MarketBrief({
                           width: "100%",
                           padding: `${spacing[1]} ${spacing[2]}`,
                           margin: `0 -${spacing[2]}`,
-                          border: "none",
                           borderRadius: borderRadius.sm,
-                          background: "transparent",
-                          color: colors.text,
-                          textAlign: "left",
                           cursor: "pointer"
                         }}
+                        className="market-brief-row-link"
                       >
                         <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.accent, width: 56, flexShrink: 0, fontFamily: typography.fontFamilyMono }}>
                           {w.symbol}
@@ -610,7 +609,7 @@ export function MarketBrief({
                         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {w.stateLabel}
                         </span>
-                      </button>
+                      </MarketBriefSymbolLink>
                     );
                   }
                   return (
@@ -1035,8 +1034,9 @@ function SectorDeskPanel({
         marginTop: spacing[1],
         padding: spacing[3],
         borderRadius: borderRadius.md,
-        border: `1px solid ${colors.border}`,
-        background: colors.surfaceMuted
+        border: `1px solid ${colors.accent}66`,
+        background: colors.surfaceMuted,
+        boxShadow: `0 0 0 1px ${colors.accent}22`
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
@@ -1053,11 +1053,14 @@ function SectorDeskPanel({
             const biasTone =
               row.bias === "bull" ? colors.bullish : row.bias === "bear" ? colors.bearish : colors.textMuted;
             return (
-              <button
+              <MarketBriefSymbolLink
                 key={`${row.lane}:${row.symbol}`}
-                type="button"
+                symbol={row.symbol}
+                company={row.company}
+                lane={row.lane}
+                onSelect={onSelectSymbol}
                 data-testid={`market-brief-sector-row-${row.symbol}`}
-                onClick={() => onSelectSymbol(row.symbol, row.company, row.lane)}
+                className="market-brief-row-link"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "minmax(3.5rem, auto) minmax(4.5rem, auto) minmax(3.5rem, auto) minmax(0, 1fr)",
@@ -1069,7 +1072,6 @@ function SectorDeskPanel({
                   borderRadius: borderRadius.sm,
                   background: colors.surface,
                   color: colors.text,
-                  textAlign: "left",
                   cursor: "pointer"
                 }}
               >
@@ -1087,7 +1089,7 @@ function SectorDeskPanel({
                 >
                   {row.verdict}
                 </span>
-              </button>
+              </MarketBriefSymbolLink>
             );
           })}
         </div>
@@ -1096,10 +1098,12 @@ function SectorDeskPanel({
           No tracked names in {sector.label} on your desk right now.
         </span>
       )}
-      <button
-        type="button"
+      <MarketBriefSymbolLink
+        symbol={sector.symbol}
+        company={`${sector.label} sector ETF`}
+        lane="swing"
+        onSelect={onSelectSymbol}
         data-testid={`market-brief-sector-etf-${sector.symbol}`}
-        onClick={() => onSelectSymbol(sector.symbol, `${sector.label} sector ETF`, "swing")}
         style={{
           alignSelf: "flex-start",
           border: `1px solid ${colors.border}`,
@@ -1113,7 +1117,7 @@ function SectorDeskPanel({
         }}
       >
         View {sector.symbol} sector ETF →
-      </button>
+      </MarketBriefSymbolLink>
     </div>
   );
 }
@@ -1176,11 +1180,14 @@ function MoverColumn({
       ) : (
         movers.map((m) =>
           onSelectSymbol ? (
-            <button
+            <MarketBriefSymbolLink
               key={m.symbol}
-              type="button"
+              symbol={m.symbol}
+              company={m.company}
+              lane={m.lane}
+              onSelect={onSelectSymbol}
               data-testid={`market-brief-mover-row-${m.symbol}`}
-              onClick={() => onSelectSymbol(m.symbol, m.company, m.lane)}
+              className="market-brief-row-link"
               style={{
                 display: "flex",
                 justifyContent: "space-between",
@@ -1189,11 +1196,7 @@ function MoverColumn({
                 width: "100%",
                 padding: `${spacing[1]} ${spacing[1]}`,
                 margin: `0 -${spacing[1]}`,
-                border: "none",
                 borderRadius: borderRadius.sm,
-                background: "transparent",
-                color: colors.text,
-                textAlign: "left",
                 cursor: "pointer"
               }}
             >
@@ -1208,7 +1211,7 @@ function MoverColumn({
               <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: tone, flexShrink: 0 }}>
                 {fmtPct(m.changePct)}
               </span>
-            </button>
+            </MarketBriefSymbolLink>
           ) : (
             <div key={m.symbol} style={{ display: "flex", justifyContent: "space-between", gap: spacing[2], minWidth: 0 }}>
               <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
