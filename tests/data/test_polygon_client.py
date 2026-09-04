@@ -787,7 +787,7 @@ class TestAdditionalRestEndpoints:
                     "constituent_ticker": "CVX",
                     "constituent_name": "Chevron Corporation",
                     "weight": 0.165,
-                    "constituent_rank": 2,
+                    "constituent_rank": 2.0,
                 },
             ],
         }
@@ -797,6 +797,10 @@ class TestAdditionalRestEndpoints:
 
         async with PolygonClient(FAKE_KEY) as client:
             rows = await client.get_etf_constituents("XLE", limit=8)
+
+        request = respx.calls.last.request
+        assert request.url.params.get("sort") == "constituent_rank.asc"
+        assert request.url.params.get("composite_ticker") == "XLE"
 
         assert len(rows) == 2
         assert rows[0].symbol == "XOM"

@@ -1366,8 +1366,7 @@ class PolygonClient(_StreamingMixin):
         params = {
             "composite_ticker": sym,
             "limit": str(lim),
-            "sort": "constituent_rank",
-            "order": "asc",
+            "sort": "constituent_rank.asc",
         }
         data = await self._get("/etf-global/v1/constituents", params)
         out: list[EtfConstituent] = []
@@ -1380,7 +1379,11 @@ class PolygonClient(_StreamingMixin):
             weight_raw = row.get("weight")
             weight = float(weight_raw) if isinstance(weight_raw, (int, float)) else None
             rank_raw = row.get("constituent_rank")
-            rank = int(rank_raw) if isinstance(rank_raw, int) else None
+            rank: int | None = None
+            if isinstance(rank_raw, int):
+                rank = rank_raw
+            elif isinstance(rank_raw, float) and rank_raw.is_integer():
+                rank = int(rank_raw)
             name = str(row.get("constituent_name") or "").strip() or None
             out.append(
                 EtfConstituent(

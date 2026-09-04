@@ -24,6 +24,7 @@ import {
   buildSectorRepresentativeRowsFromInputs,
   feedStateLabel,
   getRepresentativeSymbolsForEtf,
+  preferredLaneForSymbol,
   sectorMomentumTradingNote,
   type SectorConstituentQuoteInput,
   type SectorConstituentSource,
@@ -518,6 +519,7 @@ export function MarketBrief({
                     panelRef={sectorPanelRef}
                     sector={data.sectors.find((s) => s.symbol === selectedSectorEtf) ?? null}
                     rows={buildSectorDeskRows(trackedCards, selectedSectorEtf)}
+                    trackedCards={trackedCards}
                     colors={colors}
                     onSelectSymbol={onSelectSymbol}
                   />
@@ -1017,12 +1019,14 @@ function SectorDeskPanel({
   panelRef,
   sector,
   rows,
+  trackedCards,
   colors,
   onSelectSymbol
 }: {
   panelRef?: RefObject<HTMLDivElement>;
   sector: BriefSector | null;
   rows: SectorDeskRow[];
+  trackedCards: readonly FeedCard[];
   colors: ReturnType<typeof useTheme>["colors"];
   onSelectSymbol: (symbol: string, company?: string | null, lane?: FeedLane) => void;
 }) {
@@ -1039,11 +1043,15 @@ function SectorDeskPanel({
       setConstituentInputs([]);
       setConstituentSource("curated");
       setConstituentsLoading(false);
+      setSnapshots(new Map());
       return;
     }
+    const curated = getRepresentativeSymbolsForEtf(sectorEtf).map((symbol) => ({ symbol }));
+    setConstituentInputs(curated);
+    setConstituentSource("curated");
+    setSnapshots(new Map());
     let cancelled = false;
     setConstituentsLoading(true);
-    const curated = getRepresentativeSymbolsForEtf(sectorEtf).map((symbol) => ({ symbol }));
     void (async () => {
       try {
         const res = await fetch(
@@ -1198,7 +1206,7 @@ function SectorDeskPanel({
                 key={`rep:${row.symbol}`}
                 symbol={row.symbol}
                 company={row.company}
-                lane="swing"
+                lane={preferredLaneForSymbol(trackedCards, row.symbol)}
                 onSelect={onSelectSymbol}
                 data-testid={`market-brief-sector-rep-${row.symbol}`}
                 className="market-brief-row-link"
