@@ -18,7 +18,7 @@ import {
   type BriefSessionPhase
 } from "@/lib/dashboard/trading-room/brief-session-copy";
 import type { WatchlistAtCloseItem } from "@/lib/hooks/use-watchlist-at-close";
-import type { FeedCard, FeedLane } from "@/lib/dashboard/trading-room/feed-model";
+import type { FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import {
   buildSectorDeskRows,
   feedStateLabel,
@@ -210,7 +210,7 @@ export function MarketBrief({
 }: MarketBriefProps) {
   const { theme, colors } = useTheme();
   const [selectedSectorEtf, setSelectedSectorEtf] = useState<string | null>(null);
-  const sectorPanelRef = useRef<HTMLDivElement | null>(null);
+  const sectorPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!selectedSectorEtf || !sectorPanelRef.current) return;
@@ -1015,7 +1015,7 @@ function SectorDeskPanel({
   colors,
   onSelectSymbol
 }: {
-  panelRef?: RefObject<HTMLDivElement | null>;
+  panelRef?: RefObject<HTMLDivElement>;
   sector: BriefSector | null;
   rows: SectorDeskRow[];
   colors: ReturnType<typeof useTheme>["colors"];
