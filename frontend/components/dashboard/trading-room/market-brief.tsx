@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { BarChart3, CalendarClock, Compass, Eye, LineChart, Newspaper, Target } from "lucide-react";
 import { useTheme } from "@/lib/theme-provider";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
@@ -21,9 +21,12 @@ import type { WatchlistAtCloseItem } from "@/lib/hooks/use-watchlist-at-close";
 import type { FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import {
   buildSectorDeskRows,
+  buildSectorRepresentativeRows,
   feedStateLabel,
+  getRepresentativeSymbolsForEtf,
   sectorMomentumTradingNote,
-  type SectorDeskRow
+  type SectorDeskRow,
+  type SectorSnapshotQuote
 } from "@/lib/dashboard/trading-room/market-brief-navigation";
 import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
 import type { DeskTodayData } from "@/lib/api/desk-today";
@@ -491,7 +494,7 @@ export function MarketBrief({
               colors.accent,
               <>
                 <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, opacity: 0.85, marginTop: -2 }}>
-                  Tap a sector for desk names and a trading read. Each chip shows 1-day and 5-day moves.
+                  Tap a sector for representative names, desk setups, and a trading read. Each chip shows 1-day and 5-day moves.
                 </span>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
                   {data.sectors.map((s) => (
@@ -1021,8 +1024,71 @@ function SectorDeskPanel({
   colors: ReturnType<typeof useTheme>["colors"];
   onSelectSymbol: (symbol: string, company?: string | null, lane?: FeedLane) => void;
 }) {
+  const [snapshots, setSnapshots] = useState<Map<string, SectorSnapshotQuote>>(new Map());
+  const [quotesLoading, setQuotesLoading] = useState(false);
+
+  const sectorEtf = sector?.symbol ?? null;
+  const representativeSymbols = useMemo(
+    () => (sectorEtf ? getRepresentativeSymbolsForEtf(sectorEtf) : []),
+    [sectorEtf]
+  );
+
+  useEffect(() => {
+    if (!sectorEtf || representativeSymbols.length === 0) {
+      setSnapshots(new Map());
+      setQuotesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setQuotesLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/stocvest/market/snapshots?symbols=${encodeURIComponent(representativeSymbols.join(","))}`,
+          { cache: "no-store" }
+        );
+        const body = (await res.json().catch(() => ({}))) as { snapshots?: SectorSnapshotQuote[] };
+        const map = new Map<string, SectorSnapshotQuote>();
+        for (const row of body.snapshots ?? []) {
+          const sym = String((row as { symbol?: string }).symbol ?? "")
+            .trim()
+            .toUpperCase();
+          if (sym) map.set(sym, row);
+        }
+        if (!cancelled) setSnapshots(map);
+      } catch {
+        if (!cancelled) setSnapshots(new Map());
+      } finally {
+        if (!cancelled) setQuotesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sectorEtf, representativeSymbols]);
+
+  const representativeRows = useMemo(
+    () => (sectorEtf ? buildSectorRepresentativeRows(sectorEtf, snapshots) : []),
+    [sectorEtf, snapshots]
+  );
+
   if (!sector) return null;
   const note = sectorMomentumTradingNote(sector);
+
+  const sectionHeading = (text: string) => (
+    <span
+      style={{
+        fontSize: typography.scale.xs,
+        color: colors.textMuted,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+        fontWeight: 600
+      }}
+    >
+      {text}
+    </span>
+  );
+
   return (
     <div
       ref={panelRef}
@@ -1041,12 +1107,68 @@ function SectorDeskPanel({
     >
       <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
         <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: colors.text }}>
-          {sector.label} ({sector.symbol}) · desk names
+          {sector.label} ({sector.symbol})
         </span>
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>{note}</span>
       </div>
+
+      {representativeRows.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
+          {sectionHeading("Sector names")}
+          {representativeRows.map((row) => {
+            const moveTone =
+              row.changePct == null ? colors.textMuted : row.changePct >= 0 ? colors.bullish : colors.bearish;
+            return (
+              <MarketBriefSymbolLink
+                key={`rep:${row.symbol}`}
+                symbol={row.symbol}
+                company={row.company}
+                lane="swing"
+                onSelect={onSelectSymbol}
+                data-testid={`market-brief-sector-rep-${row.symbol}`}
+                className="market-brief-row-link"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(3.5rem, auto) minmax(0, 1fr) minmax(3.5rem, auto)",
+                  gap: spacing[2],
+                  alignItems: "baseline",
+                  width: "100%",
+                  padding: `${spacing[1]} ${spacing[2]}`,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: borderRadius.sm,
+                  background: colors.surface,
+                  color: colors.text,
+                  cursor: "pointer"
+                }}
+              >
+                <span style={{ fontWeight: 700, fontFamily: typography.fontFamilyMono }}>{row.symbol}</span>
+                <span
+                  style={{
+                    fontSize: typography.scale.xs,
+                    color: colors.textMuted,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  {row.company ?? "Representative name"}
+                </span>
+                <span style={{ fontSize: typography.scale.sm, color: moveTone, fontWeight: 600, textAlign: "right" }}>
+                  {quotesLoading && row.changePct == null ? "…" : fmtPct(row.changePct)}
+                </span>
+              </MarketBriefSymbolLink>
+            );
+          })}
+        </div>
+      ) : (
+        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+          No curated sector names for {sector.label} yet.
+        </span>
+      )}
+
       {rows.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
+          {sectionHeading("On your desk")}
           {rows.slice(0, 8).map((row) => {
             const moveTone =
               row.changePct == null ? colors.textMuted : row.changePct >= 0 ? colors.bullish : colors.bearish;
@@ -1093,11 +1215,8 @@ function SectorDeskPanel({
             );
           })}
         </div>
-      ) : (
-        <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
-          No tracked names in {sector.label} on your desk right now.
-        </span>
-      )}
+      ) : null}
+
       <MarketBriefSymbolLink
         symbol={sector.symbol}
         company={`${sector.label} sector ETF`}
