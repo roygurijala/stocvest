@@ -405,6 +405,47 @@ def snapshots_batch_handler(
         return internal_error(str(exc))
 
 
+def etf_constituents_handler(
+    event: LambdaEvent,
+    context: LambdaContext,
+    client_factory: Callable[..., PolygonClient] = PolygonClient,
+) -> dict[str, Any]:
+    """GET ``symbol=XLE&limit=8`` — top ETF holdings via Polygon ETF Global (degrades when unavailable)."""
+    _ = context
+    query = _query_params(event)
+    raw = str(query.get("symbol") or query.get("etf") or "").strip().upper()
+    if not raw or len(raw) > 10:
+        return bad_request("Query param 'symbol' is required (sector ETF ticker).")
+    limit = 8
+    limit_raw = query.get("limit")
+    if limit_raw:
+        try:
+            limit = max(1, min(int(limit_raw), 20))
+        except (TypeError, ValueError):
+            return bad_request("Invalid 'limit'.")
+
+    async def _run() -> dict[str, Any]:
+        settings = get_settings()
+        if not (settings.polygon_api_key or "").strip():
+            return ok({"etf": raw, "source": "unavailable", "constituents": [], "degraded": True})
+        async with client_factory(api_key=settings.polygon_api_key) as client:
+            rows = await client.get_etf_constituents(raw, limit=limit)
+        if not rows:
+            return ok({"etf": raw, "source": "unavailable", "constituents": [], "degraded": True})
+        return ok(
+            {
+                "etf": raw,
+                "source": "etf_global",
+                "constituents": [row.model_dump(mode="json") for row in rows],
+            }
+        )
+
+    try:
+        return asyncio.run(_run())
+    except PolygonError:
+        return ok({"etf": raw, "source": "unavailable", "constituents": [], "degraded": True})
+
+
 def bars_batch_handler(
     event: LambdaEvent,
     context: LambdaContext,

@@ -190,6 +190,16 @@ class MarketStatus(BaseModel):
     currencies:     dict[str, str] = Field(default_factory=dict)
 
 
+class EtfConstituent(BaseModel):
+    """Single holding within an ETF (Polygon ETF Global constituents feed)."""
+
+    etf_symbol: str
+    symbol: str
+    name: str | None = None
+    weight: float | None = None
+    rank: int | None = None
+
+
 class EarningsEvent(BaseModel):
     """Upcoming or recently reported earnings event."""
 

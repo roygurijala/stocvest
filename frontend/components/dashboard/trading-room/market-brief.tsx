@@ -21,10 +21,12 @@ import type { WatchlistAtCloseItem } from "@/lib/hooks/use-watchlist-at-close";
 import type { FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import {
   buildSectorDeskRows,
-  buildSectorRepresentativeRows,
+  buildSectorRepresentativeRowsFromInputs,
   feedStateLabel,
   getRepresentativeSymbolsForEtf,
   sectorMomentumTradingNote,
+  type SectorConstituentQuoteInput,
+  type SectorConstituentSource,
   type SectorDeskRow,
   type SectorSnapshotQuote
 } from "@/lib/dashboard/trading-room/market-brief-navigation";
@@ -1026,11 +1028,67 @@ function SectorDeskPanel({
 }) {
   const [snapshots, setSnapshots] = useState<Map<string, SectorSnapshotQuote>>(new Map());
   const [quotesLoading, setQuotesLoading] = useState(false);
+  const [constituentInputs, setConstituentInputs] = useState<SectorConstituentQuoteInput[]>([]);
+  const [constituentSource, setConstituentSource] = useState<SectorConstituentSource>("curated");
+  const [constituentsLoading, setConstituentsLoading] = useState(false);
 
   const sectorEtf = sector?.symbol ?? null;
+
+  useEffect(() => {
+    if (!sectorEtf) {
+      setConstituentInputs([]);
+      setConstituentSource("curated");
+      setConstituentsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setConstituentsLoading(true);
+    const curated = getRepresentativeSymbolsForEtf(sectorEtf).map((symbol) => ({ symbol }));
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/stocvest/market/etf-constituents?symbol=${encodeURIComponent(sectorEtf)}`,
+          { cache: "no-store" }
+        );
+        const body = (await res.json().catch(() => ({}))) as {
+          source?: string;
+          constituents?: Array<{ symbol?: string; name?: string | null; weight?: number | null }>;
+        };
+        const fromApi = (body.constituents ?? [])
+          .map((row) => ({
+            symbol: String(row.symbol ?? "")
+              .trim()
+              .toUpperCase(),
+            name: row.name ?? null,
+            weight: typeof row.weight === "number" && Number.isFinite(row.weight) ? row.weight : null
+          }))
+          .filter((row) => row.symbol);
+        if (!cancelled) {
+          if (fromApi.length > 0 && body.source === "etf_global") {
+            setConstituentInputs(fromApi);
+            setConstituentSource("etf_global");
+          } else {
+            setConstituentInputs(curated);
+            setConstituentSource("curated");
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setConstituentInputs(curated);
+          setConstituentSource("curated");
+        }
+      } finally {
+        if (!cancelled) setConstituentsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sectorEtf]);
+
   const representativeSymbols = useMemo(
-    () => (sectorEtf ? getRepresentativeSymbolsForEtf(sectorEtf) : []),
-    [sectorEtf]
+    () => constituentInputs.map((row) => row.symbol).filter(Boolean),
+    [constituentInputs]
   );
 
   useEffect(() => {
@@ -1068,9 +1126,14 @@ function SectorDeskPanel({
   }, [sectorEtf, representativeSymbols]);
 
   const representativeRows = useMemo(
-    () => (sectorEtf ? buildSectorRepresentativeRows(sectorEtf, snapshots) : []),
-    [sectorEtf, snapshots]
+    () =>
+      buildSectorRepresentativeRowsFromInputs(constituentInputs, snapshots, {
+        preserveOrder: constituentSource === "etf_global"
+      }),
+    [constituentInputs, snapshots, constituentSource]
   );
+
+  const namesSectionLabel = constituentSource === "etf_global" ? "Top holdings" : "Sector names";
 
   if (!sector) return null;
   const note = sectorMomentumTradingNote(sector);
@@ -1112,12 +1175,24 @@ function SectorDeskPanel({
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>{note}</span>
       </div>
 
-      {representativeRows.length > 0 ? (
+      {representativeRows.length > 0 || constituentsLoading ? (
         <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
-          {sectionHeading("Sector names")}
+          {sectionHeading(namesSectionLabel)}
+          {constituentsLoading && representativeRows.length === 0 ? (
+            <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Loading sector names…</span>
+          ) : null}
           {representativeRows.map((row) => {
             const moveTone =
               row.changePct == null ? colors.textMuted : row.changePct >= 0 ? colors.bullish : colors.bearish;
+            const weightSuffix =
+              row.weightPct != null && Number.isFinite(row.weightPct)
+                ? ` · ${row.weightPct.toFixed(1)}%`
+                : "";
+            const companyLabel = row.company
+              ? `${row.company}${weightSuffix}`
+              : constituentSource === "etf_global"
+                ? `Holding${weightSuffix}`
+                : "Representative name";
             return (
               <MarketBriefSymbolLink
                 key={`rep:${row.symbol}`}
@@ -1151,7 +1226,7 @@ function SectorDeskPanel({
                     whiteSpace: "nowrap"
                   }}
                 >
-                  {row.company ?? "Representative name"}
+                  {companyLabel}
                 </span>
                 <span style={{ fontSize: typography.scale.sm, color: moveTone, fontWeight: 600, textAlign: "right" }}>
                   {quotesLoading && row.changePct == null ? "…" : fmtPct(row.changePct)}
