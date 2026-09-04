@@ -47,6 +47,16 @@ export interface SectorRepresentativeRow {
   symbol: string;
   company: string | null;
   changePct: number | null;
+  /** ETF portfolio weight when sourced from live holdings (percent, e.g. 22.1). */
+  weightPct?: number | null;
+}
+
+export type SectorConstituentSource = "etf_global" | "curated";
+
+export interface SectorConstituentQuoteInput {
+  symbol: string;
+  name?: string | null;
+  weight?: number | null;
 }
 
 export type SectorSnapshotQuote = MarketSnapshotVixFields & {
@@ -83,25 +93,39 @@ export function getRepresentativeSymbolsForEtf(sectorEtf: string, limit = DEFAUL
   return (symbolsBySectorEtf().get(etf) ?? []).slice(0, limit);
 }
 
+export function buildSectorRepresentativeRowsFromInputs(
+  inputs: readonly SectorConstituentQuoteInput[],
+  snapshots: ReadonlyMap<string, SectorSnapshotQuote>,
+  opts?: { preserveOrder?: boolean }
+): SectorRepresentativeRow[] {
+  const rows = inputs.map((input) => {
+    const symbol = input.symbol.trim().toUpperCase();
+    const snap = snapshots.get(symbol);
+    const weight = input.weight;
+    return {
+      symbol,
+      company: input.name?.trim() || snap?.company_name?.trim() || null,
+      changePct: snap ? vixSnapshotSessionChangePct(snap) : null,
+      weightPct: weight != null && Number.isFinite(weight) ? weight * 100 : null
+    };
+  });
+  if (opts?.preserveOrder) return rows;
+  return rows.sort((a, b) => {
+    const aMove = Math.abs(a.changePct ?? 0);
+    const bMove = Math.abs(b.changePct ?? 0);
+    return bMove - aMove;
+  });
+}
+
 export function buildSectorRepresentativeRows(
   sectorEtf: string,
   snapshots: ReadonlyMap<string, SectorSnapshotQuote>,
   limit = DEFAULT_REPRESENTATIVE_LIMIT
 ): SectorRepresentativeRow[] {
-  return getRepresentativeSymbolsForEtf(sectorEtf, limit)
-    .map((symbol) => {
-      const snap = snapshots.get(symbol);
-      return {
-        symbol,
-        company: snap?.company_name?.trim() || null,
-        changePct: snap ? vixSnapshotSessionChangePct(snap) : null
-      };
-    })
-    .sort((a, b) => {
-      const aMove = Math.abs(a.changePct ?? 0);
-      const bMove = Math.abs(b.changePct ?? 0);
-      return bMove - aMove;
-    });
+  return buildSectorRepresentativeRowsFromInputs(
+    getRepresentativeSymbolsForEtf(sectorEtf, limit).map((symbol) => ({ symbol })),
+    snapshots
+  );
 }
 
 export function buildSectorDeskRows(cards: readonly FeedCard[], sectorEtf: string): SectorDeskRow[] {

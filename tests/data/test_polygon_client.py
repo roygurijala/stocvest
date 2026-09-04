@@ -771,6 +771,45 @@ class TestAdditionalRestEndpoints:
 
     @pytest.mark.asyncio
     @respx.mock
+    async def test_get_etf_constituents_returns_holdings(self):
+        payload = {
+            "status": "OK",
+            "results": [
+                {
+                    "composite_ticker": "XLE",
+                    "constituent_ticker": "XOM",
+                    "constituent_name": "Exxon Mobil Corporation",
+                    "weight": 0.221,
+                    "constituent_rank": 1,
+                },
+                {
+                    "composite_ticker": "XLE",
+                    "constituent_ticker": "CVX",
+                    "constituent_name": "Chevron Corporation",
+                    "weight": 0.165,
+                    "constituent_rank": 2.0,
+                },
+            ],
+        }
+        respx.get("https://api.polygon.io/etf-global/v1/constituents").mock(
+            return_value=httpx.Response(200, json=payload)
+        )
+
+        async with PolygonClient(FAKE_KEY) as client:
+            rows = await client.get_etf_constituents("XLE", limit=8)
+
+        request = respx.calls.last.request
+        assert request.url.params.get("sort") == "constituent_rank.asc"
+        assert request.url.params.get("composite_ticker") == "XLE"
+
+        assert len(rows) == 2
+        assert rows[0].symbol == "XOM"
+        assert rows[0].etf_symbol == "XLE"
+        assert rows[0].weight == pytest.approx(0.221)
+        assert rows[0].rank == 1
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_get_ticker_details_returns_results_dict(self):
         payload = {"status": "OK", "results": {"ticker": "AAPL", "name": "Apple Inc."}}
         respx.get("https://api.polygon.io/v3/reference/tickers/AAPL").mock(

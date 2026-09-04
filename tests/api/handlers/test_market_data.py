@@ -10,6 +10,7 @@ from stocvest.api.handlers.market_data import (
     bars_handler,
     dashboard_summary_handler,
     earnings_calendar_handler,
+    etf_constituents_handler,
     market_status_handler,
     news_handler,
     options_chain_handler,
@@ -19,7 +20,7 @@ from stocvest.api.handlers.market_data import (
     tickers_search_handler,
     vix_snapshot_handler,
 )
-from stocvest.data.models import Bar, EarningsEvent, MarketStatus, NewsArticle, OptionContract, Snapshot, Timeframe
+from stocvest.data.models import Bar, EarningsEvent, EtfConstituent, MarketStatus, NewsArticle, OptionContract, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonError
 from stocvest.utils.config import get_settings
 
@@ -54,6 +55,16 @@ class _FakePolygonClient:
     async def get_snapshots_many(self, symbols: list[str], *, chunk_size: int = 50) -> list[Snapshot]:
         _ = chunk_size
         return [await self.get_snapshot(s) for s in symbols]
+
+    async def get_etf_constituents(self, etf_symbol: str, *, limit: int = 8) -> list[EtfConstituent]:
+        _ = limit
+        sym = etf_symbol.upper()
+        if sym != "XLE":
+            return []
+        return [
+            EtfConstituent(etf_symbol="XLE", symbol="XOM", name="Exxon Mobil Corporation", weight=0.22, rank=1),
+            EtfConstituent(etf_symbol="XLE", symbol="CVX", name="Chevron Corporation", weight=0.16, rank=2),
+        ]
 
     async def search_reference_tickers(self, query: str, *, limit: int = 15) -> list[dict[str, str]]:
         _ = limit
@@ -318,6 +329,37 @@ def test_snapshots_batch_handler_returns_snapshots() -> None:
     assert len(body["snapshots"]) == 2
     syms = {s["symbol"] for s in body["snapshots"]}
     assert syms == {"AAPL", "MSFT"}
+
+
+def test_etf_constituents_handler_requires_symbol() -> None:
+    response = etf_constituents_handler({"queryStringParameters": {}}, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 400
+
+
+def test_etf_constituents_handler_returns_holdings() -> None:
+    event = {"queryStringParameters": {"symbol": "XLE", "limit": "8"}}
+    response = etf_constituents_handler(event, {}, client_factory=_FakePolygonClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["source"] == "etf_global"
+    assert body["etf"] == "XLE"
+    assert [row["symbol"] for row in body["constituents"]] == ["XOM", "CVX"]
+
+
+def test_etf_constituents_handler_degrades_on_polygon_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _ErrClient(_FakePolygonClient):
+        async def get_etf_constituents(self, etf_symbol: str, *, limit: int = 8) -> list[EtfConstituent]:
+            raise PolygonError("Polygon 403 on /etf-global/v1/constituents")
+
+    monkeypatch.setenv("POLYGON_API_KEY", "test-key")
+    get_settings.cache_clear()
+    event = {"queryStringParameters": {"symbol": "XLE"}}
+    response = etf_constituents_handler(event, {}, client_factory=_ErrClient)
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["degraded"] is True
+    assert body["constituents"] == []
+    get_settings.cache_clear()
 
 
 def test_bars_batch_handler_returns_bars_by_symbol() -> None:

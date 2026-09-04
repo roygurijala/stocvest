@@ -3,6 +3,7 @@ import type { FeedCard } from "@/lib/dashboard/trading-room/feed-model";
 import {
   buildSectorDeskRows,
   buildSectorRepresentativeRows,
+  buildSectorRepresentativeRowsFromInputs,
   getRepresentativeSymbolsForEtf,
   preferredLaneForSymbol,
   sectorEtfForSymbol,
@@ -75,5 +76,19 @@ describe("market-brief-navigation", () => {
     const rows = buildSectorRepresentativeRows("XLE", snapshots, 3);
     expect(rows.map((r) => r.symbol)).toEqual(["CVX", "OXY", "XOM"]);
     expect(rows[0]?.changePct).toBe(-2.1);
+  });
+
+  it("preserves ETF holdings order and exposes portfolio weight", () => {
+    const snapshots = new Map([["XOM", { change_percent: 0.4 }], ["CVX", { change_percent: -1.2 }]]);
+    const rows = buildSectorRepresentativeRowsFromInputs(
+      [
+        { symbol: "XOM", name: "Exxon Mobil Corporation", weight: 0.221 },
+        { symbol: "CVX", name: "Chevron Corporation", weight: 0.165 }
+      ],
+      snapshots,
+      { preserveOrder: true }
+    );
+    expect(rows.map((r) => r.symbol)).toEqual(["XOM", "CVX"]);
+    expect(rows[0]?.weightPct).toBeCloseTo(22.1, 1);
   });
 });

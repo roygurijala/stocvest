@@ -42,6 +42,7 @@ from stocvest.data.models import (
     Bar,
     EarningsEvent,
     EconomicCalendarEvent,
+    EtfConstituent,
     MarketStatus,
     NewsArticle,
     OptionContract,
@@ -1345,6 +1346,57 @@ class PolygonClient(_StreamingMixin):
                 pass
 
         return rows_out[:lim]
+
+    async def get_etf_constituents(
+        self,
+        etf_symbol: str,
+        *,
+        limit: int = 8,
+    ) -> list[EtfConstituent]:
+        """
+        Fetch top ETF holdings from Polygon's ETF Global ``/etf-global/v1/constituents`` feed.
+
+        Requires the ETF Global add-on on the Polygon/Massive plan; callers should degrade
+        gracefully when this returns an empty list or raises ``PolygonError``.
+        """
+        sym = (etf_symbol or "").strip().upper()
+        if not sym:
+            return []
+        lim = max(1, min(int(limit), 20))
+        params = {
+            "composite_ticker": sym,
+            "limit": str(lim),
+            "sort": "constituent_rank.asc",
+        }
+        data = await self._get("/etf-global/v1/constituents", params)
+        out: list[EtfConstituent] = []
+        for row in data.get("results") or []:
+            if not isinstance(row, dict):
+                continue
+            constituent = str(row.get("constituent_ticker") or "").strip().upper()
+            if not constituent:
+                continue
+            weight_raw = row.get("weight")
+            weight = float(weight_raw) if isinstance(weight_raw, (int, float)) else None
+            rank_raw = row.get("constituent_rank")
+            rank: int | None = None
+            if isinstance(rank_raw, int):
+                rank = rank_raw
+            elif isinstance(rank_raw, float) and rank_raw.is_integer():
+                rank = int(rank_raw)
+            name = str(row.get("constituent_name") or "").strip() or None
+            out.append(
+                EtfConstituent(
+                    etf_symbol=sym,
+                    symbol=constituent,
+                    name=name,
+                    weight=weight,
+                    rank=rank,
+                )
+            )
+            if len(out) >= lim:
+                break
+        return out
 
     async def get_earnings_calendar(
         self,
