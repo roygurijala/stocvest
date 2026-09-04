@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { BarChart3, CalendarClock, Compass, Eye, LineChart, Newspaper, Target } from "lucide-react";
+import { BarChart3, CalendarClock, ChevronDown, Compass, Eye, LineChart, Newspaper, Target } from "lucide-react";
 import { useTheme } from "@/lib/theme-provider";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { borderRadius, spacing, typography, animationDurations } from "@/lib/design-system";
 import { regimeTone } from "@/lib/market-context/regime";
 import {
   buildRegimeWhyLine,
@@ -32,14 +32,15 @@ import {
   type SectorSnapshotQuote
 } from "@/lib/dashboard/trading-room/market-brief-navigation";
 import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
-import type { DeskTodayData } from "@/lib/api/desk-today";
-import type { IntradaySetupPayload } from "@/lib/api/scanner";
-import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
-import { MarketSwingSetupsTable } from "@/components/dashboard/personal-ranked-home-table";
 import { MarketBriefSymbolLink } from "@/components/dashboard/trading-room/market-brief-symbol-link";
+import {
+  countMarketBriefExpandedSections,
+  marketBriefExpandButtonLabel,
+  marketBriefExpandedHeadlines,
+  marketBriefScanHeadline
+} from "@/lib/dashboard/trading-room/market-brief-scan-present";
 
 const BRIEF_NAME_STORAGE_KEY = "stocvest:brief-name";
-const SWING_ACCENT = "#8B5CF6";
 
 export interface BriefHeadline {
   id: string;
@@ -154,11 +155,10 @@ export interface MarketBriefData {
 interface MarketBriefProps {
   data: MarketBriefData;
   onViewTopSetup: () => void;
+  /** Weekend prep CTA — opens the top swing-lane setup when distinct from `onViewTopSetup`. */
+  onViewTopSwingSetup?: () => void;
   onSearch?: () => void;
-  swingDesk?: DeskTodayData | null;
-  swingSetups?: readonly IntradaySetupPayload[];
-  nearQualification?: readonly ScannerNearQualificationRow[];
-  /** Opens in-panel Deep Dive for a symbol (movers, watchlist, sector names, swing table). */
+  /** Opens in-panel Deep Dive for a symbol (movers, watchlist, sector names). */
   onSelectSymbol?: (symbol: string, company?: string | null, lane?: FeedLane) => void;
   /** Tracked feed cards — used to populate sector desk lists. */
   trackedCards?: readonly FeedCard[];
@@ -207,15 +207,14 @@ function fmtPct(n: number | null): string {
 export function MarketBrief({
   data,
   onViewTopSetup,
+  onViewTopSwingSetup,
   onSearch,
-  swingDesk = null,
-  swingSetups = [],
-  nearQualification = [],
   onSelectSymbol,
   trackedCards = []
 }: MarketBriefProps) {
   const { theme, colors } = useTheme();
   const [selectedSectorEtf, setSelectedSectorEtf] = useState<string | null>(null);
+  const [briefExpanded, setBriefExpanded] = useState(false);
   const sectorPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -245,6 +244,24 @@ export function MarketBrief({
   const sessionLead = briefSessionSubtitle(data.sessionPhase);
   const showPrep = isPreparationPhase(data.sessionPhase);
   const noSetupLabel = briefNoSetupLabel(data.sessionPhase);
+  const expandedSectionCount = useMemo(
+    () =>
+      countMarketBriefExpandedSections(
+        {
+          headlines: data.headlines,
+          movers: data.movers,
+          weekAhead: data.weekAhead,
+          outcomesRecap: data.outcomesRecap,
+          watchlistAtClose: data.watchlistAtClose,
+          weekInReview: data.weekInReview
+        },
+        showPrep
+      ),
+    [data.headlines, data.movers, data.weekAhead, data.outcomesRecap, data.watchlistAtClose, data.weekInReview, showPrep]
+  );
+  const expandLabel = marketBriefExpandButtonLabel(expandedSectionCount, briefExpanded);
+  const scanHeadline = marketBriefScanHeadline(data.headlines);
+  const extraHeadlines = marketBriefExpandedHeadlines(data.headlines);
   const regimeWhyInput = {
     regimeLabel: data.regimeLabel,
     marketRegime: data.marketRegime,
@@ -379,28 +396,9 @@ export function MarketBrief({
         ) : null}
       </div>
 
-      {onSelectSymbol
-        ? tile(
-            <Target size={15} />,
-            "Swing setups from market scan",
-            SWING_ACCENT,
-            <MarketSwingSetupsTable
-              swingDesk={swingDesk}
-              swingSetups={swingSetups}
-              nearQualification={nearQualification}
-              onSelectSymbol={(sym) => onSelectSymbol(sym, null, "swing")}
-              colors={colors}
-              embedded
-            />,
-            { span: true }
-          )
-        : null}
-
-      <div className="brief-bento" style={{ gap: spacing[3], alignItems: "start" }}>
-        {/* Weekend / after-hours swing highlight — shown when swing data is active during prep.
-            Turns Saturday into an actionable preparation surface by surfacing the best swing
-            setup so the trader can review the scenario before Monday's open. */}
-        {showPrep && data.topSwingCard
+      <div className="brief-bento brief-bento--scan" style={{ gap: spacing[3], alignItems: "start" }}>
+        {/* Weekend / after-hours swing highlight — scan surface (actionable prep). */}
+        {showPrep && data.topSwingCard && (data.swingCardCount ?? 0) > 0
           ? tile(
               <Compass size={15} />,
               `Swing setups active · ${data.swingCardCount ?? 1} signal${(data.swingCardCount ?? 1) !== 1 ? "s" : ""}${data.swingDataDate ? ` from ${data.swingDataDate}` : ""}`,
@@ -451,7 +449,7 @@ export function MarketBrief({
                 </div>
                 <button
                   type="button"
-                  onClick={onViewTopSetup}
+                  onClick={onViewTopSwingSetup ?? onViewTopSetup}
                   style={{
                     border: "none",
                     background: "#c04cf5",
@@ -471,20 +469,6 @@ export function MarketBrief({
                     Signals carried from {data.swingDataDate} · valid through weekend
                   </span>
                 ) : null}
-              </div>,
-              { span: true }
-            )
-          : null}
-
-        {data.headlines.length > 0
-          ? tile(
-              <Newspaper size={15} />,
-              data.marketOpen ? "Moving the tape" : "Today's headlines",
-              colors.accent,
-              <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
-                {data.headlines.map((h) => (
-                  <Headline key={h.id} item={h} dot={dotFor(h.sentiment)} colors={colors} />
-                ))}
               </div>,
               { span: true }
             )
@@ -528,83 +512,173 @@ export function MarketBrief({
             )
           : null}
 
-        {data.movers.up.length > 0 || data.movers.down.length > 0
-          ? tile(
-              <BarChart3 size={15} />,
-              "Notable movers on the desk",
-              colors.bullish,
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: spacing[3] }}>
-                <MoverColumn
-                  title="Leading"
-                  movers={data.movers.up}
-                  positive
-                  colors={colors}
-                  onSelectSymbol={onSelectSymbol}
-                />
-                <MoverColumn
-                  title="Lagging"
-                  movers={data.movers.down}
-                  positive={false}
-                  colors={colors}
-                  onSelectSymbol={onSelectSymbol}
-                />
-              </div>
-            )
-          : null}
+        {scanHeadline ? (
+          <div
+            data-testid="market-brief-scan-headline"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: spacing[2],
+              padding: spacing[3],
+              borderRadius: borderRadius.md,
+              border: `1px solid ${colors.border}`,
+              background: tileBg
+            }}
+          >
+            {sectionLabel(data.marketOpen ? "Top headline" : "Headline")}
+            <Headline item={scanHeadline} dot={dotFor(scanHeadline.sentiment)} colors={colors} />
+          </div>
+        ) : null}
+      </div>
 
-        {showPrep && data.weekInReview && (data.weekInReview.bestSector || data.weekInReview.worstSector)
-          ? tile(
-              <BarChart3 size={15} />,
-              "Week in review",
-              colors.bullish,
-              <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
-                {data.weekInReview.bestSector ? (
-                  <>
-                    Leading: <span style={{ color: colors.text, fontWeight: 600 }}>{data.weekInReview.bestSector.label}</span>{" "}
-                    <span style={{ color: colors.bullish, fontWeight: 600 }}>{fmtPct(data.weekInReview.bestSector.pct5d)}</span>
-                  </>
-                ) : null}
-                {data.weekInReview.bestSector && data.weekInReview.worstSector ? " · " : null}
-                {data.weekInReview.worstSector ? (
-                  <>
-                    Lagging: <span style={{ color: colors.text, fontWeight: 600 }}>{data.weekInReview.worstSector.label}</span>{" "}
-                    <span style={{ color: colors.bearish, fontWeight: 600 }}>{fmtPct(data.weekInReview.worstSector.pct5d)}</span>
-                  </>
-                ) : null}
-              </span>
-            )
-          : null}
+      {expandLabel ? (
+        <button
+          type="button"
+          data-testid="market-brief-expand-toggle"
+          aria-expanded={briefExpanded}
+          onClick={() => setBriefExpanded((open) => !open)}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: spacing[2],
+            alignSelf: "flex-start",
+            border: `1px solid ${colors.border}`,
+            background: colors.surfaceMuted,
+            color: colors.text,
+            fontSize: typography.scale.sm,
+            fontWeight: 600,
+            padding: `${spacing[2]} ${spacing[4]}`,
+            borderRadius: borderRadius.md,
+            cursor: "pointer",
+            transition: `background ${animationDurations.normal} ease, border-color ${animationDurations.normal} ease`
+          }}
+        >
+          {expandLabel}
+          <ChevronDown
+            size={16}
+            aria-hidden
+            style={{
+              transform: briefExpanded ? "rotate(180deg)" : "rotate(0deg)",
+              transition: `transform ${animationDurations.normal} ease`
+            }}
+          />
+        </button>
+      ) : null}
 
-        {showPrep && data.watchlistAtClose.length > 0
-          ? tile(
-              <Eye size={15} />,
-              "Your watchlist at close",
-              colors.accent,
-              <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
-                {data.watchlistAtClose.slice(0, 6).map((w) => {
-                  const rowTone = w.changePct == null ? colors.textMuted : w.changePct >= 0 ? colors.bullish : colors.bearish;
-                  if (onSelectSymbol) {
+      {briefExpanded && expandedSectionCount > 0 ? (
+        <div
+          className="brief-bento brief-bento--expanded"
+          data-testid="market-brief-expanded"
+          style={{ gap: spacing[3], alignItems: "start" }}
+        >
+          {extraHeadlines.length > 0
+            ? tile(
+                <Newspaper size={15} />,
+                "More headlines",
+                colors.accent,
+                <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
+                  {extraHeadlines.map((h) => (
+                    <Headline key={h.id} item={h} dot={dotFor(h.sentiment)} colors={colors} />
+                  ))}
+                </div>,
+                { span: true }
+              )
+            : null}
+
+          {data.movers.up.length > 0 || data.movers.down.length > 0
+            ? tile(
+                <BarChart3 size={15} />,
+                "Notable movers on the desk",
+                colors.bullish,
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: spacing[3] }}>
+                  <MoverColumn
+                    title="Leading"
+                    movers={data.movers.up}
+                    positive
+                    colors={colors}
+                    onSelectSymbol={onSelectSymbol}
+                  />
+                  <MoverColumn
+                    title="Lagging"
+                    movers={data.movers.down}
+                    positive={false}
+                    colors={colors}
+                    onSelectSymbol={onSelectSymbol}
+                  />
+                </div>
+              )
+            : null}
+
+          {showPrep && data.weekInReview && (data.weekInReview.bestSector || data.weekInReview.worstSector)
+            ? tile(
+                <BarChart3 size={15} />,
+                "Week in review",
+                colors.bullish,
+                <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
+                  {data.weekInReview.bestSector ? (
+                    <>
+                      Leading: <span style={{ color: colors.text, fontWeight: 600 }}>{data.weekInReview.bestSector.label}</span>{" "}
+                      <span style={{ color: colors.bullish, fontWeight: 600 }}>{fmtPct(data.weekInReview.bestSector.pct5d)}</span>
+                    </>
+                  ) : null}
+                  {data.weekInReview.bestSector && data.weekInReview.worstSector ? " · " : null}
+                  {data.weekInReview.worstSector ? (
+                    <>
+                      Lagging: <span style={{ color: colors.text, fontWeight: 600 }}>{data.weekInReview.worstSector.label}</span>{" "}
+                      <span style={{ color: colors.bearish, fontWeight: 600 }}>{fmtPct(data.weekInReview.worstSector.pct5d)}</span>
+                    </>
+                  ) : null}
+                </span>
+              )
+            : null}
+
+          {showPrep && data.watchlistAtClose.length > 0
+            ? tile(
+                <Eye size={15} />,
+                "Your watchlist at close",
+                colors.accent,
+                <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
+                  {data.watchlistAtClose.slice(0, 6).map((w) => {
+                    const rowTone = w.changePct == null ? colors.textMuted : w.changePct >= 0 ? colors.bullish : colors.bearish;
+                    if (onSelectSymbol) {
+                      return (
+                        <MarketBriefSymbolLink
+                          key={w.symbol}
+                          symbol={w.symbol}
+                          lane="swing"
+                          onSelect={onSelectSymbol}
+                          data-testid={`market-brief-watchlist-row-${w.symbol}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "baseline",
+                            justifyContent: "space-between",
+                            gap: spacing[2],
+                            width: "100%",
+                            padding: `${spacing[1]} ${spacing[2]}`,
+                            margin: `0 -${spacing[2]}`,
+                            borderRadius: borderRadius.sm,
+                            cursor: "pointer"
+                          }}
+                          className="market-brief-row-link"
+                        >
+                          <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.accent, width: 56, flexShrink: 0, fontFamily: typography.fontFamilyMono }}>
+                            {w.symbol}
+                          </span>
+                          <span style={{ fontSize: typography.scale.sm, color: colors.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                            {w.price != null ? `$${w.price.toFixed(2)}` : "—"}
+                          </span>
+                          <span style={{ fontSize: typography.scale.sm, color: rowTone, flexShrink: 0, width: 64, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                            {fmtPct(w.changePct)}
+                          </span>
+                          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {w.stateLabel}
+                          </span>
+                        </MarketBriefSymbolLink>
+                      );
+                    }
                     return (
-                      <MarketBriefSymbolLink
-                        key={w.symbol}
-                        symbol={w.symbol}
-                        lane="swing"
-                        onSelect={onSelectSymbol}
-                        data-testid={`market-brief-watchlist-row-${w.symbol}`}
-                        style={{
-                          display: "flex",
-                          alignItems: "baseline",
-                          justifyContent: "space-between",
-                          gap: spacing[2],
-                          width: "100%",
-                          padding: `${spacing[1]} ${spacing[2]}`,
-                          margin: `0 -${spacing[2]}`,
-                          borderRadius: borderRadius.sm,
-                          cursor: "pointer"
-                        }}
-                        className="market-brief-row-link"
-                      >
-                        <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.accent, width: 56, flexShrink: 0, fontFamily: typography.fontFamilyMono }}>
+                      <div key={w.symbol} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2] }}>
+                        <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text, width: 56, flexShrink: 0 }}>
                           {w.symbol}
                         </span>
                         <span style={{ fontSize: typography.scale.sm, color: colors.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
@@ -616,81 +690,65 @@ export function MarketBrief({
                         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {w.stateLabel}
                         </span>
-                      </MarketBriefSymbolLink>
+                      </div>
                     );
-                  }
-                  return (
-                    <div key={w.symbol} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2] }}>
-                      <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text, width: 56, flexShrink: 0 }}>
-                        {w.symbol}
+                  })}
+                </div>
+              )
+            : null}
+
+          {showPrep && data.outcomesRecap
+            ? tile(
+                <Target size={15} />,
+                `Setup follow-through · your watchlist · last ${data.outcomesRecap.windowDays} sessions`,
+                colors.textMuted,
+                <OutcomesRecap recap={data.outcomesRecap} colors={colors} />
+              )
+            : null}
+
+          {showPrep && data.weekAhead.length > 0
+            ? tile(
+                <CalendarClock size={15} />,
+                "Looking ahead",
+                colors.caution,
+                <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
+                  {data.weekAhead.map((e, i) => (
+                    <div key={`${e.label}-${i}`} style={{ display: "flex", justifyContent: "space-between", gap: spacing[2] }}>
+                      <span
+                        style={{
+                          fontSize: typography.scale.sm,
+                          color: colors.text,
+                          fontWeight: e.importance >= 2 ? 600 : 400,
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {e.label}
                       </span>
-                      <span style={{ fontSize: typography.scale.sm, color: colors.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                        {w.price != null ? `$${w.price.toFixed(2)}` : "—"}
-                      </span>
-                      <span style={{ fontSize: typography.scale.sm, color: rowTone, flexShrink: 0, width: 64, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                        {fmtPct(w.changePct)}
-                      </span>
-                      <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {w.stateLabel}
-                      </span>
+                      <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flexShrink: 0 }}>{e.when}</span>
                     </div>
-                  );
-                })}
-              </div>
-            )
-          : null}
+                  ))}
+                </div>
+              )
+            : null}
+        </div>
+      ) : null}
 
-        {showPrep && data.outcomesRecap
-          ? tile(
-              <Target size={15} />,
-              `Setup follow-through · your watchlist · last ${data.outcomesRecap.windowDays} sessions`,
-              colors.textMuted,
-              <OutcomesRecap recap={data.outcomesRecap} colors={colors} />
-            )
-          : null}
-
-        {showPrep && data.weekAhead.length > 0
-          ? tile(
-              <CalendarClock size={15} />,
-              "Looking ahead",
-              colors.caution,
-              <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
-                {data.weekAhead.map((e, i) => (
-                  <div key={`${e.label}-${i}`} style={{ display: "flex", justifyContent: "space-between", gap: spacing[2] }}>
-                    <span
-                      style={{
-                        fontSize: typography.scale.sm,
-                        color: colors.text,
-                        fontWeight: e.importance >= 2 ? 600 : 400,
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
-                      }}
-                    >
-                      {e.label}
-                    </span>
-                    <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flexShrink: 0 }}>{e.when}</span>
-                  </div>
-                ))}
-              </div>
-            )
-          : null}
-
-        {data.watchLine && !(showPrep && data.weekAhead.length > 0)
-          ? tile(
-              <Compass size={15} />,
-              "What to watch",
-              colors.caution,
-              <>
-                <span style={{ fontSize: typography.scale.base, fontWeight: 600 }}>{data.watchLine}</span>
-                {data.watchDetail ? (
-                  <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>→ {data.watchDetail}</span>
-                ) : null}
-              </>
-            )
-          : null}
-      </div>
+      {data.watchLine && !(showPrep && data.weekAhead.length > 0)
+        ? tile(
+            <Compass size={15} />,
+            "What to watch",
+            colors.caution,
+            <>
+              <span style={{ fontSize: typography.scale.base, fontWeight: 600 }}>{data.watchLine}</span>
+              {data.watchDetail ? (
+                <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>→ {data.watchDetail}</span>
+              ) : null}
+            </>
+          )
+        : null}
 
       <div style={{ display: "flex", gap: spacing[3], flexWrap: "wrap" }}>
         <button

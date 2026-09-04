@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { buildFeedCards, findFeedCardForSymbolLane } from "@/lib/dashboard/trading-room/feed-model";
+import {
+  buildFeedCards,
+  countDeskSetupCards,
+  DEFAULT_FEED_FILTERS,
+  findFeedCardForSymbolLane,
+  pickTopDeskSetupCard,
+  rankAndCapFeed
+} from "@/lib/dashboard/trading-room/feed-model";
 import type { FeedCard } from "@/lib/dashboard/trading-room/feed-model";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 
@@ -13,7 +20,7 @@ const swingDesk: DeskTodayData = {
 };
 
 describe("buildFeedCards", () => {
-  test("falls back to swing movers for day lane when day desk cache is null", () => {
+  test("does not ingest session movers into the default desk feed (QuietFeed only)", () => {
     const cards = buildFeedCards({
       mode: "swing",
       swingDesk,
@@ -23,11 +30,8 @@ describe("buildFeedCards", () => {
       snapshotsBySymbol: new Map(),
       dayTradingSurfaces: true
     });
-    const dayCards = cards.filter((c) => c.lane === "day");
-    expect(dayCards.length).toBeGreaterThan(0);
-    expect(dayCards.some((c) => c.symbol === "ASTN")).toBe(true);
-    expect(dayCards.every((c) => c.state === "potential")).toBe(true);
-    expect(dayCards.every((c) => c.setupTier === "mover")).toBe(true);
+    expect(cards.filter((c) => c.lane === "day")).toHaveLength(0);
+    expect(cards.some((c) => c.setupTier === "mover")).toBe(false);
   });
 
   test("excludes desk leaders marked not surface eligible", () => {
@@ -130,7 +134,7 @@ describe("buildFeedCards", () => {
     const cards = buildFeedCards({
       mode: "swing",
       swingDesk: {
-        movers_radar: [{ symbol: "ASTX", gap_percent: 18.2, direction: "up", rank_score: 70 }]
+        discovery: [{ symbol: "ASTX", gap_percent: 18.2, direction: "up", rank_score: 70, desk: "swing" }]
       },
       dayDesk: null,
       swingSetups: [],
@@ -181,12 +185,10 @@ describe("buildFeedCards", () => {
     expect(astn?.setupTier).toBe("setup");
   });
 
-  test("scanner setup promotes mover to setup tier on same symbol", () => {
+  test("scanner setup wins as setup tier on same symbol", () => {
     const cards = buildFeedCards({
       mode: "swing",
-      swingDesk: {
-        movers_radar: [{ symbol: "ASTN", gap_percent: 27.7, direction: "up", rank_score: 88 }]
-      },
+      swingDesk: null,
       dayDesk: null,
       swingSetups: [
         {
@@ -231,6 +233,172 @@ describe("buildFeedCards", () => {
     });
     const snxx = cards.find((c) => c.symbol === "SNXX");
     expect(snxx?.state).toBe("near");
+  });
+});
+
+describe("rankAndCapFeed UX-D2 defaults", () => {
+  const sample: FeedCard[] = [
+    {
+      id: "swing:A",
+      symbol: "A",
+      company: null,
+      lane: "swing",
+      state: "actionable",
+      bias: "bull",
+      verdict: "v",
+      phase: null,
+      price: null,
+      changePct: null,
+      alignment: null,
+      rankScore: 90,
+      source: "desk",
+      setupTier: "setup",
+      lastEvaluatedAt: null
+    },
+    {
+      id: "swing:B",
+      symbol: "B",
+      company: null,
+      lane: "swing",
+      state: "near",
+      bias: "bull",
+      verdict: "v",
+      phase: null,
+      price: null,
+      changePct: null,
+      alignment: null,
+      rankScore: 80,
+      source: "desk",
+      setupTier: "setup",
+      lastEvaluatedAt: null
+    },
+    {
+      id: "swing:C",
+      symbol: "C",
+      company: null,
+      lane: "swing",
+      state: "potential",
+      bias: "neutral",
+      verdict: "v",
+      phase: null,
+      price: null,
+      changePct: null,
+      alignment: null,
+      rankScore: 70,
+      source: "desk",
+      setupTier: "setup",
+      lastEvaluatedAt: null
+    },
+    {
+      id: "swing:D",
+      symbol: "D",
+      company: null,
+      lane: "swing",
+      state: "cooling",
+      bias: "neutral",
+      verdict: "v",
+      phase: null,
+      price: null,
+      changePct: null,
+      alignment: null,
+      rankScore: 60,
+      source: "desk",
+      setupTier: "setup",
+      lastEvaluatedAt: null
+    }
+  ];
+
+  test("DEFAULT_FEED_FILTERS shows actionable + near only", () => {
+    const out = rankAndCapFeed(sample, DEFAULT_FEED_FILTERS);
+    expect(out.map((c) => c.symbol)).toEqual(["A", "B"]);
+  });
+
+  test("potential cap is 2 when filter is all", () => {
+    const manyPotential = Array.from({ length: 5 }, (_, i) => ({
+      ...sample[2],
+      id: `swing:P${i}`,
+      symbol: `P${i}`,
+      rankScore: 50 - i
+    }));
+    const out = rankAndCapFeed(manyPotential, { lane: "all", state: "all", bias: "all" });
+    expect(out.filter((c) => c.state === "potential")).toHaveLength(2);
+  });
+
+  test("cooling hidden unless state filter is all", () => {
+    expect(rankAndCapFeed(sample, DEFAULT_FEED_FILTERS).some((c) => c.state === "cooling")).toBe(false);
+    const all = rankAndCapFeed(sample, { lane: "all", state: "all", bias: "all" });
+    expect(all.some((c) => c.state === "cooling")).toBe(true);
+  });
+});
+
+describe("pickTopDeskSetupCard", () => {
+  const cards: FeedCard[] = [
+    {
+      id: "swing:POT",
+      symbol: "POT",
+      company: null,
+      lane: "swing",
+      state: "potential",
+      bias: "neutral",
+      verdict: "v",
+      phase: null,
+      price: null,
+      changePct: null,
+      alignment: null,
+      rankScore: 99,
+      source: "desk",
+      setupTier: "setup",
+      lastEvaluatedAt: null
+    },
+    {
+      id: "swing:ACT",
+      symbol: "ACT",
+      company: null,
+      lane: "swing",
+      state: "actionable",
+      bias: "bull",
+      verdict: "v",
+      phase: null,
+      price: null,
+      changePct: null,
+      alignment: null,
+      rankScore: 10,
+      source: "desk",
+      setupTier: "setup",
+      lastEvaluatedAt: null
+    }
+  ];
+
+  test("prefers actionable over higher-ranked potential", () => {
+    expect(pickTopDeskSetupCard(cards)?.symbol).toBe("ACT");
+  });
+
+  test("respects lane filter", () => {
+    const mixed = [
+      ...cards,
+      {
+        id: "day:DAY",
+        symbol: "DAY",
+        company: null,
+        lane: "day",
+        state: "actionable",
+        bias: "bull",
+        verdict: "v",
+        phase: null,
+        price: null,
+        changePct: null,
+        alignment: null,
+        rankScore: 100,
+        source: "desk",
+        setupTier: "setup",
+        lastEvaluatedAt: null
+      }
+    ];
+    expect(pickTopDeskSetupCard(mixed, { lane: "swing" })?.symbol).toBe("ACT");
+  });
+
+  test("countDeskSetupCards filters lane and states", () => {
+    expect(countDeskSetupCards(cards, { lane: "swing", states: ["actionable", "near"] })).toBe(1);
   });
 });
 

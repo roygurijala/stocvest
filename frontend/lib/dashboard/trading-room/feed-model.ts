@@ -9,7 +9,7 @@
  * This is a PURE module (no React, no fetch) so it can be unit-tested and so
  * the UI never has to reason about which upstream source a card came from.
  */
-import type { DeskDiscoveryLeader, DeskMoverRadarRow, DeskTodayData, DeskTodayMode } from "@/lib/api/desk-today";
+import type { DeskDiscoveryLeader, DeskTodayData } from "@/lib/api/desk-today";
 import type { IntradaySetupPayload } from "@/lib/api/scanner";
 import type { SnapshotPayload } from "@/lib/api/market";
 
@@ -53,9 +53,12 @@ export interface FeedCard {
 export const FEED_STATE_CAPS: Record<FeedState, number> = {
   actionable: 10,
   near: 8,
-  potential: 6,
-  cooling: 5
+  potential: 2,
+  cooling: 0
 };
+
+/** Cooling rows only appear when the user widens the state filter to "All states". */
+export const FEED_COOLING_CAP_WHEN_ALL = 5;
 
 const STATE_ORDER: Record<FeedState, number> = {
   actionable: 0,
@@ -249,34 +252,6 @@ function cardFromLeader(
   };
 }
 
-function cardFromMover(
-  mover: DeskMoverRadarRow,
-  lane: FeedLane,
-  snapshotsBySymbol: Map<string, SnapshotPayload>,
-  companyBySymbol?: Map<string, string>
-): FeedCard {
-  const symbol = mover.symbol.trim().toUpperCase();
-  const snap = snapshotsBySymbol.get(symbol);
-  const company = companyBySymbol?.get(symbol) ?? snap?.company_name?.trim() ?? null;
-  return {
-    id: `${lane}:${symbol}`,
-    symbol,
-    company,
-    lane,
-    state: "potential",
-    bias: biasFromDirection(mover.direction),
-    verdict: "Session mover · not an entry",
-    phase: "session activity",
-    price: priceFromSnapshot(snap),
-    changePct: cleanNum(mover.gap_percent) ?? snapChangePct(snap),
-    alignment: null,
-    rankScore: cleanNum(mover.rank_score) ?? 0,
-    source: "desk",
-    setupTier: "mover",
-    lastEvaluatedAt: null
-  };
-}
-
 function cardFromSetup(
   setup: IntradaySetupPayload,
   lane: FeedLane,
@@ -347,16 +322,6 @@ export function buildFeedCards(input: BuildFeedInput): FeedCard[] {
       if (!leaderFeedEligible(leader)) continue;
       ingest(cardFromLeader(leader, "day", snapshotsBySymbol, companyBySymbol), false);
     }
-    const dayDiscoveryCount = input.dayDesk?.discovery?.length ?? 0;
-    if (dayDiscoveryCount === 0) {
-      const movers =
-        (input.dayDesk?.movers_radar?.length ? input.dayDesk.movers_radar : null) ??
-        (input.dayDesk == null ? input.swingDesk?.movers_radar : null) ??
-        [];
-      for (const mover of movers) {
-        ingest(cardFromMover(mover, "day", snapshotsBySymbol, companyBySymbol), false);
-      }
-    }
   }
   for (const setup of input.swingSetups) {
     if (!setupFeedEligible(setup)) continue;
@@ -374,20 +339,62 @@ export function buildFeedCards(input: BuildFeedInput): FeedCard[] {
 
 export interface FeedFilters {
   lane: "all" | FeedLane;
-  state: "all" | "actionable" | "near" | "potential";
+  /** Default desk view: actionable + near only (ADR-003 UX-D2). */
+  state: "all" | "actionable_near" | "actionable" | "near" | "potential";
   bias: "all" | "long" | "short";
 }
 
-export const DEFAULT_FEED_FILTERS: FeedFilters = { lane: "all", state: "all", bias: "all" };
+export const DEFAULT_FEED_FILTERS: FeedFilters = { lane: "all", state: "actionable_near", bias: "all" };
 
 function matchesFilters(card: FeedCard, filters: FeedFilters): boolean {
+  if (card.setupTier === "mover") return false;
   if (filters.lane !== "all" && card.lane !== filters.lane) return false;
   if (filters.bias === "long" && card.bias !== "bull") return false;
   if (filters.bias === "short" && card.bias !== "bear") return false;
+  if (filters.state === "actionable_near") {
+    return card.state === "actionable" || card.state === "near";
+  }
   if (filters.state === "actionable" && card.state !== "actionable") return false;
   if (filters.state === "near" && card.state !== "near") return false;
   if (filters.state === "potential" && card.state !== "potential") return false;
   return true;
+}
+
+function capForState(state: FeedState, filters: FeedFilters): number {
+  if (state === "cooling") {
+    return filters.state === "all" ? FEED_COOLING_CAP_WHEN_ALL : 0;
+  }
+  return FEED_STATE_CAPS[state];
+}
+
+/** Desk setup cards only — excludes session movers (QuietFeed context). */
+export function deskSetupFeedCards(cards: readonly FeedCard[]): FeedCard[] {
+  return cards.filter((c) => c.setupTier === "setup");
+}
+
+export function describeFeedFilterSummary(
+  filters: FeedFilters,
+  visibleCount: number,
+  totalSetupCount: number,
+  /** All desk setups — used for “widen filter” copy when the active filter shows zero rows. */
+  deskTotalCount?: number
+): string {
+  const deskAll = deskTotalCount ?? totalSetupCount;
+  if (filters.state === "actionable_near") {
+    if (visibleCount === 0 && deskAll > 0) {
+      return `No actionable or near setups — widen the state filter to see ${deskAll} other name${deskAll === 1 ? "" : "s"} on the desk.`;
+    }
+    if (visibleCount === 0) {
+      return "Actionable desk — qualified setups and names forming entry.";
+    }
+    return visibleCount === totalSetupCount
+      ? `${visibleCount} actionable or near setup${visibleCount === 1 ? "" : "s"}.`
+      : `Showing ${visibleCount} actionable or near of ${totalSetupCount} desk setups.`;
+  }
+  if (visibleCount === totalSetupCount) {
+    return "Filters apply to setups in this column only.";
+  }
+  return `Showing ${visibleCount} of ${totalSetupCount} setups in this column.`;
 }
 
 /**
@@ -405,7 +412,8 @@ export function rankAndCapFeed(cards: FeedCard[], filters: FeedFilters = DEFAULT
   const seen: Record<FeedState, number> = { actionable: 0, near: 0, potential: 0, cooling: 0 };
   const out: FeedCard[] = [];
   for (const card of sorted) {
-    if (seen[card.state] >= FEED_STATE_CAPS[card.state]) continue;
+    const cap = capForState(card.state, filters);
+    if (cap <= 0 || seen[card.state] >= cap) continue;
     seen[card.state] += 1;
     out.push(card);
   }
@@ -432,4 +440,30 @@ export function findFeedCardForSymbolLane(
   const sym = symbol.trim().toUpperCase();
   if (!sym) return undefined;
   return cards.find((c) => c.symbol === sym && c.lane === lane);
+}
+
+/** Hottest desk setup for brief CTAs — prefers actionable, ignores UI filter state. */
+export function pickTopDeskSetupCard(
+  cards: readonly FeedCard[],
+  opts?: { lane?: FeedLane }
+): FeedCard | null {
+  const setup = deskSetupFeedCards(cards).filter((c) => !opts?.lane || c.lane === opts.lane);
+  if (setup.length === 0) return null;
+  const sorted = [...setup].sort((a, b) => {
+    const byState = STATE_ORDER[a.state] - STATE_ORDER[b.state];
+    if (byState !== 0) return byState;
+    if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore;
+    return a.symbol.localeCompare(b.symbol);
+  });
+  return sorted.find((c) => c.state === "actionable") ?? sorted[0] ?? null;
+}
+
+export function countDeskSetupCards(
+  cards: readonly FeedCard[],
+  opts?: { lane?: FeedLane; states?: readonly FeedState[] }
+): number {
+  let setup = deskSetupFeedCards(cards);
+  if (opts?.lane) setup = setup.filter((c) => c.lane === opts.lane);
+  if (opts?.states?.length) setup = setup.filter((c) => opts.states!.includes(c.state));
+  return setup.length;
 }

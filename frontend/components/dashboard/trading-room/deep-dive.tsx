@@ -5,7 +5,8 @@
  *
  * Fetches the composite payload on select (`useSignalComposite`) and renders the
  * decision in the trading-room's own visual language: a verdict header, a
- * decisive plain-English brief, and a single scroll: Setup → Layers → Evolution → Chart.
+ * decisive plain-English brief, a sticky glance header, a Decision block (summary +
+ * geometry strip), and evidence tabs: Setup → Layers → Chart → Context (ADR-003 UX-D4).
  *
  * It deliberately reuses the PURE composite libs (`parseSwingCompositeInsight`,
  * `compositeToSignalsLayerRows`) and the self-contained `SetupEvolutionPanel`
@@ -17,6 +18,12 @@
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-system";
+import { DeepDiveEvidenceTabs } from "@/components/dashboard/trading-room/deep-dive-evidence-tabs";
+import {
+  DEFAULT_DEEP_DIVE_EVIDENCE_TAB,
+  DEEP_DIVE_CONTEXT_COLLAPSED_DEFAULT,
+  type DeepDiveEvidenceTab
+} from "@/lib/dashboard/trading-room/deep-dive-tier-present";
 import { isUsRegularSessionOpenEt, nextRegularSessionOpenLabel } from "@/lib/market-hours-et";
 import type { useTheme } from "@/lib/theme-provider";
 import { useSignalComposite } from "@/lib/hooks/use-signal-composite";
@@ -518,76 +525,104 @@ function LaneToggle({
 }
 
 
-function SectionLabel({ children, colors }: { children: string; colors: Colors }) {
-  return (
+/** Compact entry / stop / target row under the decision geometry bar. */
+function DecisionLevelStrip({
+  entryLow,
+  entryHigh,
+  stopPrice,
+  targetPrice,
+  chosenLabel,
+  colors
+}: {
+  entryLow: number;
+  entryHigh: number;
+  stopPrice: number;
+  targetPrice: number;
+  chosenLabel: "T1" | "T2";
+  colors: Colors;
+}) {
+  const chip = (label: string, value: string, tone = colors.text) => (
     <span
       style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
         fontSize: typography.scale.xs,
         color: colors.textMuted,
-        letterSpacing: "0.1em",
-        textTransform: "uppercase"
+        fontVariantNumeric: "tabular-nums"
       }}
     >
-      {children}
+      <span style={{ fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>{label}</span>
+      <span style={{ color: tone, fontWeight: 700 }}>{value}</span>
     </span>
+  );
+  return (
+    <div
+      data-testid="deep-dive-decision-levels"
+      style={{ display: "flex", flexWrap: "wrap", gap: spacing[3], marginTop: spacing[2] }}
+    >
+      {chip("Entry", `$${entryLow.toFixed(2)}–$${entryHigh.toFixed(2)}`, colors.accent)}
+      {chip("Stop", `$${stopPrice.toFixed(2)}`, colors.bearish)}
+      {chip("Target", `$${targetPrice.toFixed(2)} · ${chosenLabel}`, colors.bullish)}
+    </div>
   );
 }
 
-function DeepDiveSection({
-  id,
+function DeepDiveCollapsible({
   title,
-  statusDot,
+  defaultOpen = DEEP_DIVE_CONTEXT_COLLAPSED_DEFAULT,
   colors,
   children,
-  first = false
+  testId
 }: {
-  id: string;
   title: string;
-  statusDot?: "entry" | "caution" | null;
+  defaultOpen?: boolean;
   colors: Colors;
   children: ReactNode;
-  first?: boolean;
+  testId?: string;
 }) {
-  const dotColor =
-    statusDot === "entry" ? colors.bullish : statusDot === "caution" ? colors.caution : null;
-  const dotTitle =
-    statusDot === "entry"
-      ? "Price is inside the entry zone"
-      : statusDot === "caution"
-        ? "Price is near the stop / setup is approaching"
-        : undefined;
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <section
-      id={id}
-      data-testid={id}
-      aria-label={title}
+    <div
+      data-testid={testId}
       style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: spacing[3],
-        paddingTop: first ? 0 : spacing[4],
-        borderTop: first ? undefined : `1px solid ${colors.border}`
+        border: `1px solid ${colors.border}`,
+        borderRadius: borderRadius.md,
+        background: colors.surfaceMuted,
+        overflow: "hidden"
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
-        <SectionLabel colors={colors}>{title}</SectionLabel>
-        {dotColor ? (
-          <span
-            aria-hidden
-            title={dotTitle}
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: dotColor,
-              display: "inline-block",
-              boxShadow: `0 0 4px ${dotColor}`
-            }}
-          />
-        ) : null}
-      </div>
-      {children}
-    </section>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: spacing[2],
+          border: "none",
+          background: "transparent",
+          color: colors.text,
+          fontSize: typography.scale.sm,
+          fontWeight: 700,
+          padding: `${spacing[3]} ${spacing[4]}`,
+          cursor: "pointer",
+          textAlign: "left"
+        }}
+      >
+        {title}
+        <span aria-hidden style={{ color: colors.textMuted, fontSize: typography.scale.xs }}>
+          {open ? "▴" : "▾"}
+        </span>
+      </button>
+      {open ? (
+        <div style={{ padding: `0 ${spacing[4]} ${spacing[4]}`, display: "flex", flexDirection: "column", gap: spacing[3] }}>
+          {children}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -730,12 +765,15 @@ export function DeepDive({
   dataRefreshNonce?: number;
 }) {
   const [showBriefDetails, setShowBriefDetails] = useState(false);
+  const [evidenceTab, setEvidenceTab] = useState<DeepDiveEvidenceTab>(DEFAULT_DEEP_DIVE_EVIDENCE_TAB);
   // activeLane allows switching Day/Swing within the deep dive
   const [activeLane, setActiveLane] = useState<"day" | "swing">(card.lane);
 
   // Sync activeLane when card changes (fixes loading issue when clicking different signals)
   useEffect(() => {
     setActiveLane(card.lane);
+    setEvidenceTab(DEFAULT_DEEP_DIVE_EVIDENCE_TAB);
+    setShowBriefDetails(false);
   }, [card.symbol, card.lane]);
 
   const symbolName = useSymbolName(card.symbol);
@@ -1044,25 +1082,6 @@ export function DeepDive({
     };
   }, [composite, isInsufficient]);
 
-  // Chart section status dot. "entry" (green) when price is inside the entry zone
-  // OR either lane is actionable; "caution" (amber) when price is near the stop
-  // OR either lane is near. Reflects evaluation-time price, not a live tick —
-  // kept conservative so it never implies real-time precision it doesn't have.
-  const chartsDot = useMemo<"entry" | "caution" | null>(() => {
-    const p = card.price;
-    const priced = p != null && Number.isFinite(p);
-    if (priced && signalOverlay?.entryZone) {
-      const { low, high } = signalOverlay.entryZone;
-      if (p! >= low && p! <= high) return "entry";
-    }
-    if (dayState === "actionable" || swingState === "actionable") return "entry";
-    if (priced && signalOverlay?.stop && signalOverlay.stop > 0) {
-      if (Math.abs(p! - signalOverlay.stop) / signalOverlay.stop <= 0.01) return "caution";
-    }
-    if (dayState === "near" || swingState === "near") return "caution";
-    return null;
-  }, [card.price, signalOverlay, dayState, swingState]);
-
   const riskReward = useMemo(() => {
     if (isInsufficient) return null;
     const c = composite as Record<string, unknown>;
@@ -1225,9 +1244,6 @@ export function DeepDive({
         : null
     };
   }, [displayPrice, setupBias, signalOverlay, referenceLevels, composite, isInsufficient]);
-
-  /** Side-by-side geometry bar + gauge only when the price ladder is shown. */
-  const scenarioSideBySide = Boolean(scenario && geometryTradeable);
 
   const currentRr = scenario?.displayRr ?? null;
 
@@ -1564,7 +1580,19 @@ export function DeepDive({
         ← Session brief
       </button>
 
-      {/* ── Verdict Banner: standalone card with thick left border ── */}
+      {/* ── Sticky glance header (ADR UX-D4) ── */}
+      <div
+        data-testid="deep-dive-sticky-header"
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 4,
+          background: colors.surface,
+          paddingBottom: spacing[2],
+          marginBottom: spacing[1],
+          borderBottom: `1px solid ${colors.border}`
+        }}
+      >
       <div
         style={{
           background: colors.surface,
@@ -1709,17 +1737,21 @@ export function DeepDive({
           </p>
         ) : null}
       </div>
+      </div>
 
-      {/* ── Plain-English Brief: prototype-matching card ── */}
+      {/* ── Decision block: plain summary + geometry strip (above evidence tabs) ── */}
       <div
+        data-testid="deep-dive-decision"
         style={{
           background: colors.surfaceMuted,
           border: `1px solid ${colors.border}`,
           borderRadius: borderRadius.lg,
-          padding: `${spacing[3]} ${spacing[4]}`
+          padding: `${spacing[3]} ${spacing[4]}`,
+          display: "flex",
+          flexDirection: "column",
+          gap: spacing[3]
         }}
       >
-        {/* Micro-label: PLAIN-ENGLISH BRIEF */}
         <span
           style={{
             fontSize: 10,
@@ -1729,12 +1761,10 @@ export function DeepDive({
             color: colors.textMuted
           }}
         >
-          Plain-English Brief
+          Decision
         </span>
-        {/* brief text with left accent bar */}
         <div
           style={{
-            marginTop: spacing[2],
             paddingLeft: spacing[3],
             borderLeft: `3px solid ${laneAccent}`
           }}
@@ -1775,62 +1805,44 @@ export function DeepDive({
             </div>
           ) : null}
         </div>
-        {allowsScenarioGeometry ? (
-          <AiSetupRead
-            symbol={card.symbol}
-            direction={displayDirection.direction}
-            desk={activeLane}
-            layers={layerRows.map((r) => ({ layer: r.key, status: r.status ?? "" }))}
-            confirming={(insight?.confirming_signals ?? []).map((s) => s.label).filter(Boolean)}
-            conflicting={(insight?.conflicting_signals ?? []).map((s) => s.label).filter(Boolean)}
-            catalysts={(insight?.catalysts ?? []).map((c) => c.text).filter(Boolean)}
-            timing={setupJudgment?.tradeability.label ?? ""}
-            primaryBlocker={setupJudgment?.primaryBlocker ?? ""}
-            marketRegime={insight?.market_regime ?? ""}
-            fallbackText={brief}
-            palette={{
-              text: colors.text,
-              textMuted: colors.textMuted,
-              border: colors.border,
-              accent: colors.accent,
-              surface: colors.surfaceMuted
-            }}
-          />
-        ) : null}
-        {/* meta-line (the deep dive IS the full analysis — no cross-link to the retired signals page) */}
-        {briefMeta ? (
-          <div
-            style={{
-              marginTop: spacing[3],
-              paddingTop: spacing[2],
-              borderTop: `1px solid ${colors.border}`
-            }}
-          >
-            <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{briefMeta}</span>
+        {allowsScenarioGeometry && scenario && geometryTradeable ? (
+          <div data-testid="deep-dive-decision-geometry">
+            <ScenarioGeometry
+              currentPrice={scenario.currentPrice}
+              stopPrice={scenario.stopPrice}
+              targetPrice={scenario.targetPrice}
+              target1={scenario.target1}
+              target2={scenario.target2}
+              chosenLabel={scenario.chosenLabel}
+              entryLow={scenario.entryLow}
+              entryHigh={scenario.entryHigh}
+              isShort={setupBias === "Bearish"}
+              colors={colors}
+            />
+            <DecisionLevelStrip
+              entryLow={scenario.entryLow}
+              entryHigh={scenario.entryHigh}
+              stopPrice={scenario.stopPrice}
+              targetPrice={scenario.targetPrice}
+              chosenLabel={scenario.chosenLabel}
+              colors={colors}
+            />
           </div>
+        ) : allowsScenarioGeometry && scenario && !geometryTradeable ? (
+          <p
+            data-testid="geometry-not-tradeable"
+            style={{ margin: 0, fontSize: typography.scale.sm, lineHeight: 1.5, color: colors.caution, fontWeight: 600 }}
+          >
+            Not tradable at current structure
+            {geometryBlockReason ? ` (${geometryBlockReason.replace(/_/g, " ")})` : ""} — wait for a pullback that clears desk geometry.
+          </p>
+        ) : null}
+        {briefMeta ? (
+          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{briefMeta}</span>
         ) : null}
       </div>
 
-      {marketEnvironment && apiDecisionState && allowsScenarioGeometry ? (
-        <RiskStackPanel
-          environment={marketEnvironment}
-          signalState={apiDecisionState}
-          insight={insight}
-          ledgerGates={ledgerGateSummary}
-          testId="trading-room-deep-dive-risk-stack"
-        />
-      ) : null}
-
-      {marketContextFlags ? (
-        <MarketContextPanel
-          flags={marketContextFlags}
-          dampening={marketContextDampening}
-          compact
-          testId="trading-room-deep-dive-market-context"
-        />
-      ) : null}
-
-      {/* ── Symbol analysis: one-page scroll (Setup → Layers → Evolution → Chart) ── */}
+      {/* ── Evidence tabs: Setup | Layers | Chart | Context ── */}
       <div
         style={{
           background: colors.surface,
@@ -1842,8 +1854,11 @@ export function DeepDive({
           gap: spacing[3]
         }}
       >
+      <DeepDiveEvidenceTabs active={evidenceTab} onChange={setEvidenceTab} colors={colors} />
       <div
-        data-testid="deep-dive-one-page"
+        data-testid="deep-dive-evidence-panel"
+        role="tabpanel"
+        aria-label={evidenceTab}
         style={{ minHeight: loading ? 220 : 120, display: "flex", flexDirection: "column", gap: spacing[4] }}
       >
         {loading ? (
@@ -1886,10 +1901,8 @@ export function DeepDive({
             </p>
           </div>
         ) : null}
-        {!loading ? (
-          <>
-            <DeepDiveSection id="deep-dive-section-setup" title="Setup" colors={colors} first>
-          <div style={{ display: "flex", flexDirection: "column", gap: spacing[4] }}>
+        {!loading && evidenceTab === "setup" ? (
+          <div data-testid="deep-dive-section-setup" style={{ display: "flex", flexDirection: "column", gap: spacing[4] }}>
             {!allowsScenarioGeometry ? (
               <SessionMoverContext
                 card={card}
@@ -1908,20 +1921,6 @@ export function DeepDive({
                   signalSummary={layerSignalSummary}
                   layerAlignmentLine={layerAlignmentLine}
                 />
-                {/* 3. Timeframe alignment (prototype panel 3) */}
-                {timeframeContext ? (
-                  <TimeframeContextPanel
-                    context={timeframeContext}
-                    tradingMode={activeLane}
-                    setupBias={setupBias}
-                    compact
-                  />
-                ) : null}
-                {/* 4. Why layers read this way — shown for all states (prototype panel 4) */}
-                {causalNarrative ? (
-                  <CausalNarrativePanel narrative={causalNarrative} compact />
-                ) : null}
-                {/* 5. Setup judgment + execution read + conviction + fundamental backdrop (prototype panels 5 & 6 & 7) */}
                 {pageDecision ? (
                   <SignalsSetupRead
                     symbol={card.symbol}
@@ -1967,16 +1966,15 @@ export function DeepDive({
                       padding: `${spacing[3]} ${spacing[4]}`
                     }}
                   >
-                    {/* One row: Scenario geometry (left) | R/R gauge (right) when ladder shown; stack when not tradable. */}
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: scenarioSideBySide ? "minmax(0, 1fr) minmax(240px, 320px)" : "1fr",
+                        gridTemplateColumns: scenario ? "minmax(0, 1fr) minmax(240px, 320px)" : "1fr",
                         gap: spacing[4],
                         alignItems: "start"
                       }}
                     >
-                      {/* Left: Scenario geometry */}
+                      {scenario ? (
                       <div style={{ minWidth: 0 }}>
                         <p
                           style={{
@@ -1988,38 +1986,8 @@ export function DeepDive({
                             color: colors.textMuted
                           }}
                         >
-                          Scenario geometry
+                          Scenario details
                         </p>
-                        {scenario && geometryTradeable ? (
-                          <ScenarioGeometry
-                            currentPrice={scenario.currentPrice}
-                            stopPrice={scenario.stopPrice}
-                            targetPrice={scenario.targetPrice}
-                            target1={scenario.target1}
-                            target2={scenario.target2}
-                            chosenLabel={scenario.chosenLabel}
-                            entryLow={scenario.entryLow}
-                            entryHigh={scenario.entryHigh}
-                            isShort={setupBias === "Bearish"}
-                            colors={colors}
-                          />
-                        ) : scenario && !geometryTradeable ? (
-                          <p
-                            data-testid="geometry-not-tradeable"
-                            style={{
-                              margin: "8px 0 0",
-                              fontSize: typography.scale.sm,
-                              lineHeight: 1.5,
-                              color: colors.caution,
-                              fontWeight: 600
-                            }}
-                          >
-                            Not tradable at current structure
-                            {geometryBlockReason ? ` (${geometryBlockReason.replace(/_/g, " ")})` : ""} — no
-                            validated stop/target plan. Search this symbol for layer context only, or wait for a
-                            pullback that clears desk geometry.
-                          </p>
-                        ) : null}
                         {scenario?.t1TooClose ? (
                           <p
                             data-testid="t1-too-close-warning"
@@ -2117,15 +2085,16 @@ export function DeepDive({
                           </div>
                         ) : null}
                       </div>
-                      {/* Right: R/R gauge */}
+                      ) : null}
+                      {/* R/R gauge */}
                       {scenario ? (
                         <div
                           style={{
                             minWidth: 0,
-                            borderLeft: scenarioSideBySide ? `1px solid ${colors.border}` : undefined,
-                            borderTop: scenarioSideBySide ? undefined : `1px solid ${colors.border}`,
-                            paddingLeft: scenarioSideBySide ? spacing[4] : undefined,
-                            paddingTop: scenarioSideBySide ? undefined : spacing[4]
+                            borderLeft: scenario ? `1px solid ${colors.border}` : undefined,
+                            borderTop: scenario ? undefined : `1px solid ${colors.border}`,
+                            paddingLeft: scenario ? spacing[4] : undefined,
+                            paddingTop: scenario ? undefined : spacing[4]
                           }}
                         >
                           <p
@@ -2315,8 +2284,9 @@ export function DeepDive({
               </div>
             ) : null}
           </div>
-            </DeepDiveSection>
-            <DeepDiveSection id="deep-dive-section-layers" title="Layers" colors={colors}>
+        ) : null}
+        {!loading && evidenceTab === "layers" ? (
+          <div data-testid="deep-dive-section-layers">
           <SignalsLayerBreakdown
             symbol={card.symbol}
             tradingMode={activeLane}
@@ -2328,20 +2298,10 @@ export function DeepDive({
             causalNarrative={causalNarrative}
             alignmentRatio={compositeAlignmentRatio}
           />
-            </DeepDiveSection>
-            <DeepDiveSection id="deep-dive-section-evolution" title="Evolution" colors={colors}>
-          <SetupEvolutionPanel
-            key={`evolution-${card.symbol}-${activeLane}-${dataRefreshNonce}`}
-            symbol={card.symbol}
-            tradingMode={activeLane}
-          />
-            </DeepDiveSection>
-            <DeepDiveSection
-              id="deep-dive-section-charts"
-              title="Chart"
-              colors={colors}
-              statusDot={chartsDot}
-            >
+          </div>
+        ) : null}
+        {!loading && evidenceTab === "chart" ? (
+          <div data-testid="deep-dive-section-charts">
           <article
             style={{
               background: colors.surface,
@@ -2365,11 +2325,75 @@ export function DeepDive({
               currentPrice={card.price ?? null}
             />
           </article>
-            </DeepDiveSection>
-          </>
+          </div>
+        ) : null}
+        {!loading && evidenceTab === "context" ? (
+          <div data-testid="deep-dive-section-context" style={{ display: "flex", flexDirection: "column", gap: spacing[3] }}>
+            {marketEnvironment && apiDecisionState && allowsScenarioGeometry ? (
+              <RiskStackPanel
+                environment={marketEnvironment}
+                signalState={apiDecisionState}
+                insight={insight}
+                ledgerGates={ledgerGateSummary}
+                testId="trading-room-deep-dive-risk-stack"
+              />
+            ) : null}
+            {marketContextFlags ? (
+              <MarketContextPanel
+                flags={marketContextFlags}
+                dampening={marketContextDampening}
+                compact
+                testId="trading-room-deep-dive-market-context"
+              />
+            ) : null}
+            {timeframeContext ? (
+              <DeepDiveCollapsible title="Timeframe alignment" testId="deep-dive-context-timeframe" colors={colors}>
+                <TimeframeContextPanel
+                  context={timeframeContext}
+                  tradingMode={activeLane}
+                  setupBias={setupBias}
+                  compact
+                />
+              </DeepDiveCollapsible>
+            ) : null}
+            {causalNarrative ? (
+              <DeepDiveCollapsible title="Why layers read this way" testId="deep-dive-context-causal" colors={colors}>
+                <CausalNarrativePanel narrative={causalNarrative} compact />
+              </DeepDiveCollapsible>
+            ) : null}
+            <DeepDiveCollapsible title="Evolution" testId="deep-dive-context-evolution" colors={colors}>
+              <SetupEvolutionPanel
+                key={`evolution-${card.symbol}-${activeLane}-${dataRefreshNonce}`}
+                symbol={card.symbol}
+                tradingMode={activeLane}
+              />
+            </DeepDiveCollapsible>
+            {allowsScenarioGeometry ? (
+              <AiSetupRead
+                symbol={card.symbol}
+                direction={displayDirection.direction}
+                desk={activeLane}
+                layers={layerRows.map((r) => ({ layer: r.key, status: r.status ?? "" }))}
+                confirming={(insight?.confirming_signals ?? []).map((s) => s.label).filter(Boolean)}
+                conflicting={(insight?.conflicting_signals ?? []).map((s) => s.label).filter(Boolean)}
+                catalysts={(insight?.catalysts ?? []).map((c) => c.text).filter(Boolean)}
+                timing={setupJudgment?.tradeability.label ?? ""}
+                primaryBlocker={setupJudgment?.primaryBlocker ?? ""}
+                marketRegime={insight?.market_regime ?? ""}
+                fallbackText={brief}
+                palette={{
+                  text: colors.text,
+                  textMuted: colors.textMuted,
+                  border: colors.border,
+                  accent: colors.accent,
+                  surface: colors.surfaceMuted
+                }}
+              />
+            ) : null}
+          </div>
         ) : null}
       </div>
-      </div>{/* end one-page card */}
+      </div>{/* end evidence card */}
     </div>
   );
 }

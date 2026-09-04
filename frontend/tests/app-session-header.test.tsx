@@ -44,5 +44,6 @@ describe("<AppSessionHeader />", () => {
     expect(marketFull).toHaveTextContent("Bearish");
     expect(screen.getByText("2", { selector: "span" })).toBeInTheDocument();
     expect(screen.getByText(/actionable/)).toBeInTheDocument();
+    expect(screen.getByText(/near/)).toBeInTheDocument();
   });
 });

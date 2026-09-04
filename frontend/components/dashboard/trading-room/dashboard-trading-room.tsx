@@ -102,7 +102,11 @@ import {
   type FeedFilters,
   type FeedLane,
   type FeedState,
-  DEFAULT_FEED_FILTERS
+  DEFAULT_FEED_FILTERS,
+  describeFeedFilterSummary,
+  deskSetupFeedCards,
+  pickTopDeskSetupCard,
+  countDeskSetupCards
 } from "@/lib/dashboard/trading-room/feed-model";
 import { feedCardStateLabel } from "@/lib/dashboard/trading-room/feed-state-present";
 import { useTrackedPlansList } from "@/lib/hooks/use-tracked-plans-list";
@@ -332,11 +336,6 @@ function TradingRoomBody({
     return { swingSetups: swing, daySetups: day };
   }, [scannerOverview.setups]);
 
-  const swingNearQualification = useMemo(
-    () => (scannerOverview.scanSummary?.near_qualification ?? []).filter((r) => r.desk === "swing"),
-    [scannerOverview.scanSummary?.near_qualification]
-  );
-
   const companyBySymbol = useMemo(() => {
     const map = new Map<string, string>();
     for (const s of scannerOverview.setups) {
@@ -416,6 +415,22 @@ function TradingRoomBody({
   );
   const ranked = useMemo(() => rankAndCapFeed(cardsWithNames, filters), [cardsWithNames, filters]);
   const { day, swing } = useMemo(() => groupFeedByLane(ranked), [ranked]);
+  const deskSetupCards = useMemo(() => deskSetupFeedCards(cardsWithNames), [cardsWithNames]);
+  const filterRelevantSetupCount = useMemo(() => {
+    if (filters.state === "actionable_near") {
+      return countDeskSetupCards(deskSetupCards, { states: ["actionable", "near"] });
+    }
+    if (filters.state === "actionable") {
+      return countDeskSetupCards(deskSetupCards, { states: ["actionable"] });
+    }
+    if (filters.state === "near") {
+      return countDeskSetupCards(deskSetupCards, { states: ["near"] });
+    }
+    if (filters.state === "potential") {
+      return countDeskSetupCards(deskSetupCards, { states: ["potential"] });
+    }
+    return deskSetupCards.length;
+  }, [deskSetupCards, filters.state]);
 
   // Feed symbols (movers, setups) are not on the index tape — hydrate quotes in batch.
   const feedSymbolsKey = sidebarRefreshSymbols.join(",");
@@ -722,17 +737,15 @@ function TradingRoomBody({
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [pathname, searchParams, selectedId]);
 
-  // Top setup for the brief CTA: hottest actionable, else hottest overall.
-  const topCard = useMemo(
-    () => ranked.find((c) => c.state === "actionable") ?? ranked[0] ?? null,
-    [ranked]
-  );
+  // Top setup for the brief CTA: hottest actionable on the desk, else hottest overall
+  // (independent of the feed filter so the brief button never dead-ends).
+  const topCard = useMemo(() => pickTopDeskSetupCard(deskSetupCards), [deskSetupCards]);
 
   const counts = useMemo(() => {
     const acc: Record<FeedState, number> = { actionable: 0, near: 0, potential: 0, cooling: 0 };
-    for (const c of allCards) acc[c.state] += 1;
+    for (const c of deskSetupCards) acc[c.state] += 1;
     return acc;
-  }, [allCards]);
+  }, [deskSetupCards]);
 
   // Resolve the displayed index moves first (scanner overview, else live snapshots)
   // so the regime headline is classified from the *same* numbers the chips show —
@@ -927,15 +940,13 @@ function TradingRoomBody({
   // Uses the "all swing cards" list (pre-filter) so the brief always surfaces
   // the hottest setup even if the user's filters would hide it.
   const topSwingCard = useMemo(
-    () => allCards.filter((c) => c.lane === "swing").sort((a, b) => {
-      const stateOrder: Record<string, number> = { actionable: 0, near: 1, potential: 2, cooling: 3 };
-      const byState = (stateOrder[a.state] ?? 4) - (stateOrder[b.state] ?? 4);
-      if (byState !== 0) return byState;
-      return b.rankScore - a.rankScore;
-    })[0] ?? null,
-    [allCards]
+    () => pickTopDeskSetupCard(deskSetupCards, { lane: "swing" }),
+    [deskSetupCards]
   );
-  const swingCardCount = allCards.filter((c) => c.lane === "swing").length;
+  const swingCardCount = useMemo(
+    () => countDeskSetupCards(deskSetupCards, { lane: "swing", states: ["actionable", "near"] }),
+    [deskSetupCards]
+  );
 
   const briefData: MarketBriefData = {
     userName: userName ?? null,
@@ -973,7 +984,7 @@ function TradingRoomBody({
 
   // Use the unfiltered allCards count so active user filters never accidentally hide the
   // feed panel (e.g. "Day only" filter with no day cards but swing cards still in allCards).
-  const deskEmpty = allCards.length === 0;
+  const deskEmpty = deskSetupCards.length === 0;
 
   const isWeekendSession = sessionPhase === "weekend";
   // Keep the signal feed column mounted every session. Quiet days (zero qualified
@@ -989,7 +1000,7 @@ function TradingRoomBody({
     <MobileFeedPanel
       open={feedOpen}
       onToggleOpen={toggleFeedOpen}
-      feedCount={allCards.length}
+      feedCount={ranked.length}
       quickSwitchCards={selected ? allCards : []}
       selectedId={selected?.id ?? null}
       onSelectCard={selectCard}
@@ -1066,10 +1077,8 @@ function TradingRoomBody({
     <MarketBrief
       data={briefData}
       onViewTopSetup={() => topCard && selectCard(topCard)}
+      onViewTopSwingSetup={() => topSwingCard && selectCard(topSwingCard)}
       onSearch={undefined}
-      swingDesk={swingDesk?.data ?? null}
-      swingSetups={swingSetups}
-      nearQualification={swingNearQualification}
       onSelectSymbol={(sym, company, lane) => openSymbol(sym, company, lane ?? "swing")}
       trackedCards={allCards}
     />
@@ -1183,7 +1192,7 @@ function TradingRoomBody({
       >
         {wrapPanel(
           <>
-            {allCards.length > 0 ? (
+            {deskSetupCards.length > 0 ? (
               <FilterBar
                 filters={filters}
                 onChange={setFilters}
@@ -1191,7 +1200,13 @@ function TradingRoomBody({
                 isMobile={isMobile}
                 colors={colors}
                 visibleCount={ranked.length}
-                totalCount={cardsWithNames.length}
+                totalCount={filterRelevantSetupCount}
+                filterSummary={describeFeedFilterSummary(
+                  filters,
+                  ranked.length,
+                  filterRelevantSetupCount,
+                  deskSetupCards.length
+                )}
               />
             ) : null}
             {feedPanel}
@@ -1214,7 +1229,8 @@ function FilterBar({
   isMobile = false,
   colors,
   visibleCount,
-  totalCount
+  totalCount,
+  filterSummary
 }: {
   filters: FeedFilters;
   onChange: (f: FeedFilters) => void;
@@ -1223,6 +1239,7 @@ function FilterBar({
   colors: ReturnType<typeof useTheme>["colors"];
   visibleCount: number;
   totalCount: number;
+  filterSummary: string;
 }) {
   // Lane = the prototype's mode pillset: Day reads electric-blue, Swing violet.
   const laneOpts: SegOption<FeedFilters["lane"]>[] = showDay
@@ -1236,10 +1253,11 @@ function FilterBar({
         { id: "swing", label: "Swing", icon: "◈", activeColor: SWING_ACCENT }
       ];
   const stateOpts: SegOption<FeedFilters["state"]>[] = [
-    { id: "all", label: "All states" },
-    { id: "actionable", label: "Actionable" },
+    { id: "actionable_near", label: "Actionable desk" },
+    { id: "actionable", label: "Actionable only" },
     { id: "near", label: "Near" },
-    { id: "potential", label: "Potential" }
+    { id: "potential", label: "Potential" },
+    { id: "all", label: "All states" }
   ];
   const biasOpts: SegOption<FeedFilters["bias"]>[] = [
     { id: "all", label: "Both" },
@@ -1273,9 +1291,7 @@ function FilterBar({
           Desk feed
         </span>
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>
-          {visibleCount === totalCount
-            ? "Filters apply to setups in this column only."
-            : `Showing ${visibleCount} of ${totalCount} setups in this column.`}
+          {filterSummary}
         </span>
       </div>
       <div
@@ -1724,8 +1740,8 @@ function SignalFeed({
           </>
         ) : (
           <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
-            No setups match the desk feed filters. Try widening lane, state, or direction above — the desk has
-            names in other lanes.
+            No setups match the current desk filter. Try widening the <strong>lane</strong> or{" "}
+            <strong>state</strong> filters above — the desk may have names in other buckets.
           </p>
         )
       ) : null}

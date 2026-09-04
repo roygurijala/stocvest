@@ -51,7 +51,7 @@ Each phase ships with **tests**, **CONTEXT/BACKLOG update**, and user **“go ah
 | 4 | **GEO-2** | **Swing alert + desk filters** — exclude leveraged/inverse/single-stock inverse ETFs from swing **execution-actionable** emails and desk discovery; document in `SIGNAL_ENGINE.md` | **DONE 2026-09-02** — `swing_universe_filter.py`, `geometry_tradeability.py`, tests |
 | 5 | **GEO-3** | **Email + deep-dive honesty pass** — always show stop distance (ATR + %), **T1 R/R** vs **plan R/R (T2)** separately; suppress or downgrade when `stop_too_tight_for_swing`; Vitest on email template rows | **DONE 2026-09-02** — email rows + `geometry-honesty-present.ts`, `GeometryHonestyPanel` in `deep-dive.tsx` |
 | 6 | **UX-1** | ~~Personal mode shell~~ | **SUPERSEDED 2026-09-02** — removed; main app keeps full nav + plan-based desks |
-| 7 | **UX-2** | **Market swing setups table on dashboard brief** — Symbol \| Readiness \| Direction \| R/R \| State \| Why from cached swing desk scan (not watchlist); embedded in market brief | **DONE 2026-09-02** — `personal-ranked-home-present.ts`, `market-brief.tsx` |
+| 7 | **UX-2** | **Market swing setups table on dashboard brief** — Symbol \| Readiness \| Direction \| R/R \| State \| Why from cached swing desk scan (not watchlist); embedded in market brief | **SUPERSEDED 2026-09-04** by **ADR-003 UX-D1** — table removed from brief; ranked swing list lives in desk feed + Scanner |
 | 8 | **UX-3** | **Symbol one-page** — consolidate Setup/Layers/Evolution/Chart into a single scroll on `/dashboard` deep dive | **DONE 2026-09-02** — `deep-dive.tsx` one-page sections |
 | 9 | **VAL-1** | **Personal validation loop** — document daily workflow in CONTEXT; tighten email prefs to **execution-actionable-only** + geometry gates; weekly `ledger_signal_report.py` review checklist | **DONE 2026-09-03** — `docs/VALIDATION_LOOP.md`, alert pref defaults, weekly report section |
 | 10 | **DBZ-9** | *(Optional)* **Retire day Benzinga entirely** — remove `STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED` path; day desk Polygon-only always | Pending (ADR-001 left day flag for optional legacy) |
@@ -106,9 +106,7 @@ Each phase ships with **tests**, **CONTEXT/BACKLOG update**, and user **“go ah
 
 ### UX-2 contract
 
-- Ranked table is **read-mostly** from swing desk cache (`discovery` + `quiet_leaders`); **excludes watchlist-only symbols**.
-- Embedded in market brief (center column), not a replacement home layout.
-- Columns documented in `API_CONTRACTS.md` when wire shape stabilizes.
+- ~~Ranked table embedded in market brief~~ **Retired 2026-09-04** — see **ADR-003 UX-D1**. Presenters (`personal-ranked-home-present.ts`, `MarketSwingSetupsTable`) remain for Scanner; dashboard uses **desk feed Swing lane** instead.
 
 ### UX-3 contract
 
