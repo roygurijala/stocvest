@@ -84,7 +84,7 @@ _Next major lane when soak completes: **P1 (Phase 7 hardening)**._
 | UX-D3 | Market Brief scan mode (collapse secondary tiles) | **DONE 2026-09-04** |
 | UX-D4 | Deep Dive tiers (sticky header + evidence tabs) | **DONE 2026-09-04** |
 | UX-D5 | Card chrome pass (borders, labels, whitespace) | **DONE 2026-09-04** |
-| UX-D6 | Sector heat grid (context tile) | Pending |
+| UX-D6 | Sector heat grid (context tile) | **DONE 2026-09-04** |
 | UX-D7 | Watchlist rail collapsed default + heat toggle | Pending |
 | UX-D8 | Assistant + click-hierarchy alignment | Pending |
 

@@ -39,6 +39,7 @@ import {
 } from "@/lib/dashboard/trading-room/market-brief-navigation";
 import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
 import { MarketBriefSymbolLink } from "@/components/dashboard/trading-room/market-brief-symbol-link";
+import { SectorHeatGrid, SectorHoldingsHeatGrid } from "@/components/dashboard/trading-room/sector-heat-grid";
 import {
   countMarketBriefExpandedSections,
   marketBriefExpandButtonLabel,
@@ -466,23 +467,19 @@ export function MarketBrief({
               colors.accent,
               <>
                 <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, opacity: 0.85, marginTop: -2 }}>
-                  Tap a sector for representative names, desk setups, and a trading read. Each chip shows 1-day and 5-day moves.
+                  Sector heat by {data.sectorWindowLabel === "today" ? "1-day" : "5-day"} move — tap a tile for holdings and desk setups.
                 </span>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
-                  {data.sectors.map((s) => (
-                    <SectorChip
-                      key={s.symbol}
-                      sector={s}
-                      colors={colors}
-                      selected={selectedSectorEtf === s.symbol}
-                      interactive={Boolean(onSelectSymbol)}
-                      onClick={() => {
-                        if (!onSelectSymbol) return;
-                        setSelectedSectorEtf((prev) => (prev === s.symbol ? null : s.symbol));
-                      }}
-                    />
-                  ))}
-                </div>
+                <SectorHeatGrid
+                  sectors={data.sectors}
+                  sectorWindowLabel={data.sectorWindowLabel}
+                  selectedSymbol={selectedSectorEtf}
+                  interactive={Boolean(onSelectSymbol)}
+                  colors={colors}
+                  onSelectSector={(symbol) => {
+                    if (!onSelectSymbol) return;
+                    setSelectedSectorEtf((prev) => (prev === symbol ? null : symbol));
+                  }}
+                />
                 {selectedSectorEtf && onSelectSymbol ? (
                   <SectorDeskPanel
                     panelRef={sectorPanelRef}
@@ -990,73 +987,6 @@ function VixChip({
   );
 }
 
-function SectorChip({
-  sector,
-  colors,
-  selected = false,
-  interactive = false,
-  onClick
-}: {
-  sector: BriefSector;
-  colors: ReturnType<typeof useTheme>["colors"];
-  selected?: boolean;
-  interactive?: boolean;
-  onClick?: () => void;
-}) {
-  const tone = sector.pct >= 0 ? colors.bullish : colors.bearish;
-  const has1d = sector.pct1d != null;
-  const has5d = sector.pct5d != null;
-  const toneFor = (n: number | null | undefined) =>
-    n == null ? colors.textMuted : n >= 0 ? colors.bullish : colors.bearish;
-  const body = (
-    <>
-      <span style={{ color: colors.text, fontWeight: 600 }}>{sector.label}</span>
-      {has1d || has5d ? (
-        <span style={{ display: "inline-flex", gap: spacing[2], fontSize: typography.scale.xs }}>
-          {has1d ? (
-            <span style={{ color: colors.textMuted }}>
-              1d <span style={{ color: toneFor(sector.pct1d), fontWeight: 700 }}>{fmtPct(sector.pct1d!)}</span>
-            </span>
-          ) : null}
-          {has5d ? (
-            <span style={{ color: colors.textMuted }}>
-              5d <span style={{ color: toneFor(sector.pct5d), fontWeight: 700 }}>{fmtPct(sector.pct5d!)}</span>
-            </span>
-          ) : null}
-        </span>
-      ) : (
-        <span style={{ color: tone, fontWeight: 700, fontSize: typography.scale.xs }}>{fmtPct(sector.pct)}</span>
-      )}
-    </>
-  );
-  const style = {
-    display: "inline-flex",
-    flexDirection: "column" as const,
-    gap: 1,
-    fontSize: typography.scale.sm,
-    padding: `${spacing[1]} ${spacing[2]}`,
-    borderRadius: borderRadius.md,
-    border: `1px solid ${selected ? tone : `${tone}55`}`,
-    background: selected ? `${tone}28` : `${tone}14`,
-    cursor: interactive ? "pointer" : undefined,
-    textAlign: "left" as const
-  };
-  if (interactive) {
-    return (
-      <button
-        type="button"
-        data-testid={`market-brief-sector-${sector.symbol}`}
-        aria-pressed={selected}
-        onClick={onClick}
-        style={{ ...style, color: "inherit" }}
-      >
-        {body}
-      </button>
-    );
-  }
-  return <span style={style}>{body}</span>;
-}
-
 function SectorDeskPanel({
   panelRef,
   sector,
@@ -1252,59 +1182,13 @@ function SectorDeskPanel({
           {constituentsLoading && representativeRows.length === 0 ? (
             <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Loading sector names…</span>
           ) : null}
-          {representativeRows.map((row) => {
-            const moveTone =
-              row.changePct == null ? colors.textMuted : row.changePct >= 0 ? colors.bullish : colors.bearish;
-            const weightSuffix =
-              row.weightPct != null && Number.isFinite(row.weightPct)
-                ? ` · ${row.weightPct.toFixed(1)}%`
-                : "";
-            const companyLabel = row.company
-              ? `${row.company}${weightSuffix}`
-              : constituentSource === "etf_global"
-                ? `Holding${weightSuffix}`
-                : "Representative name";
-            return (
-              <MarketBriefSymbolLink
-                key={`rep:${row.symbol}`}
-                symbol={row.symbol}
-                company={row.company}
-                lane={preferredLaneForSymbol(trackedCards, row.symbol)}
-                onSelect={onSelectSymbol}
-                data-testid={`market-brief-sector-rep-${row.symbol}`}
-                className="market-brief-row-link"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(3.5rem, auto) minmax(0, 1fr) minmax(3.5rem, auto)",
-                  gap: spacing[2],
-                  alignItems: "baseline",
-                  width: "100%",
-                  padding: `${spacing[1]} ${spacing[2]}`,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: borderRadius.sm,
-                  background: colors.surface,
-                  color: colors.text,
-                  cursor: "pointer"
-                }}
-              >
-                <span style={{ fontWeight: 700, fontFamily: typography.fontFamilyMono }}>{row.symbol}</span>
-                <span
-                  style={{
-                    fontSize: typography.scale.xs,
-                    color: colors.textMuted,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap"
-                  }}
-                >
-                  {companyLabel}
-                </span>
-                <span style={{ fontSize: typography.scale.sm, color: moveTone, fontWeight: 600, textAlign: "right" }}>
-                  {quotesLoading && row.changePct == null ? "…" : fmtPct(row.changePct)}
-                </span>
-              </MarketBriefSymbolLink>
-            );
-          })}
+          <SectorHoldingsHeatGrid
+            rows={representativeRows}
+            colors={colors}
+            quotesLoading={quotesLoading}
+            laneForSymbol={(symbol) => preferredLaneForSymbol(trackedCards, symbol)}
+            onSelectSymbol={onSelectSymbol}
+          />
         </div>
       ) : (
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>

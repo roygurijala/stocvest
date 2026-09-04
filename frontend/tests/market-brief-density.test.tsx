@@ -109,3 +109,23 @@ describe("MarketBrief scan mode (ADR-003 UX-D3)", () => {
     expect(screen.getByText("More headlines")).toBeInTheDocument();
   });
 });
+
+describe("MarketBrief sector heat (ADR-003 UX-D6)", () => {
+  it("renders sector heat grid instead of legacy chips", () => {
+    render(
+      <MarketBrief
+        data={minimalBrief({
+          sectors: [
+            { symbol: "XLK", label: "Tech", pct: 1.1, pct1d: 1.1, pct5d: 0.5 },
+            { symbol: "XLF", label: "Financials", pct: -0.4, pct1d: -0.4, pct5d: 0.1 }
+          ]
+        })}
+        onViewTopSetup={() => {}}
+        onSelectSymbol={() => {}}
+      />
+    );
+
+    expect(screen.getByTestId("market-brief-sector-heat-grid")).toBeInTheDocument();
+    expect(screen.queryByTestId("market-brief-sector-XLK")).toBeNull();
+  });
+});
