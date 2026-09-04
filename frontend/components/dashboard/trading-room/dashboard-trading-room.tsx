@@ -8,6 +8,11 @@ import { AppSessionHeader } from "@/components/app-session-header";
 import { useTheme } from "@/lib/theme-provider";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import {
+  tradingRoomFeedCardStyle,
+  tradingRoomSectionLabelStyle,
+  tradingRoomSegTrackStyle
+} from "@/lib/dashboard/trading-room/trading-room-chrome";
+import {
   ScannerOverviewProvider,
   useScannerOverview
 } from "@/components/dashboard/scanner-overview-context";
@@ -1274,22 +1279,11 @@ function FilterBar({
         gap: spacing[2],
         paddingBottom: spacing[3],
         marginBottom: spacing[3],
-        borderBottom: `1px solid ${colors.border}`,
         flexShrink: 0
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: colors.textMuted
-          }}
-        >
-          Desk feed
-        </span>
+        <span style={tradingRoomSectionLabelStyle(colors)}>Desk feed</span>
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.4 }}>
           {filterSummary}
         </span>
@@ -1353,12 +1347,7 @@ function SegGroup<T extends string>({
   return (
     <div
       style={{
-        display: "flex",
-        gap: 4,
-        padding: 3,
-        background: colors.surface,
-        border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.full,
+        ...tradingRoomSegTrackStyle(colors),
         width: fullWidth ? "100%" : undefined,
         overflowX: fullWidth ? "auto" : undefined,
         flexWrap: fullWidth ? "nowrap" : undefined
@@ -1910,11 +1899,7 @@ function SignalCard({
       style={{
         position: "relative",
         width: "100%",
-        background: active ? colors.surfaceMuted : colors.surface,
-        border: `1px solid ${active ? colors.accent : colors.border}`,
-        borderLeft: `3px solid ${biasAccent}`,
-        borderBottom: `3px solid ${biasAccent}`,
-        borderRadius: borderRadius.md,
+        ...tradingRoomFeedCardStyle(colors, { active, railAccent: biasAccent }),
         opacity: card.state === "cooling" ? 0.7 : 1
       }}
     >

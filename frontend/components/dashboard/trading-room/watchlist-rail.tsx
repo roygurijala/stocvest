@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PanelRightClose } from "lucide-react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { tradingRoomFeedCardStyle, tradingRoomPanelStyle } from "@/lib/dashboard/trading-room/trading-room-chrome";
 import type { useTheme } from "@/lib/theme-provider";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { resolveSnapshotDisplayPrice } from "@/lib/api/snapshot-price";
@@ -234,11 +235,7 @@ function RailCard({
     <div
       style={{
         position: "relative",
-        background: active ? colors.surfaceMuted : colors.surface,
-        border: `1px solid ${active ? colors.accent : colors.border}`,
-        borderLeft: `3px solid ${biasAccent}`,
-        borderBottom: `3px solid ${biasAccent}`,
-        borderRadius: borderRadius.md,
+        ...tradingRoomFeedCardStyle(colors, { active, railAccent: biasAccent }),
         opacity: card.state === "cooling" ? 0.78 : 1
       }}
     >
@@ -561,17 +558,15 @@ export function WatchlistRail({
       data-testid="trading-room-watchlist-rail"
       className="trading-room-mobile-side-pane"
       style={{
-        background: colors.surface,
-        border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.lg,
-        padding: spacing[3],
+        ...tradingRoomPanelStyle(colors, 3),
         display: "flex",
         flexDirection: "column",
         gap: spacing[3],
         maxHeight: isMobile ? undefined : "calc(100vh - 220px)",
         position: isMobile ? "static" : "sticky",
         top: isMobile ? undefined : spacing[3],
-        alignSelf: isMobile ? undefined : "start"
+        alignSelf: isMobile ? undefined : "start",
+        boxShadow: `inset 0 0 0 1px ${colors.border}40`
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2], flexWrap: isMobile ? "wrap" : "nowrap" }}>

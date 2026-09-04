@@ -1,6 +1,10 @@
 "use client";
 
-import { borderRadius, spacing, typography, animationDurations } from "@/lib/design-system";
+import { borderRadius, spacing, typography } from "@/lib/design-system";
+import {
+  tradingRoomMotionTransition,
+  tradingRoomSegTrackStyle
+} from "@/lib/dashboard/trading-room/trading-room-chrome";
 import {
   DEEP_DIVE_EVIDENCE_TABS,
   DEEP_DIVE_EVIDENCE_TAB_LABELS,
@@ -26,13 +30,11 @@ export function DeepDiveEvidenceTabs({
       aria-label="Evidence sections"
       data-testid="deep-dive-evidence-tabs"
       style={{
-        display: "grid",
+        ...tradingRoomSegTrackStyle(colors),
         gridTemplateColumns: `repeat(${DEEP_DIVE_EVIDENCE_TABS.length}, minmax(0, 1fr))`,
         gap: spacing[2],
         padding: spacing[1],
-        background: colors.surfaceMuted,
-        border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.md
+        display: "grid"
       }}
     >
       {DEEP_DIVE_EVIDENCE_TABS.map((tab) => {
@@ -56,7 +58,7 @@ export function DeepDiveEvidenceTabs({
               borderRadius: borderRadius.sm,
               cursor: "pointer",
               letterSpacing: "0.04em",
-              transition: `background ${animationDurations.normal} ease, color ${animationDurations.normal} ease, box-shadow ${animationDurations.normal} ease`
+              transition: tradingRoomMotionTransition("background", "color", "box-shadow")
             }}
           >
             {DEEP_DIVE_EVIDENCE_TAB_LABELS[tab]}

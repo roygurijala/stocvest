@@ -2,8 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { BarChart3, CalendarClock, ChevronDown, Compass, Eye, LineChart, Newspaper, Target } from "lucide-react";
-import { useTheme } from "@/lib/theme-provider";
 import { borderRadius, spacing, typography, animationDurations } from "@/lib/design-system";
+import { useTheme } from "@/lib/theme-provider";
+import {
+  tradingRoomInsetTileStyle,
+  tradingRoomMotionTransition,
+  tradingRoomPanelStyle,
+  tradingRoomSectionLabelStyle
+} from "@/lib/dashboard/trading-room/trading-room-chrome";
 import { regimeTone } from "@/lib/market-context/regime";
 import {
   buildRegimeWhyLine,
@@ -227,17 +233,7 @@ export function MarketBrief({
   const tone = regimeTone(data.regimeLabel, colors);
 
   const sectionLabel = (text: string) => (
-    <span
-      style={{
-        fontSize: typography.scale.xs,
-        color: colors.textMuted,
-        letterSpacing: "0.12em",
-        textTransform: "uppercase",
-        fontWeight: 600
-      }}
-    >
-      {text}
-    </span>
+    <span style={tradingRoomSectionLabelStyle(colors)}>{text}</span>
   );
 
   // Session-aware lead line: live read when open, recap when closed, prep on weekends.
@@ -278,10 +274,6 @@ export function MarketBrief({
   const dotFor = (s: BriefHeadline["sentiment"]) =>
     s === "bullish" ? colors.bullish : s === "bearish" ? colors.bearish : colors.textMuted;
 
-  // Bento tile: a recessed panel with a thin colored top-accent + icon header.
-  // Gives the brief visual rhythm and fills the width without fragmenting the
-  // narrative into a stack of heavy, identical cards.
-  const tileBg = theme === "dark" ? "rgba(255,255,255,0.022)" : "rgba(2,6,23,0.022)";
   const tile = (
     icon: ReactNode,
     label: string | null,
@@ -291,11 +283,7 @@ export function MarketBrief({
   ) => (
     <section
       style={{
-        background: tileBg,
-        border: `1px solid ${colors.border}`,
-        borderTop: `2px solid ${accent}`,
-        borderRadius: borderRadius.md,
-        padding: spacing[4],
+        ...tradingRoomInsetTileStyle(colors, accent, theme),
         display: "flex",
         flexDirection: "column",
         gap: spacing[2],
@@ -315,10 +303,7 @@ export function MarketBrief({
   return (
     <div
       style={{
-        background: colors.surface,
-        border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.lg,
-        padding: spacing[6],
+        ...tradingRoomPanelStyle(colors, 6),
         display: "flex",
         flexDirection: "column",
         gap: spacing[4]
@@ -516,13 +501,11 @@ export function MarketBrief({
           <div
             data-testid="market-brief-scan-headline"
             style={{
+              ...tradingRoomInsetTileStyle(colors, colors.accent, theme),
               display: "flex",
               flexDirection: "column",
               gap: spacing[2],
-              padding: spacing[3],
-              borderRadius: borderRadius.md,
-              border: `1px solid ${colors.border}`,
-              background: tileBg
+              padding: spacing[3]
             }}
           >
             {sectionLabel(data.marketOpen ? "Top headline" : "Headline")}
@@ -542,7 +525,7 @@ export function MarketBrief({
             alignItems: "center",
             gap: spacing[2],
             alignSelf: "flex-start",
-            border: `1px solid ${colors.border}`,
+            border: "none",
             background: colors.surfaceMuted,
             color: colors.text,
             fontSize: typography.scale.sm,
@@ -550,7 +533,8 @@ export function MarketBrief({
             padding: `${spacing[2]} ${spacing[4]}`,
             borderRadius: borderRadius.md,
             cursor: "pointer",
-            transition: `background ${animationDurations.normal} ease, border-color ${animationDurations.normal} ease`
+            boxShadow: `inset 0 0 0 1px ${colors.border}50`,
+            transition: tradingRoomMotionTransition("background", "box-shadow")
           }}
         >
           {expandLabel}

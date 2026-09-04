@@ -1,6 +1,6 @@
 # ADR-003 — Trading Room density reduction + sleek terminal UX
 
-**Status:** Accepted — **UX-D0 + UX-D1 + UX-D2 + UX-D3 + UX-D4 done (2026-09-04)**  
+**Status:** Accepted — **UX-D0 + UX-D1 + UX-D2 + UX-D3 + UX-D4 + UX-D5 done (2026-09-04)**  
 **Date:** 2026-09-04  
 **Authors:** Product + engineering (user design review; Trading Room live since B63)  
 **Supersedes / relates:** ADR-002 **UX-2** (market swing setups table on dashboard brief — **retired by UX-D1**); ADR-002 **UX-3** (single-scroll deep dive — **refined by UX-D4**); [`DASHBOARD_TERMINAL_UX_PLAN.md`](../DASHBOARD_TERMINAL_UX_PLAN.md) §9 (Trading Room IA); **does not** change six-layer math, geometry gates, or immutable API contracts unless a phase explicitly says so.
@@ -67,7 +67,7 @@ Each phase ships with **tests**, **BACKLOG row update**, and user **“go ahead�
 | 2 | **UX-D2** | **Desk feed actionable-first** — default filters `state: actionable_near` (Actionable desk); demote **movers** to QuietFeed-only (not default Swing/Day lanes); lower `potential` cap; session header counts reflect setup cards (actionable + near) | **DONE 2026-09-04** |
 | 3 | **UX-D3** | **Market Brief scan mode** — above-the-fold: greeting, regime one-liner, index row, sector row, top headline; defer movers table, week ahead, outcomes recap, watchlist-at-close behind “Expand brief” | **DONE 2026-09-04** |
 | 4 | **UX-D4** | **Deep Dive tiers** — sticky glance header (symbol, verdict, price, confidence, lane); **Decision** block (plain summary + entry/stop/target strip); **Evidence** in tabs or accordions: Setup \| Layers \| Chart \| Context (collapse Evolution/Causal by default); supersedes ADR-002 UX-3 “full scroll” as default | **DONE 2026-09-04** |
-| 5 | **UX-D5** | **Card chrome pass** — app-wide trading room: fewer 1px boxes, rely on surface steps; one hero element per panel; typography ladder (2–3 sizes); motion 150–240ms on expand (`animationDurations`) | Pending |
+| 5 | **UX-D5** | **Card chrome pass** — app-wide trading room: fewer 1px boxes, rely on surface steps; one hero element per panel; typography ladder (2–3 sizes); motion 150–240ms on expand (`animationDurations`) | **DONE 2026-09-04** |
 | 6 | **UX-D6** | **Sector heat grid** — compact ETF + optional top-holdings grid (day % color); replaces long sector name list as default; tap cell → existing sector panel / Deep Dive; max ~11 ETFs + 8 names on drill-down | Pending |
 | 7 | **UX-D7** | **Watchlist rail** — collapsed by default on desktop; **List ↔ Heat** toggle; heat shows session % + actionable/near badge only; full cards on expand | Pending |
 | 8 | **UX-D8** | **Assistant + IA alignment** — `buildDashboardAssistantPageContext` mirrors visible tier only; update click-hierarchy levels on new heat/expand surfaces; Vitest contract tests | Pending |

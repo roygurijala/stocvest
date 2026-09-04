@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-system";
+import { tradingRoomFeedCardStyle } from "@/lib/dashboard/trading-room/trading-room-chrome";
 import type { useTheme } from "@/lib/theme-provider";
 import type { DeskTodayData } from "@/lib/api/desk-today";
 import type { SnapshotPayload } from "@/lib/api/market";
@@ -87,11 +88,7 @@ function QuietCard({
       onClick={() => onSelect(card)}
       style={{
         textAlign: "left",
-        background: active ? colors.surfaceMuted : colors.surface,
-        border: `1px solid ${active ? colors.accent : colors.border}`,
-        borderLeft: `3px solid ${laneAccent}`,
-        borderBottom: `3px solid ${sTone}`,
-        borderRadius: borderRadius.md,
+        ...tradingRoomFeedCardStyle(colors, { active, railAccent: laneAccent }),
         padding: spacing[2],
         cursor: "pointer",
         display: "flex",

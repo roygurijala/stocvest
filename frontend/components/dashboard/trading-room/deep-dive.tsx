@@ -17,8 +17,15 @@
  */
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-system";
+import { borderRadius, roleAccents, spacing, typography, animationDurations } from "@/lib/design-system";
 import { DeepDiveEvidenceTabs } from "@/components/dashboard/trading-room/deep-dive-evidence-tabs";
+import {
+  tradingRoomEvidenceShellStyle,
+  tradingRoomMotionTransition,
+  tradingRoomPanelStyle,
+  tradingRoomSectionLabelStyle,
+  tradingRoomSegTrackStyle
+} from "@/lib/dashboard/trading-room/trading-room-chrome";
 import {
   DEFAULT_DEEP_DIVE_EVIDENCE_TAB,
   DEEP_DIVE_CONTEXT_COLLAPSED_DEFAULT,
@@ -586,9 +593,7 @@ function DeepDiveCollapsible({
     <div
       data-testid={testId}
       style={{
-        border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.md,
-        background: colors.surfaceMuted,
+        ...tradingRoomEvidenceShellStyle(colors),
         overflow: "hidden"
       }}
     >
@@ -609,7 +614,8 @@ function DeepDiveCollapsible({
           fontWeight: 700,
           padding: `${spacing[3]} ${spacing[4]}`,
           cursor: "pointer",
-          textAlign: "left"
+          textAlign: "left",
+          transition: tradingRoomMotionTransition("background")
         }}
       >
         {title}
@@ -1595,14 +1601,12 @@ export function DeepDive({
       >
       <div
         style={{
-          background: colors.surface,
-          border: `1px solid ${colors.border}`,
+          ...tradingRoomPanelStyle(colors, 3),
           borderLeft: `5px solid ${directionColor}`,
-          borderRadius: borderRadius.lg,
-          padding: `${spacing[3]} ${spacing[4]}`,
           display: "flex",
           flexDirection: "column",
-          gap: spacing[2]
+          gap: spacing[2],
+          boxShadow: `inset 0 0 0 1px ${colors.border}40`
         }}
       >
         {/* Row 1: verdict + symbol · Day/Swing (center on desktop, beside symbol on mobile) · Watching */}
@@ -1743,26 +1747,13 @@ export function DeepDive({
       <div
         data-testid="deep-dive-decision"
         style={{
-          background: colors.surfaceMuted,
-          border: `1px solid ${colors.border}`,
-          borderRadius: borderRadius.lg,
-          padding: `${spacing[3]} ${spacing[4]}`,
+          ...tradingRoomEvidenceShellStyle(colors),
           display: "flex",
           flexDirection: "column",
           gap: spacing[3]
         }}
       >
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
-            color: colors.textMuted
-          }}
-        >
-          Decision
-        </span>
+        <span style={tradingRoomSectionLabelStyle(colors)}>Decision</span>
         <div
           style={{
             paddingLeft: spacing[3],
@@ -1845,13 +1836,11 @@ export function DeepDive({
       {/* ── Evidence tabs: Setup | Layers | Chart | Context ── */}
       <div
         style={{
-          background: colors.surface,
-          border: `1px solid ${colors.border}`,
-          borderRadius: borderRadius.lg,
-          padding: `${spacing[3]} ${spacing[4]}`,
+          ...tradingRoomPanelStyle(colors, 3),
           display: "flex",
           flexDirection: "column",
-          gap: spacing[3]
+          gap: spacing[3],
+          boxShadow: `inset 0 0 0 1px ${colors.border}40`
         }}
       >
       <DeepDiveEvidenceTabs active={evidenceTab} onChange={setEvidenceTab} colors={colors} />
