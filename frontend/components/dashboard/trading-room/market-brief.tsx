@@ -1,9 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import { BarChart3, CalendarClock, Compass, Eye, LineChart, Newspaper, Target } from "lucide-react";
+import { BarChart3, CalendarClock, ChevronDown, Compass, Eye, LineChart, Newspaper, Target } from "lucide-react";
+import { borderRadius, spacing, typography, animationDurations } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
-import { borderRadius, spacing, typography } from "@/lib/design-system";
+import {
+  tradingRoomInsetTileStyle,
+  tradingRoomMotionTransition,
+  tradingRoomPanelStyle,
+  tradingRoomSectionLabelStyle
+} from "@/lib/dashboard/trading-room/trading-room-chrome";
 import { regimeTone } from "@/lib/market-context/regime";
 import {
   buildRegimeWhyLine,
@@ -32,14 +38,16 @@ import {
   type SectorSnapshotQuote
 } from "@/lib/dashboard/trading-room/market-brief-navigation";
 import { FeedCardUpdatedLine } from "@/lib/dashboard/trading-room/feed-card-present";
-import type { DeskTodayData } from "@/lib/api/desk-today";
-import type { IntradaySetupPayload } from "@/lib/api/scanner";
-import type { ScannerNearQualificationRow } from "@/lib/scanner-scan-summary";
-import { MarketSwingSetupsTable } from "@/components/dashboard/personal-ranked-home-table";
 import { MarketBriefSymbolLink } from "@/components/dashboard/trading-room/market-brief-symbol-link";
+import { SectorHeatGrid, SectorHoldingsHeatGrid } from "@/components/dashboard/trading-room/sector-heat-grid";
+import {
+  countMarketBriefExpandedSections,
+  marketBriefExpandButtonLabel,
+  marketBriefExpandedHeadlines,
+  marketBriefScanHeadline
+} from "@/lib/dashboard/trading-room/market-brief-scan-present";
 
 const BRIEF_NAME_STORAGE_KEY = "stocvest:brief-name";
-const SWING_ACCENT = "#8B5CF6";
 
 export interface BriefHeadline {
   id: string;
@@ -154,11 +162,10 @@ export interface MarketBriefData {
 interface MarketBriefProps {
   data: MarketBriefData;
   onViewTopSetup: () => void;
+  /** Weekend prep CTA — opens the top swing-lane setup when distinct from `onViewTopSetup`. */
+  onViewTopSwingSetup?: () => void;
   onSearch?: () => void;
-  swingDesk?: DeskTodayData | null;
-  swingSetups?: readonly IntradaySetupPayload[];
-  nearQualification?: readonly ScannerNearQualificationRow[];
-  /** Opens in-panel Deep Dive for a symbol (movers, watchlist, sector names, swing table). */
+  /** Opens in-panel Deep Dive for a symbol (movers, watchlist, sector names). */
   onSelectSymbol?: (symbol: string, company?: string | null, lane?: FeedLane) => void;
   /** Tracked feed cards — used to populate sector desk lists. */
   trackedCards?: readonly FeedCard[];
@@ -207,15 +214,14 @@ function fmtPct(n: number | null): string {
 export function MarketBrief({
   data,
   onViewTopSetup,
+  onViewTopSwingSetup,
   onSearch,
-  swingDesk = null,
-  swingSetups = [],
-  nearQualification = [],
   onSelectSymbol,
   trackedCards = []
 }: MarketBriefProps) {
   const { theme, colors } = useTheme();
   const [selectedSectorEtf, setSelectedSectorEtf] = useState<string | null>(null);
+  const [briefExpanded, setBriefExpanded] = useState(false);
   const sectorPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -228,23 +234,31 @@ export function MarketBrief({
   const tone = regimeTone(data.regimeLabel, colors);
 
   const sectionLabel = (text: string) => (
-    <span
-      style={{
-        fontSize: typography.scale.xs,
-        color: colors.textMuted,
-        letterSpacing: "0.12em",
-        textTransform: "uppercase",
-        fontWeight: 600
-      }}
-    >
-      {text}
-    </span>
+    <span style={tradingRoomSectionLabelStyle(colors)}>{text}</span>
   );
 
   // Session-aware lead line: live read when open, recap when closed, prep on weekends.
   const sessionLead = briefSessionSubtitle(data.sessionPhase);
   const showPrep = isPreparationPhase(data.sessionPhase);
   const noSetupLabel = briefNoSetupLabel(data.sessionPhase);
+  const expandedSectionCount = useMemo(
+    () =>
+      countMarketBriefExpandedSections(
+        {
+          headlines: data.headlines,
+          movers: data.movers,
+          weekAhead: data.weekAhead,
+          outcomesRecap: data.outcomesRecap,
+          watchlistAtClose: data.watchlistAtClose,
+          weekInReview: data.weekInReview
+        },
+        showPrep
+      ),
+    [data.headlines, data.movers, data.weekAhead, data.outcomesRecap, data.watchlistAtClose, data.weekInReview, showPrep]
+  );
+  const expandLabel = marketBriefExpandButtonLabel(expandedSectionCount, briefExpanded);
+  const scanHeadline = marketBriefScanHeadline(data.headlines);
+  const extraHeadlines = marketBriefExpandedHeadlines(data.headlines);
   const regimeWhyInput = {
     regimeLabel: data.regimeLabel,
     marketRegime: data.marketRegime,
@@ -261,10 +275,6 @@ export function MarketBrief({
   const dotFor = (s: BriefHeadline["sentiment"]) =>
     s === "bullish" ? colors.bullish : s === "bearish" ? colors.bearish : colors.textMuted;
 
-  // Bento tile: a recessed panel with a thin colored top-accent + icon header.
-  // Gives the brief visual rhythm and fills the width without fragmenting the
-  // narrative into a stack of heavy, identical cards.
-  const tileBg = theme === "dark" ? "rgba(255,255,255,0.022)" : "rgba(2,6,23,0.022)";
   const tile = (
     icon: ReactNode,
     label: string | null,
@@ -274,11 +284,7 @@ export function MarketBrief({
   ) => (
     <section
       style={{
-        background: tileBg,
-        border: `1px solid ${colors.border}`,
-        borderTop: `2px solid ${accent}`,
-        borderRadius: borderRadius.md,
-        padding: spacing[4],
+        ...tradingRoomInsetTileStyle(colors, accent, theme),
         display: "flex",
         flexDirection: "column",
         gap: spacing[2],
@@ -298,10 +304,7 @@ export function MarketBrief({
   return (
     <div
       style={{
-        background: colors.surface,
-        border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.lg,
-        padding: spacing[6],
+        ...tradingRoomPanelStyle(colors, 6),
         display: "flex",
         flexDirection: "column",
         gap: spacing[4]
@@ -379,28 +382,9 @@ export function MarketBrief({
         ) : null}
       </div>
 
-      {onSelectSymbol
-        ? tile(
-            <Target size={15} />,
-            "Swing setups from market scan",
-            SWING_ACCENT,
-            <MarketSwingSetupsTable
-              swingDesk={swingDesk}
-              swingSetups={swingSetups}
-              nearQualification={nearQualification}
-              onSelectSymbol={(sym) => onSelectSymbol(sym, null, "swing")}
-              colors={colors}
-              embedded
-            />,
-            { span: true }
-          )
-        : null}
-
-      <div className="brief-bento" style={{ gap: spacing[3], alignItems: "start" }}>
-        {/* Weekend / after-hours swing highlight — shown when swing data is active during prep.
-            Turns Saturday into an actionable preparation surface by surfacing the best swing
-            setup so the trader can review the scenario before Monday's open. */}
-        {showPrep && data.topSwingCard
+      <div className="brief-bento brief-bento--scan" style={{ gap: spacing[3], alignItems: "start" }}>
+        {/* Weekend / after-hours swing highlight — scan surface (actionable prep). */}
+        {showPrep && data.topSwingCard && (data.swingCardCount ?? 0) > 0
           ? tile(
               <Compass size={15} />,
               `Swing setups active · ${data.swingCardCount ?? 1} signal${(data.swingCardCount ?? 1) !== 1 ? "s" : ""}${data.swingDataDate ? ` from ${data.swingDataDate}` : ""}`,
@@ -451,7 +435,7 @@ export function MarketBrief({
                 </div>
                 <button
                   type="button"
-                  onClick={onViewTopSetup}
+                  onClick={onViewTopSwingSetup ?? onViewTopSetup}
                   style={{
                     border: "none",
                     background: "#c04cf5",
@@ -476,20 +460,6 @@ export function MarketBrief({
             )
           : null}
 
-        {data.headlines.length > 0
-          ? tile(
-              <Newspaper size={15} />,
-              data.marketOpen ? "Moving the tape" : "Today's headlines",
-              colors.accent,
-              <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
-                {data.headlines.map((h) => (
-                  <Headline key={h.id} item={h} dot={dotFor(h.sentiment)} colors={colors} />
-                ))}
-              </div>,
-              { span: true }
-            )
-          : null}
-
         {data.sectors.length > 0
           ? tile(
               <LineChart size={15} />,
@@ -497,23 +467,19 @@ export function MarketBrief({
               colors.accent,
               <>
                 <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, opacity: 0.85, marginTop: -2 }}>
-                  Tap a sector for representative names, desk setups, and a trading read. Each chip shows 1-day and 5-day moves.
+                  Sector heat by {data.sectorWindowLabel === "today" ? "1-day" : "5-day"} move — tap a tile for holdings and desk setups.
                 </span>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
-                  {data.sectors.map((s) => (
-                    <SectorChip
-                      key={s.symbol}
-                      sector={s}
-                      colors={colors}
-                      selected={selectedSectorEtf === s.symbol}
-                      interactive={Boolean(onSelectSymbol)}
-                      onClick={() => {
-                        if (!onSelectSymbol) return;
-                        setSelectedSectorEtf((prev) => (prev === s.symbol ? null : s.symbol));
-                      }}
-                    />
-                  ))}
-                </div>
+                <SectorHeatGrid
+                  sectors={data.sectors}
+                  sectorWindowLabel={data.sectorWindowLabel}
+                  selectedSymbol={selectedSectorEtf}
+                  interactive={Boolean(onSelectSymbol)}
+                  colors={colors}
+                  onSelectSector={(symbol) => {
+                    if (!onSelectSymbol) return;
+                    setSelectedSectorEtf((prev) => (prev === symbol ? null : symbol));
+                  }}
+                />
                 {selectedSectorEtf && onSelectSymbol ? (
                   <SectorDeskPanel
                     panelRef={sectorPanelRef}
@@ -528,83 +494,172 @@ export function MarketBrief({
             )
           : null}
 
-        {data.movers.up.length > 0 || data.movers.down.length > 0
-          ? tile(
-              <BarChart3 size={15} />,
-              "Notable movers on the desk",
-              colors.bullish,
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: spacing[3] }}>
-                <MoverColumn
-                  title="Leading"
-                  movers={data.movers.up}
-                  positive
-                  colors={colors}
-                  onSelectSymbol={onSelectSymbol}
-                />
-                <MoverColumn
-                  title="Lagging"
-                  movers={data.movers.down}
-                  positive={false}
-                  colors={colors}
-                  onSelectSymbol={onSelectSymbol}
-                />
-              </div>
-            )
-          : null}
+        {scanHeadline ? (
+          <div
+            data-testid="market-brief-scan-headline"
+            style={{
+              ...tradingRoomInsetTileStyle(colors, colors.accent, theme),
+              display: "flex",
+              flexDirection: "column",
+              gap: spacing[2],
+              padding: spacing[3]
+            }}
+          >
+            {sectionLabel(data.marketOpen ? "Top headline" : "Headline")}
+            <Headline item={scanHeadline} dot={dotFor(scanHeadline.sentiment)} colors={colors} />
+          </div>
+        ) : null}
+      </div>
 
-        {showPrep && data.weekInReview && (data.weekInReview.bestSector || data.weekInReview.worstSector)
-          ? tile(
-              <BarChart3 size={15} />,
-              "Week in review",
-              colors.bullish,
-              <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
-                {data.weekInReview.bestSector ? (
-                  <>
-                    Leading: <span style={{ color: colors.text, fontWeight: 600 }}>{data.weekInReview.bestSector.label}</span>{" "}
-                    <span style={{ color: colors.bullish, fontWeight: 600 }}>{fmtPct(data.weekInReview.bestSector.pct5d)}</span>
-                  </>
-                ) : null}
-                {data.weekInReview.bestSector && data.weekInReview.worstSector ? " · " : null}
-                {data.weekInReview.worstSector ? (
-                  <>
-                    Lagging: <span style={{ color: colors.text, fontWeight: 600 }}>{data.weekInReview.worstSector.label}</span>{" "}
-                    <span style={{ color: colors.bearish, fontWeight: 600 }}>{fmtPct(data.weekInReview.worstSector.pct5d)}</span>
-                  </>
-                ) : null}
-              </span>
-            )
-          : null}
+      {expandLabel ? (
+        <button
+          type="button"
+          data-testid="market-brief-expand-toggle"
+          aria-expanded={briefExpanded}
+          onClick={() => setBriefExpanded((open) => !open)}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: spacing[2],
+            alignSelf: "flex-start",
+            border: "none",
+            background: colors.surfaceMuted,
+            color: colors.text,
+            fontSize: typography.scale.sm,
+            fontWeight: 600,
+            padding: `${spacing[2]} ${spacing[4]}`,
+            borderRadius: borderRadius.md,
+            cursor: "pointer",
+            boxShadow: `inset 0 0 0 1px ${colors.border}50`,
+            transition: tradingRoomMotionTransition("background", "box-shadow")
+          }}
+        >
+          {expandLabel}
+          <ChevronDown
+            size={16}
+            aria-hidden
+            style={{
+              transform: briefExpanded ? "rotate(180deg)" : "rotate(0deg)",
+              transition: `transform ${animationDurations.normal} ease`
+            }}
+          />
+        </button>
+      ) : null}
 
-        {showPrep && data.watchlistAtClose.length > 0
-          ? tile(
-              <Eye size={15} />,
-              "Your watchlist at close",
-              colors.accent,
-              <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
-                {data.watchlistAtClose.slice(0, 6).map((w) => {
-                  const rowTone = w.changePct == null ? colors.textMuted : w.changePct >= 0 ? colors.bullish : colors.bearish;
-                  if (onSelectSymbol) {
+      {briefExpanded && expandedSectionCount > 0 ? (
+        <div
+          className="brief-bento brief-bento--expanded"
+          data-testid="market-brief-expanded"
+          style={{ gap: spacing[3], alignItems: "start" }}
+        >
+          {extraHeadlines.length > 0
+            ? tile(
+                <Newspaper size={15} />,
+                "More headlines",
+                colors.accent,
+                <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
+                  {extraHeadlines.map((h) => (
+                    <Headline key={h.id} item={h} dot={dotFor(h.sentiment)} colors={colors} />
+                  ))}
+                </div>,
+                { span: true }
+              )
+            : null}
+
+          {data.movers.up.length > 0 || data.movers.down.length > 0
+            ? tile(
+                <BarChart3 size={15} />,
+                "Notable movers on the desk",
+                colors.bullish,
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: spacing[3] }}>
+                  <MoverColumn
+                    title="Leading"
+                    movers={data.movers.up}
+                    positive
+                    colors={colors}
+                    onSelectSymbol={onSelectSymbol}
+                  />
+                  <MoverColumn
+                    title="Lagging"
+                    movers={data.movers.down}
+                    positive={false}
+                    colors={colors}
+                    onSelectSymbol={onSelectSymbol}
+                  />
+                </div>
+              )
+            : null}
+
+          {showPrep && data.weekInReview && (data.weekInReview.bestSector || data.weekInReview.worstSector)
+            ? tile(
+                <BarChart3 size={15} />,
+                "Week in review",
+                colors.bullish,
+                <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
+                  {data.weekInReview.bestSector ? (
+                    <>
+                      Leading: <span style={{ color: colors.text, fontWeight: 600 }}>{data.weekInReview.bestSector.label}</span>{" "}
+                      <span style={{ color: colors.bullish, fontWeight: 600 }}>{fmtPct(data.weekInReview.bestSector.pct5d)}</span>
+                    </>
+                  ) : null}
+                  {data.weekInReview.bestSector && data.weekInReview.worstSector ? " · " : null}
+                  {data.weekInReview.worstSector ? (
+                    <>
+                      Lagging: <span style={{ color: colors.text, fontWeight: 600 }}>{data.weekInReview.worstSector.label}</span>{" "}
+                      <span style={{ color: colors.bearish, fontWeight: 600 }}>{fmtPct(data.weekInReview.worstSector.pct5d)}</span>
+                    </>
+                  ) : null}
+                </span>
+              )
+            : null}
+
+          {showPrep && data.watchlistAtClose.length > 0
+            ? tile(
+                <Eye size={15} />,
+                "Your watchlist at close",
+                colors.accent,
+                <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
+                  {data.watchlistAtClose.slice(0, 6).map((w) => {
+                    const rowTone = w.changePct == null ? colors.textMuted : w.changePct >= 0 ? colors.bullish : colors.bearish;
+                    if (onSelectSymbol) {
+                      return (
+                        <MarketBriefSymbolLink
+                          key={w.symbol}
+                          symbol={w.symbol}
+                          lane="swing"
+                          onSelect={onSelectSymbol}
+                          data-testid={`market-brief-watchlist-row-${w.symbol}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "baseline",
+                            justifyContent: "space-between",
+                            gap: spacing[2],
+                            width: "100%",
+                            padding: `${spacing[1]} ${spacing[2]}`,
+                            margin: `0 -${spacing[2]}`,
+                            borderRadius: borderRadius.sm,
+                            cursor: "pointer"
+                          }}
+                          className="market-brief-row-link"
+                        >
+                          <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.accent, width: 56, flexShrink: 0, fontFamily: typography.fontFamilyMono }}>
+                            {w.symbol}
+                          </span>
+                          <span style={{ fontSize: typography.scale.sm, color: colors.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                            {w.price != null ? `$${w.price.toFixed(2)}` : "—"}
+                          </span>
+                          <span style={{ fontSize: typography.scale.sm, color: rowTone, flexShrink: 0, width: 64, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                            {fmtPct(w.changePct)}
+                          </span>
+                          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {w.stateLabel}
+                          </span>
+                        </MarketBriefSymbolLink>
+                      );
+                    }
                     return (
-                      <MarketBriefSymbolLink
-                        key={w.symbol}
-                        symbol={w.symbol}
-                        lane="swing"
-                        onSelect={onSelectSymbol}
-                        data-testid={`market-brief-watchlist-row-${w.symbol}`}
-                        style={{
-                          display: "flex",
-                          alignItems: "baseline",
-                          justifyContent: "space-between",
-                          gap: spacing[2],
-                          width: "100%",
-                          padding: `${spacing[1]} ${spacing[2]}`,
-                          margin: `0 -${spacing[2]}`,
-                          borderRadius: borderRadius.sm,
-                          cursor: "pointer"
-                        }}
-                        className="market-brief-row-link"
-                      >
-                        <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.accent, width: 56, flexShrink: 0, fontFamily: typography.fontFamilyMono }}>
+                      <div key={w.symbol} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2] }}>
+                        <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text, width: 56, flexShrink: 0 }}>
                           {w.symbol}
                         </span>
                         <span style={{ fontSize: typography.scale.sm, color: colors.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
@@ -616,81 +671,65 @@ export function MarketBrief({
                         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {w.stateLabel}
                         </span>
-                      </MarketBriefSymbolLink>
+                      </div>
                     );
-                  }
-                  return (
-                    <div key={w.symbol} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: spacing[2] }}>
-                      <span style={{ fontSize: typography.scale.sm, fontWeight: 600, color: colors.text, width: 56, flexShrink: 0 }}>
-                        {w.symbol}
+                  })}
+                </div>
+              )
+            : null}
+
+          {showPrep && data.outcomesRecap
+            ? tile(
+                <Target size={15} />,
+                `Setup follow-through · your watchlist · last ${data.outcomesRecap.windowDays} sessions`,
+                colors.textMuted,
+                <OutcomesRecap recap={data.outcomesRecap} colors={colors} />
+              )
+            : null}
+
+          {showPrep && data.weekAhead.length > 0
+            ? tile(
+                <CalendarClock size={15} />,
+                "Looking ahead",
+                colors.caution,
+                <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
+                  {data.weekAhead.map((e, i) => (
+                    <div key={`${e.label}-${i}`} style={{ display: "flex", justifyContent: "space-between", gap: spacing[2] }}>
+                      <span
+                        style={{
+                          fontSize: typography.scale.sm,
+                          color: colors.text,
+                          fontWeight: e.importance >= 2 ? 600 : 400,
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}
+                      >
+                        {e.label}
                       </span>
-                      <span style={{ fontSize: typography.scale.sm, color: colors.text, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
-                        {w.price != null ? `$${w.price.toFixed(2)}` : "—"}
-                      </span>
-                      <span style={{ fontSize: typography.scale.sm, color: rowTone, flexShrink: 0, width: 64, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                        {fmtPct(w.changePct)}
-                      </span>
-                      <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flex: 1, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {w.stateLabel}
-                      </span>
+                      <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flexShrink: 0 }}>{e.when}</span>
                     </div>
-                  );
-                })}
-              </div>
-            )
-          : null}
+                  ))}
+                </div>
+              )
+            : null}
+        </div>
+      ) : null}
 
-        {showPrep && data.outcomesRecap
-          ? tile(
-              <Target size={15} />,
-              `Setup follow-through · your watchlist · last ${data.outcomesRecap.windowDays} sessions`,
-              colors.textMuted,
-              <OutcomesRecap recap={data.outcomesRecap} colors={colors} />
-            )
-          : null}
-
-        {showPrep && data.weekAhead.length > 0
-          ? tile(
-              <CalendarClock size={15} />,
-              "Looking ahead",
-              colors.caution,
-              <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
-                {data.weekAhead.map((e, i) => (
-                  <div key={`${e.label}-${i}`} style={{ display: "flex", justifyContent: "space-between", gap: spacing[2] }}>
-                    <span
-                      style={{
-                        fontSize: typography.scale.sm,
-                        color: colors.text,
-                        fontWeight: e.importance >= 2 ? 600 : 400,
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap"
-                      }}
-                    >
-                      {e.label}
-                    </span>
-                    <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, flexShrink: 0 }}>{e.when}</span>
-                  </div>
-                ))}
-              </div>
-            )
-          : null}
-
-        {data.watchLine && !(showPrep && data.weekAhead.length > 0)
-          ? tile(
-              <Compass size={15} />,
-              "What to watch",
-              colors.caution,
-              <>
-                <span style={{ fontSize: typography.scale.base, fontWeight: 600 }}>{data.watchLine}</span>
-                {data.watchDetail ? (
-                  <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>→ {data.watchDetail}</span>
-                ) : null}
-              </>
-            )
-          : null}
-      </div>
+      {data.watchLine && !(showPrep && data.weekAhead.length > 0)
+        ? tile(
+            <Compass size={15} />,
+            "What to watch",
+            colors.caution,
+            <>
+              <span style={{ fontSize: typography.scale.base, fontWeight: 600 }}>{data.watchLine}</span>
+              {data.watchDetail ? (
+                <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>→ {data.watchDetail}</span>
+              ) : null}
+            </>
+          )
+        : null}
 
       <div style={{ display: "flex", gap: spacing[3], flexWrap: "wrap" }}>
         <button
@@ -948,73 +987,6 @@ function VixChip({
   );
 }
 
-function SectorChip({
-  sector,
-  colors,
-  selected = false,
-  interactive = false,
-  onClick
-}: {
-  sector: BriefSector;
-  colors: ReturnType<typeof useTheme>["colors"];
-  selected?: boolean;
-  interactive?: boolean;
-  onClick?: () => void;
-}) {
-  const tone = sector.pct >= 0 ? colors.bullish : colors.bearish;
-  const has1d = sector.pct1d != null;
-  const has5d = sector.pct5d != null;
-  const toneFor = (n: number | null | undefined) =>
-    n == null ? colors.textMuted : n >= 0 ? colors.bullish : colors.bearish;
-  const body = (
-    <>
-      <span style={{ color: colors.text, fontWeight: 600 }}>{sector.label}</span>
-      {has1d || has5d ? (
-        <span style={{ display: "inline-flex", gap: spacing[2], fontSize: typography.scale.xs }}>
-          {has1d ? (
-            <span style={{ color: colors.textMuted }}>
-              1d <span style={{ color: toneFor(sector.pct1d), fontWeight: 700 }}>{fmtPct(sector.pct1d!)}</span>
-            </span>
-          ) : null}
-          {has5d ? (
-            <span style={{ color: colors.textMuted }}>
-              5d <span style={{ color: toneFor(sector.pct5d), fontWeight: 700 }}>{fmtPct(sector.pct5d!)}</span>
-            </span>
-          ) : null}
-        </span>
-      ) : (
-        <span style={{ color: tone, fontWeight: 700, fontSize: typography.scale.xs }}>{fmtPct(sector.pct)}</span>
-      )}
-    </>
-  );
-  const style = {
-    display: "inline-flex",
-    flexDirection: "column" as const,
-    gap: 1,
-    fontSize: typography.scale.sm,
-    padding: `${spacing[1]} ${spacing[2]}`,
-    borderRadius: borderRadius.md,
-    border: `1px solid ${selected ? tone : `${tone}55`}`,
-    background: selected ? `${tone}28` : `${tone}14`,
-    cursor: interactive ? "pointer" : undefined,
-    textAlign: "left" as const
-  };
-  if (interactive) {
-    return (
-      <button
-        type="button"
-        data-testid={`market-brief-sector-${sector.symbol}`}
-        aria-pressed={selected}
-        onClick={onClick}
-        style={{ ...style, color: "inherit" }}
-      >
-        {body}
-      </button>
-    );
-  }
-  return <span style={style}>{body}</span>;
-}
-
 function SectorDeskPanel({
   panelRef,
   sector,
@@ -1035,6 +1007,7 @@ function SectorDeskPanel({
   const [constituentInputs, setConstituentInputs] = useState<SectorConstituentQuoteInput[]>([]);
   const [constituentSource, setConstituentSource] = useState<SectorConstituentSource>("curated");
   const [constituentsLoading, setConstituentsLoading] = useState(false);
+  const [holdingsAsOf, setHoldingsAsOf] = useState<string | null>(null);
 
   const sectorEtf = sector?.symbol ?? null;
 
@@ -1044,12 +1017,14 @@ function SectorDeskPanel({
       setConstituentSource("curated");
       setConstituentsLoading(false);
       setSnapshots(new Map());
+      setHoldingsAsOf(null);
       return;
     }
     const curated = getRepresentativeSymbolsForEtf(sectorEtf).map((symbol) => ({ symbol }));
     setConstituentInputs(curated);
     setConstituentSource("curated");
     setSnapshots(new Map());
+    setHoldingsAsOf(null);
     let cancelled = false;
     setConstituentsLoading(true);
     void (async () => {
@@ -1060,7 +1035,13 @@ function SectorDeskPanel({
         );
         const body = (await res.json().catch(() => ({}))) as {
           source?: string;
-          constituents?: Array<{ symbol?: string; name?: string | null; weight?: number | null }>;
+          holdings_as_of?: string | null;
+          constituents?: Array<{
+            symbol?: string;
+            name?: string | null;
+            weight?: number | null;
+            effective_date?: string | null;
+          }>;
         };
         const fromApi = (body.constituents ?? [])
           .map((row) => ({
@@ -1075,15 +1056,22 @@ function SectorDeskPanel({
           if (fromApi.length > 0 && body.source === "etf_global") {
             setConstituentInputs(fromApi);
             setConstituentSource("etf_global");
+            setHoldingsAsOf(
+              body.holdings_as_of?.trim() ||
+                body.constituents?.find((row) => row.effective_date)?.effective_date?.trim() ||
+                null
+            );
           } else {
             setConstituentInputs(curated);
             setConstituentSource("curated");
+            setHoldingsAsOf(null);
           }
         }
       } catch {
         if (!cancelled) {
           setConstituentInputs(curated);
           setConstituentSource("curated");
+          setHoldingsAsOf(null);
         }
       } finally {
         if (!cancelled) setConstituentsLoading(false);
@@ -1186,62 +1174,21 @@ function SectorDeskPanel({
       {representativeRows.length > 0 || constituentsLoading ? (
         <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
           {sectionHeading(namesSectionLabel)}
+          {holdingsAsOf && constituentSource === "etf_global" ? (
+            <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+              Holdings as of {holdingsAsOf}
+            </span>
+          ) : null}
           {constituentsLoading && representativeRows.length === 0 ? (
             <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Loading sector names…</span>
           ) : null}
-          {representativeRows.map((row) => {
-            const moveTone =
-              row.changePct == null ? colors.textMuted : row.changePct >= 0 ? colors.bullish : colors.bearish;
-            const weightSuffix =
-              row.weightPct != null && Number.isFinite(row.weightPct)
-                ? ` · ${row.weightPct.toFixed(1)}%`
-                : "";
-            const companyLabel = row.company
-              ? `${row.company}${weightSuffix}`
-              : constituentSource === "etf_global"
-                ? `Holding${weightSuffix}`
-                : "Representative name";
-            return (
-              <MarketBriefSymbolLink
-                key={`rep:${row.symbol}`}
-                symbol={row.symbol}
-                company={row.company}
-                lane={preferredLaneForSymbol(trackedCards, row.symbol)}
-                onSelect={onSelectSymbol}
-                data-testid={`market-brief-sector-rep-${row.symbol}`}
-                className="market-brief-row-link"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(3.5rem, auto) minmax(0, 1fr) minmax(3.5rem, auto)",
-                  gap: spacing[2],
-                  alignItems: "baseline",
-                  width: "100%",
-                  padding: `${spacing[1]} ${spacing[2]}`,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: borderRadius.sm,
-                  background: colors.surface,
-                  color: colors.text,
-                  cursor: "pointer"
-                }}
-              >
-                <span style={{ fontWeight: 700, fontFamily: typography.fontFamilyMono }}>{row.symbol}</span>
-                <span
-                  style={{
-                    fontSize: typography.scale.xs,
-                    color: colors.textMuted,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap"
-                  }}
-                >
-                  {companyLabel}
-                </span>
-                <span style={{ fontSize: typography.scale.sm, color: moveTone, fontWeight: 600, textAlign: "right" }}>
-                  {quotesLoading && row.changePct == null ? "…" : fmtPct(row.changePct)}
-                </span>
-              </MarketBriefSymbolLink>
-            );
-          })}
+          <SectorHoldingsHeatGrid
+            rows={representativeRows}
+            colors={colors}
+            quotesLoading={quotesLoading}
+            laneForSymbol={(symbol) => preferredLaneForSymbol(trackedCards, symbol)}
+            onSelectSymbol={onSelectSymbol}
+          />
         </div>
       ) : (
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>

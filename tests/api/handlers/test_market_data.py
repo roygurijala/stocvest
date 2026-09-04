@@ -62,8 +62,22 @@ class _FakePolygonClient:
         if sym != "XLE":
             return []
         return [
-            EtfConstituent(etf_symbol="XLE", symbol="XOM", name="Exxon Mobil Corporation", weight=0.22, rank=1),
-            EtfConstituent(etf_symbol="XLE", symbol="CVX", name="Chevron Corporation", weight=0.16, rank=2),
+            EtfConstituent(
+                etf_symbol="XLE",
+                symbol="XOM",
+                name="Exxon Mobil Corporation",
+                weight=0.22,
+                rank=1,
+                effective_date="2025-09-18",
+            ),
+            EtfConstituent(
+                etf_symbol="XLE",
+                symbol="CVX",
+                name="Chevron Corporation",
+                weight=0.16,
+                rank=2,
+                effective_date="2025-09-18",
+            ),
         ]
 
     async def search_reference_tickers(self, query: str, *, limit: int = 15) -> list[dict[str, str]]:
@@ -343,6 +357,7 @@ def test_etf_constituents_handler_returns_holdings() -> None:
     body = json.loads(response["body"])
     assert body["source"] == "etf_global"
     assert body["etf"] == "XLE"
+    assert body["holdings_as_of"] == "2025-09-18"
     assert [row["symbol"] for row in body["constituents"]] == ["XOM", "CVX"]
 
 

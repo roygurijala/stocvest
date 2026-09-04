@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from "react";
 import type { FeedLane } from "@/lib/dashboard/trading-room/feed-model";
 import { dashboardTradingRoomHref } from "@/lib/nav/dashboard-trading-room-deeplink";
 
@@ -14,7 +14,7 @@ type Props = {
   className?: string;
   style?: CSSProperties;
   children: ReactNode;
-};
+} & Omit<ComponentPropsWithoutRef<typeof Link>, "href" | "children" | "onClick" | "style" | "className" | "onSelect">;
 
 /** In-panel symbol navigation for Market Brief — Link href for fallback, click opens Deep Dive. */
 export function MarketBriefSymbolLink({
@@ -25,7 +25,8 @@ export function MarketBriefSymbolLink({
   "data-testid": dataTestId,
   className,
   style,
-  children
+  children,
+  ...linkProps
 }: Props) {
   const sym = symbol.trim().toUpperCase();
   const laneNorm: FeedLane = lane === "day" ? "day" : "swing";
@@ -40,6 +41,7 @@ export function MarketBriefSymbolLink({
         e.preventDefault();
         onSelect(sym, company, laneNorm);
       }}
+      {...linkProps}
     >
       {children}
     </Link>

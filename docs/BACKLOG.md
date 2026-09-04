@@ -65,10 +65,28 @@ _Next major lane when soak completes: **P1 (Phase 7 hardening)**._
 | GEO-2 | Exclude leveraged/inverse from swing alerts/desk | **DONE 2026-09-02** |
 | GEO-3 | Email + UI geometry honesty (T1 vs T2 R/R) | DONE 2026-09-02 |
 | UX-1 | Personal mode nav + swing defaults | **SUPERSEDED 2026-09-02** — removed; use main app |
-| UX-2 | Market swing setups table on dashboard brief | **DONE 2026-09-02** — `buildMarketSwingRankedRows`, market brief section |
+| UX-2 | Market swing setups table on dashboard brief | **SUPERSEDED 2026-09-04** — ADR-003 UX-D1 removed table from brief |
 | UX-3 | Symbol one-page deep dive scroll | **DONE 2026-09-02** — Setup → Layers → Evolution → Chart in `deep-dive.tsx` |
 | VAL-1 | Personal validation loop + email discipline | **DONE 2026-09-03** |
 | DBZ-9 | *(Optional)* Retire day Benzinga flag entirely | Pending |
+
+---
+
+## ADR-003 — Trading Room density + sleek UX (active)
+
+**Master plan:** [`adr/ADR-003-trading-room-density-and-sleek-ux.md`](./adr/ADR-003-trading-room-density-and-sleek-ux.md). **Supersedes ADR-002 UX-2** (swing table on brief). **Color tokens unchanged.**
+
+| ID | Theme | Status |
+|----|-------|--------|
+| UX-D0 | ADR + BACKLOG + cross-links | **DONE 2026-09-04** |
+| UX-D1 | Remove Market Brief swing setups table | **DONE 2026-09-04** |
+| UX-D2 | Desk feed actionable-first defaults | **DONE 2026-09-04** |
+| UX-D3 | Market Brief scan mode (collapse secondary tiles) | **DONE 2026-09-04** |
+| UX-D4 | Deep Dive tiers (sticky header + evidence tabs) | **DONE 2026-09-04** |
+| UX-D5 | Card chrome pass (borders, labels, whitespace) | **DONE 2026-09-04** |
+| UX-D6 | Sector heat grid (context tile) | **DONE 2026-09-04** |
+| UX-D7 | Watchlist rail collapsed default + heat toggle | Pending |
+| UX-D8 | Assistant + click-hierarchy alignment | Pending |
 
 ---
 

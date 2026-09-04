@@ -2,7 +2,7 @@
 
 Plain-English workflow for using STOCVEST as a **personal swing-first desk**: ranked market scan → deep dive → **execution-actionable email only when geometry clears** → ledger proof.
 
-Related: [`adr/ADR-002-personal-swing-first-product-ops.md`](./adr/ADR-002-personal-swing-first-product-ops.md) (VAL-1), [`LEDGER_DAILY_VERIFICATION.md`](./LEDGER_DAILY_VERIFICATION.md), [`SIGNAL_ENGINE.md`](./SIGNAL_ENGINE.md) (geometry gates).
+Related: [`adr/ADR-002-personal-swing-first-product-ops.md`](./adr/ADR-002-personal-swing-first-product-ops.md) (VAL-1), [`adr/ADR-003-trading-room-density-and-sleek-ux.md`](./adr/ADR-003-trading-room-density-and-sleek-ux.md) (UX-D1 desk feed as ranked queue), [`LEDGER_DAILY_VERIFICATION.md`](./LEDGER_DAILY_VERIFICATION.md), [`SIGNAL_ENGINE.md`](./SIGNAL_ENGINE.md) (geometry gates).
 
 ---
 
@@ -18,7 +18,7 @@ If you exceed the target, gates are too loose or you are subscribed to non-essen
 
 | Step | When | Action |
 |------|------|--------|
-| 1 | Morning / pre-market | Open **Dashboard** → **Market pulse** → **Swing setups from market scan** table. Scan readiness, R/R, and state — not watchlist-only symbols. |
+| 1 | Morning / pre-market | Open **Dashboard** → **Desk feed** (left column, default **Actionable desk** filter). Scan actionable/near cards — ranked setups from the market scan, not watchlist-only symbols. Full ranked table: **Scanner** (`/dashboard/scanner`). |
 | 2 | When a row looks interesting | Open **deep dive** (single scroll: Setup → Layers → Evolution → Chart). Read **Geometry honesty** (stop distance, T1 R/R, plan R/R when applicable). |
 | 3 | Before acting | Confirm `execution_actionable` would be true: price inside entry zone, ledger + geometry gates pass (see deep-dive Setup + email parity rows). |
 | 4 | After **4:20 PM ET** | Run ledger daily report (below). Compare **qualified** counts to what you saw on the desk. |

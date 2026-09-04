@@ -266,6 +266,12 @@ export function AppSessionHeader({
             }}
           >
             <span style={{ fontSize: typography.scale.base }}>{counts.actionable}</span> actionable
+            {counts.near > 0 ? (
+              <>
+                {" · "}
+                <span style={{ fontSize: typography.scale.base }}>{counts.near}</span> near
+              </>
+            ) : null}
           </span>
         ) : null}
 

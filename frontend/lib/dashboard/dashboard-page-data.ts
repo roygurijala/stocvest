@@ -43,7 +43,13 @@ const SECTOR_ROTATION_META: readonly { symbol: string; label: string }[] = [
   { symbol: "XLC", label: "Comm" },
   { symbol: "XLE", label: "Energy" },
   { symbol: "XLF", label: "Financials" },
-  { symbol: "XLY", label: "Cons. disc." }
+  { symbol: "XLY", label: "Cons. disc." },
+  { symbol: "XLP", label: "Cons. staples" },
+  { symbol: "XLV", label: "Health care" },
+  { symbol: "XLI", label: "Industrials" },
+  { symbol: "XLB", label: "Materials" },
+  { symbol: "XLU", label: "Utilities" },
+  { symbol: "XLRE", label: "Real estate" }
 ];
 
 function buildWeeklyRows(dailyCloses: Record<string, number[]>, snapshots: SnapshotPayload[]): WeeklyIndexRow[] {

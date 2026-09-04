@@ -114,7 +114,7 @@ a {
 }
 
 .market-brief-row-link {
-  transition: background 0.12s ease, box-shadow 0.12s ease;
+  transition: background 240ms ease, box-shadow 240ms ease;
 }
 .market-brief-row-link:hover {
   background: rgba(56, 189, 248, 0.08);
