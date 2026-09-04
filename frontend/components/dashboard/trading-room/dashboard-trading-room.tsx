@@ -465,6 +465,7 @@ function TradingRoomBody({
 
   const [selectedId, setSelectedId] = useState<string | null>(() => openIntent?.key ?? null);
   const selectionBootstrappedRef = useRef(false);
+  const userInitiatedSelectionRef = useRef(false);
   const prevSelectedIdRef = useRef<string | null>(selectedId);
   // Holds a synthetic card for symbols that live only on the watchlist (not in
   // the desk/scanner feed), so the deep dive can open for any monitored symbol.
@@ -500,6 +501,7 @@ function TradingRoomBody({
   };
 
   const selectCard = (card: FeedCard) => {
+    userInitiatedSelectionRef.current = true;
     setSelectedId(card.id);
     setOverrideCard(card);
     setLastSelectedId(card.id);
@@ -538,6 +540,7 @@ function TradingRoomBody({
   const openSymbol = (symbol: string, company?: string | null, lane: FeedLane = "swing") => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
+    userInitiatedSelectionRef.current = true;
     const existing = findFeedCardForSymbolLane(allCards, sym, lane);
     if (existing) {
       selectCard(existing);
@@ -633,23 +636,11 @@ function TradingRoomBody({
   };
 
   const applyDeepLinkOrRestoreSelection = () => {
+    if (userInitiatedSelectionRef.current) return;
+
     const pendingHandoff = peekTradingRoomOpenIntent();
     const freshTradingDay = !pendingHandoff && isFirstVisitOfTradingDay();
     const freshAfterLogin = !pendingHandoff && consumeTradingRoomPostLoginFresh();
-
-    // Card clicks update the URL via `replaceState`, which does not refresh
-    // `useSearchParams`. When the user already has a selection, keep it and heal
-    // the address bar — never stomp a fresh click with stale hook params or a
-    // first-visit-of-day reset.
-    if (selectedId) {
-      const active =
-        selected ?? (overrideCard && overrideCard.id === selectedId ? overrideCard : null);
-      if (active) syncSymbolInUrl(active);
-      clearTradingRoomOpenIntent();
-      recordTradingRoomVisit();
-      selectionBootstrappedRef.current = true;
-      return;
-    }
 
     // First open each NY day, or first dashboard load after logout → login, lands
     // on Market Brief — even when a symbol is still in the URL or sessionStorage.
@@ -696,24 +687,40 @@ function TradingRoomBody({
 
   useLayoutEffect(() => {
     applyDeepLinkOrRestoreSelection();
-  }, [openIntent, searchParams, allCards, selectedId, selected, overrideCard]);
+  }, [openIntent, searchParams]);
+
+  useLayoutEffect(() => {
+    if (userInitiatedSelectionRef.current || selectionBootstrappedRef.current) return;
+    if (allCards.length === 0) return;
+    applyDeepLinkOrRestoreSelection();
+  }, [allCards]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const active = selected ?? (overrideCard && overrideCard.id === selectedId ? overrideCard : null);
+    if (!active) return;
+    syncSymbolInUrl(active);
+    recordTradingRoomVisit();
+    selectionBootstrappedRef.current = true;
+  }, [selectedId, selected, overrideCard, pathname, searchParams]);
 
   // Safety net: `useSearchParams` can hydrate one frame after `window.location`.
   useEffect(() => {
     applyDeepLinkOrRestoreSelection();
-  }, [openIntent, searchParams, allCards, selectedId, selected, overrideCard]);
+  }, [openIntent, searchParams]);
 
   // Tabs left open overnight keep React state — reset when the calendar day turns.
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState !== "visible") return;
       if (peekTradingRoomOpenIntent()) return;
+      if (userInitiatedSelectionRef.current || selectedId) return;
       if (!isFirstVisitOfTradingDay()) return;
       resetToMarketBrief();
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, [pathname, searchParams]);
+  }, [pathname, searchParams, selectedId]);
 
   // Top setup for the brief CTA: hottest actionable, else hottest overall.
   const topCard = useMemo(
