@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   formatHeatVsGroup,
   heatGroupMedian,
+  heatRelativeSizeWeights,
+  heatRelativeTileLayout,
   heatVsGroupDelta
 } from "@/lib/dashboard/trading-room/heat-group-present";
 
@@ -11,5 +13,13 @@ describe("heat-group-present", () => {
     expect(heatVsGroupDelta(2.5, 1)).toBeCloseTo(1.5, 5);
     expect(formatHeatVsGroup(0.02)).toBe("≈ grp");
     expect(formatHeatVsGroup(0.4)).toBe("+0.4 vs grp");
+  });
+
+  it("assigns larger relative weights to names that diverged most from the median", () => {
+    const weights = heatRelativeSizeWeights([2.1, -0.5, 0.1], 0.1);
+    expect(weights[0]).toBeGreaterThan(weights[1]!);
+    expect(weights[1]).toBeGreaterThan(weights[2]!);
+    const layout = heatRelativeTileLayout(weights[0]!);
+    expect(layout.minHeight).toBeGreaterThan(heatRelativeTileLayout(weights[2]!).minHeight);
   });
 });
