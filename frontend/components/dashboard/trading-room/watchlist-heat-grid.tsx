@@ -6,8 +6,7 @@ import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import {
   formatHeatMissingQuote,
   formatSectorHeatPct,
-  sectorHeatCellStyle,
-  sectorHeatGridColumns
+  sectorHeatCellStyle
 } from "@/lib/dashboard/trading-room/sector-heat-present";
 import {
   formatHeatVsGroup,
@@ -15,6 +14,7 @@ import {
   heatGroupMedian,
   heatVsGroupDelta
 } from "@/lib/dashboard/trading-room/heat-group-present";
+import { HeatRelativeTileGrid } from "@/components/dashboard/trading-room/heat-relative-tile-grid";
 import { tradingRoomMotionTransition } from "@/lib/dashboard/trading-room/trading-room-chrome";
 import type { FeedCard } from "@/lib/dashboard/trading-room/feed-model";
 import {
@@ -43,17 +43,12 @@ export function WatchlistHeatGrid({
   if (cards.length === 0) return null;
 
   const groupMedian = heatGroupMedian(cards.map((c) => c.changePct));
-
-  const gridStyle: CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: sectorHeatGridColumns(Math.min(cards.length, 12)),
-    gap: spacing[1],
-    width: "100%"
-  };
+  const pcts = cards.map((c) => c.changePct);
 
   return (
-    <div data-testid="trading-room-watchlist-heat-grid" style={gridStyle}>
-      {cards.map((card) => {
+    <HeatRelativeTileGrid pcts={pcts} testId="trading-room-watchlist-heat-grid">
+      {({ index, layout }) => {
+        const card = cards[index]!;
         const pct = card.changePct;
         const vsGroup = heatVsGroupDelta(pct, groupMedian);
         const colorPct = heatCellPctForColor(pct, vsGroup);
@@ -68,6 +63,27 @@ export function WatchlistHeatGrid({
         const vsLabel = formatHeatVsGroup(vsGroup);
         const missingQuote = pct == null && !quotesLoading;
 
+        const tileStyle: CSSProperties = {
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+          justifyContent: "center",
+          gap: 2,
+          flex: layout.flex,
+          minHeight: layout.minHeight,
+          padding: `${spacing[1]} ${spacing[2]}`,
+          borderRadius: borderRadius.sm,
+          border: "none",
+          background: bg,
+          boxShadow: selected
+            ? `inset 0 0 0 2px ${colors.accent}`
+            : `inset 0 0 0 1px ${colors.border}55`,
+          cursor: "pointer",
+          textAlign: "left",
+          color: colors.text,
+          transition: tradingRoomMotionTransition("background", "box-shadow", "min-height", "flex")
+        };
+
         return (
           <button
             key={card.id}
@@ -77,29 +93,12 @@ export function WatchlistHeatGrid({
               missingQuote
                 ? "No live quote — symbol may be halted, illiquid, or delisted"
                 : vsLabel
-                  ? `${formatSectorHeatPct(pct)} (${vsLabel}, ${heatWindow.toUpperCase()} window)`
-                  : undefined
+                  ? `${formatSectorHeatPct(pct)} (${vsLabel}, ${heatWindow.toUpperCase()} window). Larger tiles moved further vs the watchlist median.`
+                  : "Larger tiles moved further vs the watchlist median."
             }
             {...interactionLevelProps("deep")}
             onClick={() => onSelectCard(card)}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-start",
-              gap: 2,
-              minHeight: 58,
-              padding: `${spacing[1]} ${spacing[2]}`,
-              borderRadius: borderRadius.sm,
-              border: "none",
-              background: bg,
-              boxShadow: selected
-                ? `inset 0 0 0 2px ${colors.accent}`
-                : `inset 0 0 0 1px ${colors.border}55`,
-              cursor: "pointer",
-              textAlign: "left",
-              color: colors.text,
-              transition: tradingRoomMotionTransition("background", "box-shadow")
-            }}
+            style={tileStyle}
           >
             <span style={{ fontWeight: 700, fontFamily: typography.fontFamilyMono, fontSize: typography.scale.xs }}>
               {card.symbol}
@@ -125,7 +124,7 @@ export function WatchlistHeatGrid({
             ) : null}
           </button>
         );
-      })}
-    </div>
+      }}
+    </HeatRelativeTileGrid>
   );
 }

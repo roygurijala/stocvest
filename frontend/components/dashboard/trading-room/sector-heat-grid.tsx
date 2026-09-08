@@ -7,7 +7,6 @@ import {
   formatHeatMissingQuote,
   formatSectorHeatPct,
   sectorHeatCellStyle,
-  sectorHeatGridColumns,
   sectorHeatPrimaryPct,
   SECTOR_HEAT_MAX_HOLDINGS,
   type SectorHeatInput
@@ -16,8 +15,12 @@ import {
   formatHeatVsGroup,
   heatCellPctForColor,
   heatGroupMedian,
+  heatRelativeTileLayout,
+  heatRelativeSizeWeights,
+  heatRelativeGridStyle,
   heatVsGroupDelta
 } from "@/lib/dashboard/trading-room/heat-group-present";
+import { HeatRelativeTileGrid } from "@/components/dashboard/trading-room/heat-relative-tile-grid";
 import { tradingRoomMotionTransition } from "@/lib/dashboard/trading-room/trading-room-chrome";
 import type { FeedLane } from "@/lib/dashboard/trading-room/feed-model";
 import type { SectorRepresentativeRow } from "@/lib/dashboard/trading-room/market-brief-navigation";
@@ -42,17 +45,20 @@ export function SectorHeatGrid({
 }: SectorHeatGridProps) {
   if (sectors.length === 0) return null;
 
+  const sectorPcts = sectors.map((sector) => sectorHeatPrimaryPct(sector, sectorWindowLabel));
+  const groupMedian = heatGroupMedian(sectorPcts);
+  const weights = heatRelativeSizeWeights(sectorPcts, groupMedian);
+
   const gridStyle: CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: sectorHeatGridColumns(sectors.length),
-    gap: spacing[2],
-    width: "100%"
+    ...heatRelativeGridStyle,
+    gap: spacing[2]
   };
 
   return (
     <div data-testid="market-brief-sector-heat-grid" style={gridStyle}>
-      {sectors.map((sector) => {
-        const pct = sectorHeatPrimaryPct(sector, sectorWindowLabel);
+      {sectors.map((sector, index) => {
+        const pct = sectorPcts[index]!;
+        const layout = heatRelativeTileLayout(weights[index] ?? 0.38);
         const selected = selectedSymbol === sector.symbol;
         const tone = pct >= 0 ? colors.bullish : colors.bearish;
         const cellStyle: CSSProperties = {
@@ -61,13 +67,14 @@ export function SectorHeatGrid({
           alignItems: "flex-start",
           justifyContent: "center",
           gap: 2,
-          minHeight: 56,
+          flex: layout.flex,
+          minHeight: layout.minHeight,
           padding: `${spacing[2]} ${spacing[2]}`,
           borderRadius: borderRadius.md,
           border: "none",
           textAlign: "left",
           cursor: interactive ? "pointer" : undefined,
-          transition: tradingRoomMotionTransition("background", "box-shadow"),
+          transition: tradingRoomMotionTransition("background", "box-shadow", "min-height", "flex"),
           ...sectorHeatCellStyle(pct, colors, { selected })
         };
 
@@ -151,17 +158,12 @@ export function SectorHoldingsHeatGrid({
   if (capped.length === 0) return null;
 
   const groupMedian = heatGroupMedian(capped.map((row) => row.changePct));
-
-  const gridStyle: CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: sectorHeatGridColumns(capped.length),
-    gap: spacing[1],
-    width: "100%"
-  };
+  const pcts = capped.map((row) => row.changePct);
 
   return (
-    <div data-testid="market-brief-sector-holdings-heat" style={gridStyle}>
-      {capped.map((row) => {
+    <HeatRelativeTileGrid pcts={pcts} testId="market-brief-sector-holdings-heat">
+      {({ index, layout }) => {
+        const row = capped[index]!;
         const pct = row.changePct;
         const vsGroup = heatVsGroupDelta(pct, groupMedian);
         const colorPct = heatCellPctForColor(pct, vsGroup);
@@ -186,22 +188,24 @@ export function SectorHoldingsHeatGrid({
               missingQuote
                 ? "No live quote for this holding"
                 : vsLabel
-                  ? `${formatSectorHeatPct(pct)} (${vsLabel})`
-                  : undefined
+                  ? `${formatSectorHeatPct(pct)} (${vsLabel}). Larger tiles moved further vs sector peers.`
+                  : "Larger tiles moved further vs sector peers."
             }
             {...interactionLevelProps("deep")}
             style={{
               display: "flex",
               flexDirection: "column",
               alignItems: "flex-start",
+              justifyContent: "center",
               gap: 2,
-              minHeight: 52,
+              flex: layout.flex,
+              minHeight: layout.minHeight,
               padding: `${spacing[1]} ${spacing[2]}`,
               borderRadius: borderRadius.sm,
               border: "none",
               background: bg,
               boxShadow: `inset 0 0 0 1px ${colors.border}55`,
-              transition: tradingRoomMotionTransition("background", "box-shadow")
+              transition: tradingRoomMotionTransition("background", "box-shadow", "min-height", "flex")
             }}
           >
             <span style={{ fontWeight: 700, fontFamily: typography.fontFamilyMono, fontSize: typography.scale.xs }}>
@@ -215,7 +219,7 @@ export function SectorHoldingsHeatGrid({
             ) : null}
           </MarketBriefSymbolLink>
         );
-      })}
-    </div>
+      }}
+    </HeatRelativeTileGrid>
   );
 }
