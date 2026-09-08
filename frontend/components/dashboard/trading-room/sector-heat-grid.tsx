@@ -69,7 +69,8 @@ export function SectorHeatGrid({
           justifyContent: "center",
           gap: 2,
           flex: layout.flex,
-          minHeight: layout.minHeight,
+          height: layout.height,
+          minHeight: layout.height,
           maxWidth: "100%",
           boxSizing: "border-box",
           padding: `${spacing[2]} ${spacing[2]}`,
@@ -77,7 +78,7 @@ export function SectorHeatGrid({
           border: "none",
           textAlign: "left",
           cursor: interactive ? "pointer" : undefined,
-          transition: tradingRoomMotionTransition("background", "box-shadow", "min-height", "flex"),
+          transition: tradingRoomMotionTransition("background", "box-shadow", "height", "flex"),
           ...sectorHeatCellStyle(pct, colors, { selected })
         };
 
@@ -202,7 +203,8 @@ export function SectorHoldingsHeatGrid({
               justifyContent: "center",
               gap: 2,
               flex: layout.flex,
-              minHeight: layout.minHeight,
+              height: layout.height,
+              minHeight: layout.height,
               maxWidth: "100%",
               boxSizing: "border-box",
               padding: `${spacing[1]} ${spacing[2]}`,
@@ -210,7 +212,7 @@ export function SectorHoldingsHeatGrid({
               border: "none",
               background: bg,
               boxShadow: `inset 0 0 0 1px ${colors.border}55`,
-              transition: tradingRoomMotionTransition("background", "box-shadow", "min-height", "flex")
+              transition: tradingRoomMotionTransition("background", "box-shadow", "height", "flex")
             }}
           >
             <span style={{ fontWeight: 700, fontFamily: typography.fontFamilyMono, fontSize: typography.scale.xs }}>

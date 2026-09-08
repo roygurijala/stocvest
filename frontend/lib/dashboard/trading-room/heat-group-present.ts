@@ -64,17 +64,20 @@ export function heatRelativeSizeWeights(
   });
 }
 
-/** Map a relative weight to flex + height for a heat tile. */
-export function heatRelativeTileLayout(weight: number): { flex: string; minHeight: number; basisPx: number } {
+/** Map a relative weight to flex width + fixed height for a heat tile (area scales with weight). */
+export function heatRelativeTileLayout(weight: number): { flex: string; height: number; basisPx: number } {
   const floor = HEAT_RELATIVE_SIZE_MIN * 0.72;
   const w = Math.max(floor, Math.min(1, weight));
   const t = (w - floor) / (1 - floor);
   const basisPx = Math.round(
     HEAT_RELATIVE_BASIS_MIN_PX + t * (HEAT_RELATIVE_BASIS_MAX_PX - HEAT_RELATIVE_BASIS_MIN_PX)
   );
+  const heightPx = Math.round(
+    HEAT_RELATIVE_BASIS_MIN_PX + 4 + t * (HEAT_RELATIVE_BASIS_MAX_PX - HEAT_RELATIVE_BASIS_MIN_PX + 8)
+  );
   return {
     flex: `0 0 ${basisPx}px`,
-    minHeight: Math.round(HEAT_RELATIVE_BASIS_MIN_PX - 4 + t * 56),
+    height: heightPx,
     basisPx
   };
 }
@@ -82,6 +85,6 @@ export function heatRelativeTileLayout(weight: number): { flex: string; minHeigh
 export const heatRelativeGridStyle = {
   display: "flex",
   flexWrap: "wrap",
-  alignItems: "stretch",
+  alignItems: "flex-start",
   width: "100%"
 } as const;
