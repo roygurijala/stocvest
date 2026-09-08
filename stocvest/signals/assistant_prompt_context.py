@@ -202,6 +202,63 @@ def _serialize_dashboard_context_v1(lines: list[str], dc: dict[str, Any]) -> Non
     _append_gap_summary_lines(lines, dc.get("gap_leaders_detail"), "gap_leader", 10)
 
 
+def _serialize_trading_room_context_v1(lines: list[str], tr: dict[str, Any]) -> None:
+    """ADR-003 UX-D8 — Trading Room nested context (version 1)."""
+    if tr.get("version") != 1:
+        return
+    lines.append("trading_room_context_version=1")
+
+    center = _coerce_str(tr.get("center_view"), limit=16).lower()
+    if center in ("brief", "deep_dive"):
+        lines.append(f"trading_room_center_view={center}")
+
+    if tr.get("brief_expanded") is True:
+        lines.append("trading_room_brief_expanded=true")
+    elif tr.get("brief_expanded") is False:
+        lines.append("trading_room_brief_expanded=false")
+
+    lane = _coerce_str(tr.get("feed_filter_lane"), limit=12).lower()
+    if lane in ("all", "swing", "day"):
+        lines.append(f"trading_room_feed_filter_lane={lane}")
+
+    state = _coerce_str(tr.get("feed_filter_state"), limit=24).lower()
+    if state in ("all", "actionable_near", "actionable", "near", "potential"):
+        lines.append(f"trading_room_feed_filter_state={state}")
+
+    bias = _coerce_str(tr.get("feed_filter_bias"), limit=12).lower()
+    if bias in ("all", "long", "short"):
+        lines.append(f"trading_room_feed_filter_bias={bias}")
+
+    visible = _coerce_num(tr.get("feed_visible_count"))
+    if visible:
+        lines.append(f"trading_room_feed_visible_count={visible}")
+
+    syms = tr.get("feed_visible_symbols")
+    if isinstance(syms, list):
+        sym_list = [_coerce_str(x, limit=12).upper() for x in syms[:12]]
+        sym_list = [s for s in sym_list if s]
+        if sym_list:
+            lines.append(f"trading_room_feed_visible_symbols={','.join(sym_list)}")
+
+    if tr.get("watchlist_rail_open") is True:
+        lines.append("trading_room_watchlist_rail_open=true")
+    elif tr.get("watchlist_rail_open") is False:
+        lines.append("trading_room_watchlist_rail_open=false")
+
+    wmode = _coerce_str(tr.get("watchlist_view_mode"), limit=8).lower()
+    if wmode in ("list", "heat"):
+        lines.append(f"trading_room_watchlist_view_mode={wmode}")
+
+    for key, line_key in (
+        ("desk_actionable_count", "trading_room_desk_actionable_count"),
+        ("desk_near_count", "trading_room_desk_near_count"),
+        ("desk_potential_count", "trading_room_desk_potential_count"),
+    ):
+        n = _coerce_num(tr.get(key))
+        if n:
+            lines.append(f"{line_key}={n}")
+
+
 _PAGE_LABELS: dict[str, str] = {
     "signals/layers": "Signals (layers / evidence)",
     "dashboard/scanner": "Scanner",
@@ -622,6 +679,10 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
     dc = ctx.get("dashboard_context")
     if isinstance(dc, dict):
         _serialize_dashboard_context_v1(lines, dc)
+
+    tr = ctx.get("trading_room_context")
+    if isinstance(tr, dict):
+        _serialize_trading_room_context_v1(lines, tr)
 
     gap_intel = ctx.get("gap_intel")
     if isinstance(gap_intel, dict):

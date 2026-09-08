@@ -77,6 +77,9 @@ import { feedBiasColor } from "@/lib/signal-direction-colors";
 import { overlayFeedCardTimestamps } from "@/lib/dashboard/trading-room/feed-card-timestamps";
 import { useSymbolNames, useSymbolName } from "@/lib/hooks/use-symbol-names";
 import { WatchlistRail } from "@/components/dashboard/trading-room/watchlist-rail";
+import type { WatchlistRailViewMode } from "@/lib/dashboard/trading-room/watchlist-rail-present";
+import { buildTradingRoomAssistantPageContext } from "@/lib/dashboard/trading-room/trading-room-assistant-context";
+import { usePublishAssistantContext } from "@/lib/assistant/context";
 import { MarketEnvironmentStrip } from "@/components/market-environment-strip";
 import { useMarketEnvironment } from "@/lib/hooks/use-market-environment";
 import { environmentSessionCardHint } from "@/lib/signal-evidence/environment-session-hint";
@@ -495,6 +498,8 @@ function TradingRoomBody({
   // Collapsed by default on every breakpoint — the watchlist is a peek-on-demand
   // rail, not a persistent third column. The user opens it from the collapsed tab.
   const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [briefExpanded, setBriefExpanded] = useState(false);
+  const [watchlistViewMode, setWatchlistViewMode] = useState<WatchlistRailViewMode>("heat");
   /** Mobile: desk feed collapses while deep-dive is open; expands on session brief. */
   const [feedOpen, setFeedOpen] = useState(true);
 
@@ -1086,6 +1091,8 @@ function TradingRoomBody({
       onSearch={undefined}
       onSelectSymbol={(sym, company, lane) => openSymbol(sym, company, lane ?? "swing")}
       trackedCards={allCards}
+      briefExpanded={briefExpanded}
+      onBriefExpandedChange={setBriefExpanded}
     />
   );
   // Build live bias map from current desk data for watchlist rail
@@ -1112,8 +1119,37 @@ function TradingRoomBody({
       liveBiasBySymbol={liveBiasBySymbol}
       onRefreshCard={handleRefreshFeedCard}
       refreshingCardIds={refreshingCardIds}
+      viewMode={watchlistViewMode}
+      onViewModeChange={setWatchlistViewMode}
     />
   );
+
+  const tradingRoomAssistantContext = useMemo(
+    () =>
+      centerCard
+        ? null
+        : buildTradingRoomAssistantPageContext({
+            centerView: "brief",
+            briefExpanded,
+            filters,
+            visibleFeedCards: ranked,
+            watchlistOpen,
+            watchlistViewMode,
+            regimeLabel: briefData.regimeLabel,
+            deskCounts: briefData.counts
+          }),
+    [
+      centerCard,
+      briefExpanded,
+      filters,
+      ranked,
+      watchlistOpen,
+      watchlistViewMode,
+      briefData.regimeLabel,
+      briefData.counts
+    ]
+  );
+  usePublishAssistantContext(tradingRoomAssistantContext);
 
   // Full-bleed amount: pull the header/filter bands out to the edges of the
   // padded <main> so they read as flush, edge-to-edge bars (prototype). The

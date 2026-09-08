@@ -167,6 +167,12 @@ export interface AssistantPageContext {
   dashboard_context?: DashboardAssistantContextV1;
 
   /**
+   * ADR-003 UX-D8 — Trading Room surface summary (version 1).
+   * Visible feed cards, brief expand, feed filters, watchlist rail mode.
+   */
+  trading_room_context?: TradingRoomAssistantContextV1;
+
+  /**
    * Server-shaped Gap Intelligence snapshot subset (Signals page). The
    * backend serializer only forwards these keys to the assistant.
    */
@@ -231,6 +237,23 @@ export type DashboardAssistantContextV1 = {
     min_rr_swing: number;
     min_rr_day: number;
   };
+};
+
+/** ADR-003 UX-D8 — Trading Room assistant block; keep in lockstep with backend serializer. */
+export type TradingRoomAssistantContextV1 = {
+  version: 1;
+  center_view: "brief" | "deep_dive";
+  brief_expanded: boolean;
+  feed_filter_lane: "all" | "swing" | "day";
+  feed_filter_state: "all" | "actionable_near" | "actionable" | "near" | "potential";
+  feed_filter_bias: "all" | "long" | "short";
+  feed_visible_count: number;
+  feed_visible_symbols: string[];
+  watchlist_rail_open: boolean;
+  watchlist_view_mode: "list" | "heat";
+  desk_actionable_count: number;
+  desk_near_count: number;
+  desk_potential_count: number;
 };
 
 /** Keys whitelisted for assistant serialization — nested object from gap-intel API. */

@@ -481,6 +481,37 @@ def test_serialize_page_context_emits_dashboard_context_v1() -> None:
     assert "top_setup_1=symbol=AAA|direction=long|strength=strong|confluence=true" in out
 
 
+def test_serialize_page_context_emits_trading_room_context_v1() -> None:
+    """ADR-003 UX-D8 — Trading Room nested context serializes visible-tier fields."""
+    ctx = {
+        "page": "dashboard",
+        "market_regime": "Neutral",
+        "trading_room_context": {
+            "version": 1,
+            "center_view": "brief",
+            "brief_expanded": True,
+            "feed_filter_lane": "all",
+            "feed_filter_state": "actionable_near",
+            "feed_filter_bias": "all",
+            "feed_visible_count": 2,
+            "feed_visible_symbols": ["AAPL", "MSFT"],
+            "watchlist_rail_open": False,
+            "watchlist_view_mode": "heat",
+            "desk_actionable_count": 2,
+            "desk_near_count": 1,
+            "desk_potential_count": 0,
+        },
+    }
+    out = serialize_page_context(ctx)
+    assert "trading_room_context_version=1" in out
+    assert "trading_room_center_view=brief" in out
+    assert "trading_room_brief_expanded=true" in out
+    assert "trading_room_feed_filter_state=actionable_near" in out
+    assert "trading_room_feed_visible_symbols=AAPL,MSFT" in out
+    assert "trading_room_watchlist_view_mode=heat" in out
+    assert "trading_room_desk_actionable_count=2" in out
+
+
 def test_serialize_page_context_dashboard_dual_desk_omits_swing_only_fields() -> None:
     """The dashboard's dual-desk page-context block doesn't carry scanner-overview
     fields like `top_setup_1` or `gap_with_catalyst_count`. Make sure the new
