@@ -45,8 +45,7 @@ import { SectorHeatGrid, SectorHoldingsHeatGrid } from "@/components/dashboard/t
 import {
   countMarketBriefExpandedSections,
   marketBriefExpandButtonLabel,
-  marketBriefExpandedHeadlines,
-  marketBriefScanHeadline
+  marketBriefExpandedHeadlines
 } from "@/lib/dashboard/trading-room/market-brief-scan-present";
 
 const BRIEF_NAME_STORAGE_KEY = "stocvest:brief-name";
@@ -273,8 +272,7 @@ export function MarketBrief({
     [data.headlines, data.movers, data.weekAhead, data.outcomesRecap, data.watchlistAtClose, data.weekInReview, showPrep]
   );
   const expandLabel = marketBriefExpandButtonLabel(expandedSectionCount, briefExpanded);
-  const scanHeadline = marketBriefScanHeadline(data.headlines);
-  const extraHeadlines = marketBriefExpandedHeadlines(data.headlines);
+  const expandedHeadlines = marketBriefExpandedHeadlines(data.headlines);
   const regimeWhyInput = {
     regimeLabel: data.regimeLabel,
     marketRegime: data.marketRegime,
@@ -511,21 +509,6 @@ export function MarketBrief({
             )
           : null}
 
-        {scanHeadline ? (
-          <div
-            data-testid="market-brief-scan-headline"
-            style={{
-              ...tradingRoomInsetTileStyle(colors, colors.accent, theme),
-              display: "flex",
-              flexDirection: "column",
-              gap: spacing[2],
-              padding: spacing[3]
-            }}
-          >
-            {sectionLabel(data.marketOpen ? "Top headline" : "Headline")}
-            <Headline item={scanHeadline} dot={dotFor(scanHeadline.sentiment)} colors={colors} />
-          </div>
-        ) : null}
       </div>
 
       {expandLabel ? (
@@ -569,13 +552,16 @@ export function MarketBrief({
           data-testid="market-brief-expanded"
           style={{ gap: spacing[3], alignItems: "start" }}
         >
-          {extraHeadlines.length > 0
+          {expandedHeadlines.length > 0
             ? tile(
                 <Newspaper size={15} />,
-                "More headlines",
+                "Market headlines",
                 colors.accent,
-                <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
-                  {extraHeadlines.map((h) => (
+                <div
+                  data-testid="market-brief-headlines"
+                  style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}
+                >
+                  {expandedHeadlines.map((h) => (
                     <Headline key={h.id} item={h} dot={dotFor(h.sentiment)} colors={colors} />
                   ))}
                 </div>,
