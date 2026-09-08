@@ -1093,6 +1093,7 @@ function TradingRoomBody({
       trackedCards={allCards}
       briefExpanded={briefExpanded}
       onBriefExpandedChange={setBriefExpanded}
+      snapshotsBySymbol={snapshotsBySymbol}
     />
   );
   // Build live bias map from current desk data for watchlist rail
@@ -1121,6 +1122,7 @@ function TradingRoomBody({
       refreshingCardIds={refreshingCardIds}
       viewMode={watchlistViewMode}
       onViewModeChange={setWatchlistViewMode}
+      snapshotsBySymbol={snapshotsBySymbol}
     />
   );
 

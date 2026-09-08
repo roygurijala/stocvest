@@ -78,6 +78,12 @@ describe("market-brief-navigation", () => {
     expect(rows[0]?.changePct).toBe(-2.1);
   });
 
+  it("derives representative change from last trade when change_percent is absent", () => {
+    const snapshots = new Map([["MSFT", { last_trade_price: 420, prev_close: 400 }]]);
+    const rows = buildSectorRepresentativeRowsFromInputs([{ symbol: "MSFT" }], snapshots);
+    expect(rows[0]?.changePct).toBeCloseTo(5, 5);
+  });
+
   it("preserves ETF holdings order and exposes portfolio weight", () => {
     const snapshots = new Map([["XOM", { change_percent: 0.4 }], ["CVX", { change_percent: -1.2 }]]);
     const rows = buildSectorRepresentativeRowsFromInputs(

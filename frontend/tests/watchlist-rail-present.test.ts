@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   watchlistHeatShowsStateBadge,
-  watchlistHeatStateBadgeLabel
+  watchlistHeatStateBadgeLabel,
+  watchlistSessionChangePct
 } from "@/lib/dashboard/trading-room/watchlist-rail-present";
 
 describe("watchlist-rail-present (ADR-003 UX-D7)", () => {
@@ -16,5 +17,21 @@ describe("watchlist-rail-present (ADR-003 UX-D7)", () => {
     expect(watchlistHeatStateBadgeLabel("actionable")).toBe("Actionable");
     expect(watchlistHeatStateBadgeLabel("near")).toBe("Near");
     expect(watchlistHeatStateBadgeLabel("potential")).toBeNull();
+  });
+
+  it("derives session change from last trade and prior close when change_percent is missing", () => {
+    expect(
+      watchlistSessionChangePct({
+        symbol: "NVDA",
+        last_trade_price: 110,
+        prev_close: 100
+      })
+    ).toBeCloseTo(10, 5);
+    expect(
+      watchlistSessionChangePct({
+        symbol: "NVDA",
+        pre_market_change_percent: 1.5
+      })
+    ).toBe(1.5);
   });
 });

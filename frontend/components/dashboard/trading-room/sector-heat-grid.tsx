@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { borderRadius, spacing, typography, type ThemeColors } from "@/lib/design-system";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import {
+  formatHeatMissingQuote,
   formatSectorHeatPct,
   sectorHeatCellStyle,
   sectorHeatGridColumns,
@@ -11,6 +12,12 @@ import {
   SECTOR_HEAT_MAX_HOLDINGS,
   type SectorHeatInput
 } from "@/lib/dashboard/trading-room/sector-heat-present";
+import {
+  formatHeatVsGroup,
+  heatCellPctForColor,
+  heatGroupMedian,
+  heatVsGroupDelta
+} from "@/lib/dashboard/trading-room/heat-group-present";
 import { tradingRoomMotionTransition } from "@/lib/dashboard/trading-room/trading-room-chrome";
 import type { FeedLane } from "@/lib/dashboard/trading-room/feed-model";
 import type { SectorRepresentativeRow } from "@/lib/dashboard/trading-room/market-brief-navigation";
@@ -143,6 +150,8 @@ export function SectorHoldingsHeatGrid({
   const capped = rows.slice(0, SECTOR_HEAT_MAX_HOLDINGS);
   if (capped.length === 0) return null;
 
+  const groupMedian = heatGroupMedian(capped.map((row) => row.changePct));
+
   const gridStyle: CSSProperties = {
     display: "grid",
     gridTemplateColumns: sectorHeatGridColumns(capped.length),
@@ -154,12 +163,16 @@ export function SectorHoldingsHeatGrid({
     <div data-testid="market-brief-sector-holdings-heat" style={gridStyle}>
       {capped.map((row) => {
         const pct = row.changePct;
+        const vsGroup = heatVsGroupDelta(pct, groupMedian);
+        const colorPct = heatCellPctForColor(pct, vsGroup);
         const moveTone =
           pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
         const bg =
-          pct == null
+          colorPct == null
             ? colors.surface
-            : sectorHeatCellStyle(pct, colors).background ?? colors.surface;
+            : sectorHeatCellStyle(colorPct, colors).background ?? colors.surface;
+        const vsLabel = formatHeatVsGroup(vsGroup);
+        const missingQuote = pct == null && !quotesLoading;
 
         return (
           <MarketBriefSymbolLink
@@ -169,13 +182,20 @@ export function SectorHoldingsHeatGrid({
             lane={laneForSymbol(row.symbol)}
             onSelect={onSelectSymbol}
             data-testid={`market-brief-sector-holding-heat-${row.symbol}`}
+            title={
+              missingQuote
+                ? "No live quote for this holding"
+                : vsLabel
+                  ? `${formatSectorHeatPct(pct)} (${vsLabel})`
+                  : undefined
+            }
             {...interactionLevelProps("deep")}
             style={{
               display: "flex",
               flexDirection: "column",
               alignItems: "flex-start",
               gap: 2,
-              minHeight: 48,
+              minHeight: 52,
               padding: `${spacing[1]} ${spacing[2]}`,
               borderRadius: borderRadius.sm,
               border: "none",
@@ -188,8 +208,11 @@ export function SectorHoldingsHeatGrid({
               {row.symbol}
             </span>
             <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: moveTone }}>
-              {quotesLoading && pct == null ? "…" : formatSectorHeatPct(pct)}
+              {quotesLoading && pct == null ? "…" : missingQuote ? formatHeatMissingQuote() : formatSectorHeatPct(pct)}
             </span>
+            {vsLabel && pct != null ? (
+              <span style={{ fontSize: 9, fontWeight: 600, color: colors.textMuted }}>{vsLabel}</span>
+            ) : null}
           </MarketBriefSymbolLink>
         );
       })}

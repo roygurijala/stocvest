@@ -51,7 +51,7 @@ from stocvest.data.models import (
     Timeframe,
     Trade,
 )
-from stocvest.data.symbol_normalize import TICKER_SEARCH_MIN_QUERY_LEN
+from stocvest.data.symbol_normalize import TICKER_SEARCH_MIN_QUERY_LEN, to_polygon_symbol
 from stocvest.signals.session_price_guard import sanitize_session_change_pct
 from stocvest.utils.redis_client import get_sync_redis
 from stocvest.utils.logging import get_logger
@@ -500,18 +500,21 @@ class PolygonClient(_StreamingMixin):
             for candidate in candidates:
                 hit = by_index.get(candidate)
                 if hit is not None:
-                    return hit
+                    return hit.model_copy(update={"symbol": sym})
             last_error: PolygonError | None = None
             for candidate in candidates:
                 try:
-                    return await self._get_snapshot_from_stocks_endpoint(candidate)
+                    snap = await self._get_snapshot_from_stocks_endpoint(candidate)
+                    return snap.model_copy(update={"symbol": sym})
                 except PolygonError as exc:
                     last_error = exc
                     continue
             if last_error is not None:
                 raise last_error
             raise PolygonError(f"No snapshot for index symbol {sym}")
-        return await self._get_snapshot_from_stocks_endpoint(sym)
+        wire = to_polygon_symbol(sym)
+        snap = await self._get_snapshot_from_stocks_endpoint(wire)
+        return snap.model_copy(update={"symbol": sym})
 
     async def get_snapshots(self, symbols: list[str]) -> dict[str, Snapshot]:
         """
@@ -525,12 +528,28 @@ class PolygonClient(_StreamingMixin):
         stock_syms = [s for s in unique if s not in index_syms]
         result: dict[str, Snapshot] = {}
         if stock_syms:
-            params = {"tickers": ",".join(stock_syms)}
+            wire_by_requested = {s: to_polygon_symbol(s) for s in stock_syms}
+            wire_syms = list(dict.fromkeys(wire_by_requested.values()))
+            params = {"tickers": ",".join(wire_syms)}
             data = await self._get("/v2/snapshot/locale/us/markets/stocks/tickers", params)
+            poly_to_snap: dict[str, Snapshot] = {}
             for ticker_data in data.get("tickers", []) or []:
-                sym = ticker_data.get("ticker", "")
-                if sym:
-                    result[str(sym).strip().upper()] = self._parse_snapshot(sym, ticker_data)
+                poly_sym = str(ticker_data.get("ticker", "") or "").strip().upper()
+                if poly_sym:
+                    poly_to_snap[poly_sym] = self._parse_snapshot(poly_sym, ticker_data)
+            for req in stock_syms:
+                wire = wire_by_requested[req]
+                hit = poly_to_snap.get(wire)
+                if hit is not None:
+                    result[req] = hit.model_copy(update={"symbol": req})
+            for req in stock_syms:
+                if req in result:
+                    continue
+                try:
+                    snap = await self._get_snapshot_from_stocks_endpoint(wire_by_requested[req])
+                    result[req] = snap.model_copy(update={"symbol": req})
+                except PolygonError as exc:
+                    log.debug("get_snapshots single fallback failed sym=%s: %s", req, exc)
         if index_syms:
             index_tickers: list[str] = []
             for sym in index_syms:

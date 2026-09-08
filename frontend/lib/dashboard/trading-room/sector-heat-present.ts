@@ -89,3 +89,8 @@ export function formatSectorHeatPct(n: number | null | undefined): string {
   const sign = n >= 0 ? "+" : "";
   return `${sign}${n.toFixed(1)}%`;
 }
+
+/** Label when Polygon has no usable quote (halted, illiquid, or delisted). */
+export function formatHeatMissingQuote(): string {
+  return "N/A";
+}

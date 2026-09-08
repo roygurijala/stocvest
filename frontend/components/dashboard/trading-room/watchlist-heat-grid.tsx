@@ -4,15 +4,23 @@ import type { CSSProperties } from "react";
 import { borderRadius, spacing, typography, type ThemeColors } from "@/lib/design-system";
 import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import {
+  formatHeatMissingQuote,
   formatSectorHeatPct,
   sectorHeatCellStyle,
   sectorHeatGridColumns
 } from "@/lib/dashboard/trading-room/sector-heat-present";
+import {
+  formatHeatVsGroup,
+  heatCellPctForColor,
+  heatGroupMedian,
+  heatVsGroupDelta
+} from "@/lib/dashboard/trading-room/heat-group-present";
 import { tradingRoomMotionTransition } from "@/lib/dashboard/trading-room/trading-room-chrome";
 import type { FeedCard } from "@/lib/dashboard/trading-room/feed-model";
 import {
   watchlistHeatShowsStateBadge,
-  watchlistHeatStateBadgeLabel
+  watchlistHeatStateBadgeLabel,
+  type WatchlistHeatWindow
 } from "@/lib/dashboard/trading-room/watchlist-rail-present";
 
 type WatchlistHeatGridProps = {
@@ -20,10 +28,21 @@ type WatchlistHeatGridProps = {
   selectedId: string | null;
   colors: ThemeColors;
   onSelectCard: (card: FeedCard) => void;
+  quotesLoading?: boolean;
+  heatWindow?: WatchlistHeatWindow;
 };
 
-export function WatchlistHeatGrid({ cards, selectedId, colors, onSelectCard }: WatchlistHeatGridProps) {
+export function WatchlistHeatGrid({
+  cards,
+  selectedId,
+  colors,
+  onSelectCard,
+  quotesLoading = false,
+  heatWindow = "1d"
+}: WatchlistHeatGridProps) {
   if (cards.length === 0) return null;
+
+  const groupMedian = heatGroupMedian(cards.map((c) => c.changePct));
 
   const gridStyle: CSSProperties = {
     display: "grid",
@@ -36,20 +55,31 @@ export function WatchlistHeatGrid({ cards, selectedId, colors, onSelectCard }: W
     <div data-testid="trading-room-watchlist-heat-grid" style={gridStyle}>
       {cards.map((card) => {
         const pct = card.changePct;
+        const vsGroup = heatVsGroupDelta(pct, groupMedian);
+        const colorPct = heatCellPctForColor(pct, vsGroup);
         const moveTone =
           pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
         const selected = card.id === selectedId;
         const badge = watchlistHeatStateBadgeLabel(card.state);
         const bg =
-          pct == null
+          colorPct == null
             ? colors.surface
-            : sectorHeatCellStyle(pct, colors, { selected }).background ?? colors.surface;
+            : sectorHeatCellStyle(colorPct, colors, { selected }).background ?? colors.surface;
+        const vsLabel = formatHeatVsGroup(vsGroup);
+        const missingQuote = pct == null && !quotesLoading;
 
         return (
           <button
             key={card.id}
             type="button"
             data-testid={`trading-room-watchlist-heat-${card.symbol}`}
+            title={
+              missingQuote
+                ? "No live quote — symbol may be halted, illiquid, or delisted"
+                : vsLabel
+                  ? `${formatSectorHeatPct(pct)} (${vsLabel}, ${heatWindow.toUpperCase()} window)`
+                  : undefined
+            }
             {...interactionLevelProps("deep")}
             onClick={() => onSelectCard(card)}
             style={{
@@ -57,7 +87,7 @@ export function WatchlistHeatGrid({ cards, selectedId, colors, onSelectCard }: W
               flexDirection: "column",
               alignItems: "flex-start",
               gap: 2,
-              minHeight: 52,
+              minHeight: 58,
               padding: `${spacing[1]} ${spacing[2]}`,
               borderRadius: borderRadius.sm,
               border: "none",
@@ -75,8 +105,11 @@ export function WatchlistHeatGrid({ cards, selectedId, colors, onSelectCard }: W
               {card.symbol}
             </span>
             <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: moveTone }}>
-              {formatSectorHeatPct(pct)}
+              {quotesLoading && pct == null ? "…" : missingQuote ? formatHeatMissingQuote() : formatSectorHeatPct(pct)}
             </span>
+            {vsLabel && pct != null ? (
+              <span style={{ fontSize: 9, fontWeight: 600, color: colors.textMuted }}>{vsLabel}</span>
+            ) : null}
             {watchlistHeatShowsStateBadge(card.state) && badge ? (
               <span
                 style={{
