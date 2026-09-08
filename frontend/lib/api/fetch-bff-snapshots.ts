@@ -4,6 +4,7 @@
  * Backend caps each request at 40 symbols; this helper chunks automatically.
  */
 import type { SnapshotPayload } from "@/lib/api/market";
+import { canonicalUsTicker, canonicalUsTickerFromSearch, tickersEquivalent } from "@/lib/symbol-ticker";
 
 export const BFF_SNAPSHOT_BATCH_SIZE = 40;
 
@@ -32,6 +33,25 @@ export async function fetchBffSnapshotsBatched(
     }
   }
   return out;
+}
+
+/** Resolve a snapshot whether the map key is canonical or an alias (BRK-B vs BRK.B). */
+export function lookupSnapshot<T extends { symbol?: string | null }>(
+  map: ReadonlyMap<string, T>,
+  symbol: string
+): T | undefined {
+  const sym = symbol.trim().toUpperCase();
+  const direct = map.get(sym);
+  if (direct) return direct;
+  const canon = canonicalUsTicker(sym) ?? canonicalUsTickerFromSearch(sym);
+  if (canon && canon !== sym) {
+    const hit = map.get(canon);
+    if (hit) return hit;
+  }
+  for (const [key, snap] of map) {
+    if (tickersEquivalent(key, sym)) return snap;
+  }
+  return undefined;
 }
 
 /** Merge parent tape snapshots with a local fetch map (local wins on conflict). */

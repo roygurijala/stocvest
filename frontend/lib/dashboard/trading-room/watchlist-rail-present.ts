@@ -8,6 +8,18 @@ import type { FeedState } from "@/lib/dashboard/trading-room/feed-model";
 
 export type WatchlistRailViewMode = "list" | "heat";
 
+/** Performance window for watchlist heat cells. */
+export type WatchlistHeatWindow = "1d" | "1w" | "3m" | "ytd";
+
+export const WATCHLIST_HEAT_WINDOWS: readonly WatchlistHeatWindow[] = ["1d", "1w", "3m", "ytd"];
+
+export const WATCHLIST_HEAT_WINDOW_LABEL: Record<WatchlistHeatWindow, string> = {
+  "1d": "1D",
+  "1w": "1W",
+  "3m": "3M",
+  ytd: "YTD"
+};
+
 export const WATCHLIST_HEAT_STATE_BADGE: Partial<Record<FeedState, string>> = {
   actionable: "Actionable",
   near: "Near"

@@ -7,6 +7,7 @@ import {
   type MarketSnapshotVixFields,
   vixSnapshotSessionChangePct
 } from "@/lib/api/market-snapshot-helpers";
+import { lookupSnapshot } from "@/lib/api/fetch-bff-snapshots";
 import { SYMBOL_TO_SECTOR_ETF } from "@/lib/scanner/terminal/symbol-sector-etf-map";
 
 const DEFAULT_REPRESENTATIVE_LIMIT = 8;
@@ -100,7 +101,7 @@ export function buildSectorRepresentativeRowsFromInputs(
 ): SectorRepresentativeRow[] {
   const rows = inputs.map((input) => {
     const symbol = input.symbol.trim().toUpperCase();
-    const snap = snapshots.get(symbol);
+    const snap = lookupSnapshot(snapshots, symbol);
     const weight = input.weight;
     return {
       symbol,

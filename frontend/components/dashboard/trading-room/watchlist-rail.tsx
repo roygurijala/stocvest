@@ -18,9 +18,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PanelRightClose } from "lucide-react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { tradingRoomFeedCardStyle, tradingRoomPanelStyle, tradingRoomSegTrackStyle } from "@/lib/dashboard/trading-room/trading-room-chrome";
-import { fetchBffSnapshotsBatched, mergeSnapshotMaps } from "@/lib/api/fetch-bff-snapshots";
-import type { WatchlistRailViewMode } from "@/lib/dashboard/trading-room/watchlist-rail-present";
-import { watchlistSessionChangePct } from "@/lib/dashboard/trading-room/watchlist-rail-present";
+import { fetchBffSnapshotsBatched, lookupSnapshot, mergeSnapshotMaps } from "@/lib/api/fetch-bff-snapshots";
+import {
+  barLimitForHeatWindow,
+  buildHeatWindowChangeMap,
+  fetchBffDailyClosesBatched
+} from "@/lib/api/fetch-bff-bars";
+import type { WatchlistHeatWindow, WatchlistRailViewMode } from "@/lib/dashboard/trading-room/watchlist-rail-present";
+import {
+  WATCHLIST_HEAT_WINDOW_LABEL,
+  WATCHLIST_HEAT_WINDOWS,
+  watchlistSessionChangePct
+} from "@/lib/dashboard/trading-room/watchlist-rail-present";
 import { WatchlistHeatGrid } from "@/components/dashboard/trading-room/watchlist-heat-grid";
 import type { useTheme } from "@/lib/theme-provider";
 import type { SnapshotPayload } from "@/lib/api/market";
@@ -88,7 +97,8 @@ function cardFromWatchlist(
   snap: SnapshotPayload | undefined,
   company: string | null,
   mode: FeedLane,
-  liveBias?: string | null
+  liveBias?: string | null,
+  changePctOverride?: number | null
 ): FeedCard {
   const r = row ?? {};
   const state = mapMaturationState(r);
@@ -110,7 +120,7 @@ function cardFromWatchlist(
     verdict,
     phase: r.readiness_label?.trim() || null,
     price: resolveSnapshotDisplayPrice(snap),
-    changePct: watchlistSessionChangePct(snap),
+    changePct: changePctOverride ?? watchlistSessionChangePct(snap),
     alignment: aligned != null ? { aligned, total } : null,
     rankScore: aligned ?? 0,
     source: "desk",
@@ -423,6 +433,9 @@ export function WatchlistRail({
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [viewModeInternal, setViewModeInternal] = useState<WatchlistRailViewMode>("heat");
+  const [heatWindow, setHeatWindow] = useState<WatchlistHeatWindow>("1d");
+  const [windowChangePcts, setWindowChangePcts] = useState<Map<string, number | null>>(new Map());
+  const [windowQuotesLoading, setWindowQuotesLoading] = useState(false);
   const viewMode = viewModeProp ?? viewModeInternal;
   const setViewMode = (mode: WatchlistRailViewMode) => {
     onViewModeChange?.(mode);
@@ -492,6 +505,25 @@ export function WatchlistRail({
     };
   }, [symbols, reloadNonce]);
 
+  useEffect(() => {
+    if (symbols.length === 0 || heatWindow === "1d") {
+      setWindowChangePcts(new Map());
+      setWindowQuotesLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setWindowQuotesLoading(true);
+    void (async () => {
+      const closes = await fetchBffDailyClosesBatched(symbols, barLimitForHeatWindow(heatWindow));
+      if (cancelled) return;
+      setWindowChangePcts(buildHeatWindowChangeMap(symbols, closes, heatWindow));
+      setWindowQuotesLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [symbols, heatWindow, reloadNonce]);
+
   const symbolNames = useSymbolNames(symbols);
 
   const mergedSnaps = useMemo(
@@ -500,26 +532,29 @@ export function WatchlistRail({
   );
 
   const cards = useMemo(() => {
-    const list = symbols.map((sym) =>
-      cardFromWatchlist(
+    const list = symbols.map((sym) => {
+      const snap = lookupSnapshot(mergedSnaps, sym);
+      const windowPct = heatWindow === "1d" ? undefined : windowChangePcts.get(sym.trim().toUpperCase()) ?? null;
+      return cardFromWatchlist(
         sym,
         bySymbol[sym],
-        mergedSnaps.get(sym),
-        mergedSnaps.get(sym)?.company_name?.trim() ||
+        snap,
+        snap?.company_name?.trim() ||
           companyBySymbol.get(sym) ||
           symbolNames[sym] ||
           null,
         mode,
-        liveBiasBySymbol?.get(sym)
-      )
-    );
+        liveBiasBySymbol?.get(sym),
+        windowPct
+      );
+    });
     return list.sort((a, b) => {
       const byState = STATE_RANK[a.state] - STATE_RANK[b.state];
       if (byState !== 0) return byState;
       if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore;
       return a.symbol.localeCompare(b.symbol);
     });
-  }, [symbols, bySymbol, mergedSnaps, companyBySymbol, symbolNames, mode, liveBiasBySymbol]);
+  }, [symbols, bySymbol, mergedSnaps, companyBySymbol, symbolNames, mode, liveBiasBySymbol, heatWindow, windowChangePcts]);
 
   if (!open) {
     // Mobile: a full-width horizontal toggle bar; desktop: a thin vertical rail.
@@ -618,6 +653,42 @@ export function WatchlistRail({
               })}
             </div>
           ) : null}
+          {cards.length > 0 && viewMode === "heat" ? (
+            <div
+              data-testid="trading-room-watchlist-heat-window"
+              role="group"
+              aria-label="Heat window"
+              style={tradingRoomSegTrackStyle(colors)}
+            >
+              {WATCHLIST_HEAT_WINDOWS.map((window) => {
+                const active = heatWindow === window;
+                return (
+                  <button
+                    key={window}
+                    type="button"
+                    aria-pressed={active}
+                    data-testid={`trading-room-watchlist-heat-window-${window}`}
+                    onClick={() => setHeatWindow(window)}
+                    style={{
+                      border: "none",
+                      borderRadius: borderRadius.full,
+                      padding: "4px 8px",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      cursor: "pointer",
+                      background: active ? colors.surface : "transparent",
+                      color: active ? colors.text : colors.textMuted,
+                      boxShadow: active ? `inset 0 0 0 1px ${colors.border}80` : "none"
+                    }}
+                  >
+                    {WATCHLIST_HEAT_WINDOW_LABEL[window]}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <NotifyToggle colors={colors} />
           <button
             type="button"
@@ -692,6 +763,8 @@ export function WatchlistRail({
             selectedId={selectedId}
             colors={colors}
             onSelectCard={onSelectCard}
+            quotesLoading={windowQuotesLoading && heatWindow !== "1d"}
+            heatWindow={heatWindow}
           />
         ) : (
           cards.map((card) => (

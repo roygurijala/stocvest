@@ -40,7 +40,10 @@ describe("WatchlistHeatGrid (ADR-003 UX-D7)", () => {
     const onSelect = vi.fn();
     render(
       <WatchlistHeatGrid
-        cards={[card({ symbol: "NVDA", state: "actionable", changePct: 2.1 })]}
+        cards={[
+          card({ symbol: "NVDA", state: "actionable", changePct: 2.1 }),
+          card({ symbol: "AAPL", state: "potential", changePct: -0.5 })
+        ]}
         selectedId={null}
         colors={colors}
         onSelectCard={onSelect}
@@ -50,6 +53,7 @@ describe("WatchlistHeatGrid (ADR-003 UX-D7)", () => {
     const cell = screen.getByTestId("trading-room-watchlist-heat-NVDA");
     expect(cell).toHaveAttribute(DATA_INTERACTION_LEVEL, "deep");
     expect(cell).toHaveTextContent("Actionable");
+    expect(cell).toHaveTextContent("vs grp");
     fireEvent.click(cell);
     expect(onSelect).toHaveBeenCalled();
   });
