@@ -70,7 +70,8 @@ export function WatchlistHeatGrid({
           justifyContent: "center",
           gap: 2,
           flex: layout.flex,
-          minHeight: layout.minHeight,
+          height: layout.height,
+          minHeight: layout.height,
           maxWidth: "100%",
           boxSizing: "border-box",
           padding: `${spacing[1]} ${spacing[2]}`,
@@ -83,7 +84,7 @@ export function WatchlistHeatGrid({
           cursor: "pointer",
           textAlign: "left",
           color: colors.text,
-          transition: tradingRoomMotionTransition("background", "box-shadow", "min-height", "flex")
+          transition: tradingRoomMotionTransition("background", "box-shadow", "height", "flex")
         };
 
         return (

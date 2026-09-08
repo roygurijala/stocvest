@@ -22,7 +22,7 @@ describe("heat-group-present", () => {
     const leader = heatRelativeTileLayout(weights[0]!);
     const laggard = heatRelativeTileLayout(weights[2]!);
     expect(leader.basisPx).toBeGreaterThan(laggard.basisPx);
-    expect(leader.minHeight).toBeGreaterThan(laggard.minHeight);
+    expect(leader.height).toBeGreaterThan(laggard.height);
     expect(leader.flex).toMatch(/^0 0 \d+px$/);
   });
 });
