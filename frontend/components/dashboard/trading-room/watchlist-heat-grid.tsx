@@ -71,6 +71,8 @@ export function WatchlistHeatGrid({
           gap: 2,
           flex: layout.flex,
           minHeight: layout.minHeight,
+          maxWidth: "100%",
+          boxSizing: "border-box",
           padding: `${spacing[1]} ${spacing[2]}`,
           borderRadius: borderRadius.sm,
           border: "none",

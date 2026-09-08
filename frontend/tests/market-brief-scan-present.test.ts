@@ -2,8 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   countMarketBriefExpandedSections,
   marketBriefExpandButtonLabel,
-  marketBriefExpandedHeadlines,
-  marketBriefScanHeadline
+  marketBriefExpandedHeadlines
 } from "@/lib/dashboard/trading-room/market-brief-scan-present";
 
 describe("market-brief-scan-present", () => {
@@ -29,10 +28,25 @@ describe("market-brief-scan-present", () => {
     expect(marketBriefExpandButtonLabel(0, false)).toBeNull();
   });
 
-  test("scan vs expanded headline split", () => {
+  test("expanded headlines include full feed", () => {
     const headlines = [{ id: "a" }, { id: "b" }, { id: "c" }];
-    expect(marketBriefScanHeadline(headlines)?.id).toBe("a");
-    expect(marketBriefExpandedHeadlines(headlines).map((h) => h.id)).toEqual(["b", "c"]);
-    expect(marketBriefExpandedHeadlines([{ id: "only" }])).toEqual([]);
+    expect(marketBriefExpandedHeadlines(headlines).map((h) => h.id)).toEqual(["a", "b", "c"]);
+    expect(marketBriefExpandedHeadlines([])).toEqual([]);
+  });
+
+  test("single headline counts as expandable section", () => {
+    expect(
+      countMarketBriefExpandedSections(
+        {
+          headlines: [{ id: "1" }],
+          movers: { up: [], down: [] },
+          weekAhead: [],
+          outcomesRecap: null,
+          watchlistAtClose: [],
+          weekInReview: null
+        },
+        false
+      )
+    ).toBe(1);
   });
 });

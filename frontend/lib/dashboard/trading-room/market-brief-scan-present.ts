@@ -1,8 +1,8 @@
 /**
  * ADR-003 UX-D3 — Market Brief scan vs expanded section model (pure).
  *
- * Scan mode (default): greeting, pulse, indices, sectors, one headline.
- * Expanded: movers, prep tiles, additional headlines, macro calendar detail.
+ * Scan mode (default): greeting, pulse, indices, sectors — no headlines.
+ * Expanded: market headlines, movers, prep tiles, macro calendar detail.
  */
 
 export type MarketBriefScanInput = {
@@ -17,7 +17,7 @@ export type MarketBriefScanInput = {
 /** Number of collapsible bento sections behind “Expand brief”. */
 export function countMarketBriefExpandedSections(input: MarketBriefScanInput, showPrep: boolean): number {
   let n = 0;
-  if (input.headlines.length > 1) n += 1;
+  if (input.headlines.length > 0) n += 1;
   if (input.movers.up.length > 0 || input.movers.down.length > 0) n += 1;
   if (showPrep && input.weekInReview && (input.weekInReview.bestSector || input.weekInReview.worstSector)) {
     n += 1;
@@ -34,10 +34,6 @@ export function marketBriefExpandButtonLabel(sectionCount: number, expanded: boo
   return sectionCount === 1 ? "Expand brief · 1 section" : `Expand brief · ${sectionCount} sections`;
 }
 
-export function marketBriefScanHeadline<T>(headlines: readonly T[]): T | null {
-  return headlines[0] ?? null;
-}
-
 export function marketBriefExpandedHeadlines<T>(headlines: readonly T[]): T[] {
-  return headlines.length > 1 ? headlines.slice(1) : [];
+  return [...headlines];
 }

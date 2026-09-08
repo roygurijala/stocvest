@@ -32,10 +32,14 @@ export function heatCellPctForColor(pct: number | null, vsGroupDelta: number | n
 }
 
 /** Minimum flex/height weight so flat movers still render legibly (0–1 scale). */
-export const HEAT_RELATIVE_SIZE_MIN = 0.38;
+export const HEAT_RELATIVE_SIZE_MIN = 0.22;
 
 /** Floor for max |delta| when computing relative tile sizes — avoids divide-by-zero on flat groups. */
 export const HEAT_RELATIVE_SIZE_DELTA_FLOOR = 0.05;
+
+/** Fixed flex-basis range (px) — width/height scale with peer-relative weight. */
+export const HEAT_RELATIVE_BASIS_MIN_PX = 48;
+export const HEAT_RELATIVE_BASIS_MAX_PX = 132;
 
 /**
  * Relative tile weights within a peer group (0–1).
@@ -54,16 +58,24 @@ export function heatRelativeSizeWeights(
   const maxDelta = Math.max(...deltas, HEAT_RELATIVE_SIZE_DELTA_FLOOR);
   return pcts.map((pct, i) => {
     if (pct == null) return minWeight * 0.72;
-    return minWeight + (deltas[i]! / maxDelta) * (1 - minWeight);
+    const normalized = deltas[i]! / maxDelta;
+    const scaled = normalized ** 1.25;
+    return minWeight + scaled * (1 - minWeight);
   });
 }
 
 /** Map a relative weight to flex + height for a heat tile. */
-export function heatRelativeTileLayout(weight: number): { flex: string; minHeight: number } {
-  const w = Math.max(HEAT_RELATIVE_SIZE_MIN * 0.72, Math.min(1, weight));
+export function heatRelativeTileLayout(weight: number): { flex: string; minHeight: number; basisPx: number } {
+  const floor = HEAT_RELATIVE_SIZE_MIN * 0.72;
+  const w = Math.max(floor, Math.min(1, weight));
+  const t = (w - floor) / (1 - floor);
+  const basisPx = Math.round(
+    HEAT_RELATIVE_BASIS_MIN_PX + t * (HEAT_RELATIVE_BASIS_MAX_PX - HEAT_RELATIVE_BASIS_MIN_PX)
+  );
   return {
-    flex: `${w.toFixed(3)} 1 56px`,
-    minHeight: Math.round(44 + w * 40)
+    flex: `0 0 ${basisPx}px`,
+    minHeight: Math.round(HEAT_RELATIVE_BASIS_MIN_PX - 4 + t * 56),
+    basisPx
   };
 }
 

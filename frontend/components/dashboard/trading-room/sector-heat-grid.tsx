@@ -15,6 +15,7 @@ import {
   formatHeatVsGroup,
   heatCellPctForColor,
   heatGroupMedian,
+  HEAT_RELATIVE_SIZE_MIN,
   heatRelativeTileLayout,
   heatRelativeSizeWeights,
   heatRelativeGridStyle,
@@ -58,7 +59,7 @@ export function SectorHeatGrid({
     <div data-testid="market-brief-sector-heat-grid" style={gridStyle}>
       {sectors.map((sector, index) => {
         const pct = sectorPcts[index]!;
-        const layout = heatRelativeTileLayout(weights[index] ?? 0.38);
+        const layout = heatRelativeTileLayout(weights[index] ?? HEAT_RELATIVE_SIZE_MIN);
         const selected = selectedSymbol === sector.symbol;
         const tone = pct >= 0 ? colors.bullish : colors.bearish;
         const cellStyle: CSSProperties = {
@@ -69,6 +70,8 @@ export function SectorHeatGrid({
           gap: 2,
           flex: layout.flex,
           minHeight: layout.minHeight,
+          maxWidth: "100%",
+          boxSizing: "border-box",
           padding: `${spacing[2]} ${spacing[2]}`,
           borderRadius: borderRadius.md,
           border: "none",
@@ -200,6 +203,8 @@ export function SectorHoldingsHeatGrid({
               gap: 2,
               flex: layout.flex,
               minHeight: layout.minHeight,
+              maxWidth: "100%",
+              boxSizing: "border-box",
               padding: `${spacing[1]} ${spacing[2]}`,
               borderRadius: borderRadius.sm,
               border: "none",
