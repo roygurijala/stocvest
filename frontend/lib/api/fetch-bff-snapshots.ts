@@ -35,10 +35,10 @@ export async function fetchBffSnapshotsBatched(
 }
 
 /** Merge parent tape snapshots with a local fetch map (local wins on conflict). */
-export function mergeSnapshotMaps(
-  parent: ReadonlyMap<string, SnapshotPayload> | undefined,
-  local: ReadonlyMap<string, SnapshotPayload>
-): Map<string, SnapshotPayload> {
+export function mergeSnapshotMaps<T>(
+  parent: ReadonlyMap<string, T> | undefined,
+  local: ReadonlyMap<string, T>
+): Map<string, T> {
   const merged = new Map(parent ?? []);
   for (const [sym, snap] of local) merged.set(sym, snap);
   return merged;

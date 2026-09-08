@@ -1019,9 +1019,9 @@ function SectorDeskPanel({
   trackedCards: readonly FeedCard[];
   colors: ReturnType<typeof useTheme>["colors"];
   onSelectSymbol: (symbol: string, company?: string | null, lane?: FeedLane) => void;
-  snapshotsBySymbol?: ReadonlyMap<string, SectorSnapshotQuote>;
+  snapshotsBySymbol?: ReadonlyMap<string, SnapshotPayload>;
 }) {
-  const [snapshots, setSnapshots] = useState<Map<string, SectorSnapshotQuote>>(new Map());
+  const [snapshots, setSnapshots] = useState<Map<string, SnapshotPayload>>(new Map());
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [constituentInputs, setConstituentInputs] = useState<SectorConstituentQuoteInput[]>([]);
   const [constituentSource, setConstituentSource] = useState<SectorConstituentSource>("curated");
