@@ -18,7 +18,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PanelRightClose } from "lucide-react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { tradingRoomFeedCardStyle, tradingRoomPanelStyle, tradingRoomSegTrackStyle } from "@/lib/dashboard/trading-room/trading-room-chrome";
+import { fetchBffSnapshotsBatched, mergeSnapshotMaps } from "@/lib/api/fetch-bff-snapshots";
 import type { WatchlistRailViewMode } from "@/lib/dashboard/trading-room/watchlist-rail-present";
+import { watchlistSessionChangePct } from "@/lib/dashboard/trading-room/watchlist-rail-present";
 import { WatchlistHeatGrid } from "@/components/dashboard/trading-room/watchlist-heat-grid";
 import type { useTheme } from "@/lib/theme-provider";
 import type { SnapshotPayload } from "@/lib/api/market";
@@ -108,7 +110,7 @@ function cardFromWatchlist(
     verdict,
     phase: r.readiness_label?.trim() || null,
     price: resolveSnapshotDisplayPrice(snap),
-    changePct: cleanNum(snap?.change_percent),
+    changePct: watchlistSessionChangePct(snap),
     alignment: aligned != null ? { aligned, total } : null,
     rankScore: aligned ?? 0,
     source: "desk",
@@ -395,7 +397,8 @@ export function WatchlistRail({
   onRefreshCard,
   refreshingCardIds,
   viewMode: viewModeProp,
-  onViewModeChange
+  onViewModeChange,
+  snapshotsBySymbol: parentSnapshots
 }: {
   mode: FeedLane;
   selectedId: string | null;
@@ -411,6 +414,8 @@ export function WatchlistRail({
   refreshingCardIds?: Set<string>;
   viewMode?: WatchlistRailViewMode;
   onViewModeChange?: (mode: WatchlistRailViewMode) => void;
+  /** Parent tape + desk hydration — merged with rail-local snapshot fetches. */
+  snapshotsBySymbol?: ReadonlyMap<string, SnapshotPayload>;
 }) {
   const [symbols, setSymbols] = useState<string[]>([]);
   const [bySymbol, setBySymbol] = useState<Record<string, WatchlistMaturationRow>>({});
@@ -478,25 +483,9 @@ export function WatchlistRail({
       return;
     }
     let cancelled = false;
-    const chunk = symbols.slice(0, 40);
     void (async () => {
-      try {
-        const res = await fetch(`/api/stocvest/market/snapshots?symbols=${encodeURIComponent(chunk.join(","))}`, {
-          cache: "no-store"
-        });
-        if (!res.ok || cancelled) return;
-        const json = (await res.json().catch(() => ({}))) as { snapshots?: SnapshotPayload[] };
-        const rows = Array.isArray(json.snapshots) ? json.snapshots : [];
-        if (cancelled) return;
-        const next = new Map<string, SnapshotPayload>();
-        for (const row of rows) {
-          const sym = (row.symbol || "").trim().toUpperCase();
-          if (sym) next.set(sym, row);
-        }
-        setSnaps(next);
-      } catch {
-        /* snapshots are best-effort */
-      }
+      const next = await fetchBffSnapshotsBatched(symbols);
+      if (!cancelled) setSnaps(next);
     })();
     return () => {
       cancelled = true;
@@ -505,13 +494,18 @@ export function WatchlistRail({
 
   const symbolNames = useSymbolNames(symbols);
 
+  const mergedSnaps = useMemo(
+    () => mergeSnapshotMaps(parentSnapshots, snaps),
+    [parentSnapshots, snaps]
+  );
+
   const cards = useMemo(() => {
     const list = symbols.map((sym) =>
       cardFromWatchlist(
         sym,
         bySymbol[sym],
-        snaps.get(sym),
-        snaps.get(sym)?.company_name?.trim() ||
+        mergedSnaps.get(sym),
+        mergedSnaps.get(sym)?.company_name?.trim() ||
           companyBySymbol.get(sym) ||
           symbolNames[sym] ||
           null,
@@ -525,7 +519,7 @@ export function WatchlistRail({
       if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore;
       return a.symbol.localeCompare(b.symbol);
     });
-  }, [symbols, bySymbol, snaps, companyBySymbol, symbolNames, mode, liveBiasBySymbol]);
+  }, [symbols, bySymbol, mergedSnaps, companyBySymbol, symbolNames, mode, liveBiasBySymbol]);
 
   if (!open) {
     // Mobile: a full-width horizontal toggle bar; desktop: a thin vertical rail.

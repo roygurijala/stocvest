@@ -24,6 +24,8 @@ import {
   type BriefSessionPhase
 } from "@/lib/dashboard/trading-room/brief-session-copy";
 import type { WatchlistAtCloseItem } from "@/lib/hooks/use-watchlist-at-close";
+import type { SnapshotPayload } from "@/lib/api/market";
+import { fetchBffSnapshotsBatched, mergeSnapshotMaps } from "@/lib/api/fetch-bff-snapshots";
 import type { FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
 import {
   buildSectorDeskRows,
@@ -172,6 +174,8 @@ interface MarketBriefProps {
   /** Controlled expand state for assistant context (ADR-003 UX-D8). */
   briefExpanded?: boolean;
   onBriefExpandedChange?: (expanded: boolean) => void;
+  /** Parent tape + desk hydration for sector holdings heat. */
+  snapshotsBySymbol?: ReadonlyMap<string, SnapshotPayload>;
 }
 
 function greeting(): string {
@@ -222,7 +226,8 @@ export function MarketBrief({
   onSelectSymbol,
   trackedCards = [],
   briefExpanded: briefExpandedProp,
-  onBriefExpandedChange
+  onBriefExpandedChange,
+  snapshotsBySymbol: parentSnapshots
 }: MarketBriefProps) {
   const { theme, colors } = useTheme();
   const [selectedSectorEtf, setSelectedSectorEtf] = useState<string | null>(null);
@@ -499,6 +504,7 @@ export function MarketBrief({
                     trackedCards={trackedCards}
                     colors={colors}
                     onSelectSymbol={onSelectSymbol}
+                    snapshotsBySymbol={parentSnapshots}
                   />
                 ) : null}
               </>
@@ -1004,7 +1010,8 @@ function SectorDeskPanel({
   rows,
   trackedCards,
   colors,
-  onSelectSymbol
+  onSelectSymbol,
+  snapshotsBySymbol: parentSnapshots
 }: {
   panelRef?: RefObject<HTMLDivElement>;
   sector: BriefSector | null;
@@ -1012,6 +1019,7 @@ function SectorDeskPanel({
   trackedCards: readonly FeedCard[];
   colors: ReturnType<typeof useTheme>["colors"];
   onSelectSymbol: (symbol: string, company?: string | null, lane?: FeedLane) => void;
+  snapshotsBySymbol?: ReadonlyMap<string, SectorSnapshotQuote>;
 }) {
   const [snapshots, setSnapshots] = useState<Map<string, SectorSnapshotQuote>>(new Map());
   const [quotesLoading, setQuotesLoading] = useState(false);
@@ -1107,37 +1115,26 @@ function SectorDeskPanel({
     let cancelled = false;
     setQuotesLoading(true);
     void (async () => {
-      try {
-        const res = await fetch(
-          `/api/stocvest/market/snapshots?symbols=${encodeURIComponent(representativeSymbols.join(","))}`,
-          { cache: "no-store" }
-        );
-        const body = (await res.json().catch(() => ({}))) as { snapshots?: SectorSnapshotQuote[] };
-        const map = new Map<string, SectorSnapshotQuote>();
-        for (const row of body.snapshots ?? []) {
-          const sym = String((row as { symbol?: string }).symbol ?? "")
-            .trim()
-            .toUpperCase();
-          if (sym) map.set(sym, row);
-        }
-        if (!cancelled) setSnapshots(map);
-      } catch {
-        if (!cancelled) setSnapshots(new Map());
-      } finally {
-        if (!cancelled) setQuotesLoading(false);
-      }
+      const map = await fetchBffSnapshotsBatched(representativeSymbols);
+      if (!cancelled) setSnapshots(map);
+      if (!cancelled) setQuotesLoading(false);
     })();
     return () => {
       cancelled = true;
     };
   }, [sectorEtf, representativeSymbols]);
 
+  const mergedSnapshots = useMemo(
+    () => mergeSnapshotMaps(parentSnapshots, snapshots),
+    [parentSnapshots, snapshots]
+  );
+
   const representativeRows = useMemo(
     () =>
-      buildSectorRepresentativeRowsFromInputs(constituentInputs, snapshots, {
+      buildSectorRepresentativeRowsFromInputs(constituentInputs, mergedSnapshots, {
         preserveOrder: constituentSource === "etf_global"
       }),
-    [constituentInputs, snapshots, constituentSource]
+    [constituentInputs, mergedSnapshots, constituentSource]
   );
 
   const namesSectionLabel = constituentSource === "etf_global" ? "Top holdings" : "Sector names";
