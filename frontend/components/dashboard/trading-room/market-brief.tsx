@@ -169,6 +169,9 @@ interface MarketBriefProps {
   onSelectSymbol?: (symbol: string, company?: string | null, lane?: FeedLane) => void;
   /** Tracked feed cards — used to populate sector desk lists. */
   trackedCards?: readonly FeedCard[];
+  /** Controlled expand state for assistant context (ADR-003 UX-D8). */
+  briefExpanded?: boolean;
+  onBriefExpandedChange?: (expanded: boolean) => void;
 }
 
 function greeting(): string {
@@ -217,11 +220,19 @@ export function MarketBrief({
   onViewTopSwingSetup,
   onSearch,
   onSelectSymbol,
-  trackedCards = []
+  trackedCards = [],
+  briefExpanded: briefExpandedProp,
+  onBriefExpandedChange
 }: MarketBriefProps) {
   const { theme, colors } = useTheme();
   const [selectedSectorEtf, setSelectedSectorEtf] = useState<string | null>(null);
-  const [briefExpanded, setBriefExpanded] = useState(false);
+  const [briefExpandedInternal, setBriefExpandedInternal] = useState(false);
+  const briefExpanded = briefExpandedProp ?? briefExpandedInternal;
+  const setBriefExpanded = (next: boolean | ((prev: boolean) => boolean)) => {
+    const resolved = typeof next === "function" ? next(briefExpanded) : next;
+    if (onBriefExpandedChange) onBriefExpandedChange(resolved);
+    else setBriefExpandedInternal(resolved);
+  };
   const sectorPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

@@ -17,7 +17,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PanelRightClose } from "lucide-react";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
-import { tradingRoomFeedCardStyle, tradingRoomPanelStyle } from "@/lib/dashboard/trading-room/trading-room-chrome";
+import { tradingRoomFeedCardStyle, tradingRoomPanelStyle, tradingRoomSegTrackStyle } from "@/lib/dashboard/trading-room/trading-room-chrome";
+import type { WatchlistRailViewMode } from "@/lib/dashboard/trading-room/watchlist-rail-present";
+import { WatchlistHeatGrid } from "@/components/dashboard/trading-room/watchlist-heat-grid";
 import type { useTheme } from "@/lib/theme-provider";
 import type { SnapshotPayload } from "@/lib/api/market";
 import { resolveSnapshotDisplayPrice } from "@/lib/api/snapshot-price";
@@ -391,7 +393,9 @@ export function WatchlistRail({
   colors,
   liveBiasBySymbol,
   onRefreshCard,
-  refreshingCardIds
+  refreshingCardIds,
+  viewMode: viewModeProp,
+  onViewModeChange
 }: {
   mode: FeedLane;
   selectedId: string | null;
@@ -405,12 +409,20 @@ export function WatchlistRail({
   liveBiasBySymbol?: Map<string, string>;
   onRefreshCard?: (card: FeedCard) => void | Promise<void>;
   refreshingCardIds?: Set<string>;
+  viewMode?: WatchlistRailViewMode;
+  onViewModeChange?: (mode: WatchlistRailViewMode) => void;
 }) {
   const [symbols, setSymbols] = useState<string[]>([]);
   const [bySymbol, setBySymbol] = useState<Record<string, WatchlistMaturationRow>>({});
   const [snaps, setSnaps] = useState<Map<string, SnapshotPayload>>(new Map());
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [viewModeInternal, setViewModeInternal] = useState<WatchlistRailViewMode>("heat");
+  const viewMode = viewModeProp ?? viewModeInternal;
+  const setViewMode = (mode: WatchlistRailViewMode) => {
+    onViewModeChange?.(mode);
+    if (viewModeProp == null) setViewModeInternal(mode);
+  };
   const [reloadNonce, bumpReloadNonce] = useWatchlistMaturationReloadNonce();
 
   // Escape closes the panel — a discoverable, standard way out when it's open.
@@ -575,7 +587,43 @@ export function WatchlistRail({
             Your watch · {symbols.length}
           </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
+        <div style={{ display: "flex", alignItems: "center", gap: spacing[2], flexWrap: "wrap" }}>
+          {cards.length > 0 ? (
+            <div
+              data-testid="trading-room-watchlist-view-toggle"
+              role="group"
+              aria-label="Watchlist view"
+              style={tradingRoomSegTrackStyle(colors)}
+            >
+              {(["heat", "list"] as const).map((mode) => {
+                const active = viewMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={active}
+                    data-testid={`trading-room-watchlist-view-${mode}`}
+                    onClick={() => setViewMode(mode)}
+                    style={{
+                      border: "none",
+                      borderRadius: borderRadius.full,
+                      padding: "4px 10px",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      cursor: "pointer",
+                      background: active ? colors.surface : "transparent",
+                      color: active ? colors.text : colors.textMuted,
+                      boxShadow: active ? `inset 0 0 0 1px ${colors.border}80` : "none"
+                    }}
+                  >
+                    {mode === "heat" ? "Heat" : "List"}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
           <NotifyToggle colors={colors} />
           <button
             type="button"
@@ -644,6 +692,13 @@ export function WatchlistRail({
           <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
             Your watchlist is empty. Add symbols from any setup or use the header search to start monitoring names.
           </p>
+        ) : viewMode === "heat" ? (
+          <WatchlistHeatGrid
+            cards={cards}
+            selectedId={selectedId}
+            colors={colors}
+            onSelectCard={onSelectCard}
+          />
         ) : (
           cards.map((card) => (
             <RailCard
