@@ -223,6 +223,59 @@ def test_signal_parameters_from_dict_with_day_composite_block() -> None:
     assert p.swing_composite is None
 
 
+def test_signal_parameters_from_dict_rejects_invalid_position_weights(caplog: pytest.LogCaptureFixture) -> None:
+    """Malformed position_composite weights are normalized on load."""
+    json_data = {
+        "position_composite": {
+            "fundamentals_weight": 0.9,
+            "technical_weight": 0.9,
+            "macro_weight": 0.15,
+            "sector_weight": 0.12,
+            "news_weight": 0.08,
+            "geopolitical_weight": 0.06,
+            "internals_weight": 0.05,
+        }
+    }
+    p = signal_parameters_from_dict(json_data)
+    assert p.position_composite is not None
+    total = (
+        p.position_composite.fundamentals_weight
+        + p.position_composite.technical_weight
+        + p.position_composite.macro_weight
+        + p.position_composite.sector_weight
+        + p.position_composite.news_weight
+        + p.position_composite.geopolitical_weight
+        + p.position_composite.internals_weight
+    )
+    assert total == pytest.approx(1.0, abs=0.02)
+
+
+def test_signal_parameters_from_dict_with_position_composite_block() -> None:
+    """``position_composite`` parses into a seven-layer PositionCompositeParameters."""
+    json_data = {
+        "composite": {},
+        "position_composite": {
+            "fundamentals_weight": 0.35,
+            "technical_weight": 0.20,
+            "macro_weight": 0.15,
+            "sector_weight": 0.12,
+            "news_weight": 0.08,
+            "geopolitical_weight": 0.06,
+            "internals_weight": 0.04,
+        },
+        "position_technical": {"min_weekly_bars_full": 48},
+        "position_signal_valid_days": 120,
+        "position_news_lookback_hours": 1440,
+    }
+    p = signal_parameters_from_dict(json_data)
+    assert p.position_composite is not None
+    assert p.position_composite.fundamentals_weight == pytest.approx(0.35)
+    assert p.position_composite.technical_weight == pytest.approx(0.20)
+    assert p.position_technical.min_weekly_bars_full == 48
+    assert p.position_signal_valid_days == 120
+    assert p.position_news_lookback_hours == 1440
+
+
 def test_signal_parameters_from_dict_with_both_per_mode_blocks() -> None:
     """Both per-mode blocks can coexist and parse independently."""
     json_data = {

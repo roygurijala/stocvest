@@ -17,12 +17,13 @@ from stocvest.api.services.signal_validation_eligibility import (
     DECISION_STATE_BLOCKED,
     DECISION_STATE_MONITOR,
     evaluate_day_ledger_entry,
+    evaluate_position_desk_entry,
     evaluate_swing_ledger_entry,
     sector_analyzer_score_from_body,
 )
 from stocvest.signals.composite_score import CompositeVerdict
 
-Mode = Literal["day", "swing"]
+Mode = Literal["day", "swing", "position"]
 
 
 def _float_or_none(v: Any) -> float | None:
@@ -207,6 +208,13 @@ def evaluate_ledger_gates(
             intraday_bar_count=ibc,
             orb_signal=orb,
             vwap_state=vwap,
+            market_environment=env,
+        )
+    if mode == "position":
+        return evaluate_position_desk_entry(
+            response_status=status,
+            verdict=v,
+            risk_reward=rr,
             market_environment=env,
         )
     return evaluate_swing_ledger_entry(

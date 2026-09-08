@@ -19,6 +19,10 @@ from stocvest.signals.internals_analyzer import (
     INTERNALS_BEARISH_THRESHOLD,
     INTERNALS_BULLISH_THRESHOLD,
 )
+from stocvest.signals.position_fundamentals.types import (
+    PILLAR_BEARISH_THRESHOLD,
+    PILLAR_BULLISH_THRESHOLD,
+)
 
 
 def layer_verdict_band(
@@ -27,12 +31,20 @@ def layer_verdict_band(
     """Return ``(bearish_cutoff, bullish_cutoff)`` for ``layer_id`` or ``None`` if unknown.
 
     ``mode`` selects the Technical layer's threshold set ("swing" → swing-technical params,
-    anything else → day-technical params).
+    "position" → position-technical params, anything else → day-technical params).
     """
+    desk = str(mode).strip().lower()
     lid = (layer_id or "").strip().lower()
     if lid == "technical":
-        p = params.swing_technical if str(mode).strip().lower() == "swing" else params.technical
+        if desk == "swing":
+            p = params.swing_technical
+        elif desk == "position":
+            p = params.position_technical
+        else:
+            p = params.technical
         return float(p.bearish_threshold), float(p.bullish_threshold)
+    if lid == "fundamentals":
+        return float(PILLAR_BEARISH_THRESHOLD), float(PILLAR_BULLISH_THRESHOLD)
     if lid == "news":
         return float(params.news.bearish_threshold), float(params.news.bullish_threshold)
     if lid == "macro":

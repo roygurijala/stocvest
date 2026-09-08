@@ -88,8 +88,8 @@ def structure_risk_reward_for_mode(
     trading_mode: str | None = None,
     use_long: bool = True,
 ) -> float | None:
-    """Swing desk/email R/R uses T1 only — T2 promotion inflated headline R/R on tight T1 setups."""
-    if trading_mode == "swing":
+    """Swing/position desk/email R/R uses T1 only — T2 promotion inflated headline R/R on tight T1 setups."""
+    if trading_mode in ("swing", "position"):
         rr_t1 = (
             rr_from_levels_long(entry, target_1, stop)
             if use_long

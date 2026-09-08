@@ -17,6 +17,8 @@ from stocvest.config.signal_parameters import (
     EntryZoneParameters,
     MacroParameters,
     NewsParameters,
+    PositionCompositeParameters,
+    PositionTechnicalParameters,
     SectorParameters,
     SignalParameters,
     SwingTechnicalParameters,
@@ -70,6 +72,33 @@ def _parse_optional_composite_block(raw: Any) -> CompositeParameters | None:
     return _coerce_dataclass(CompositeParameters, raw)
 
 
+def _parse_optional_position_composite_block(raw: Any) -> PositionCompositeParameters | None:
+    """Parse ``position_composite`` override (seven-layer Position desk blend)."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    block = _coerce_dataclass(PositionCompositeParameters, raw)
+    from dataclasses import replace
+
+    from stocvest.signals.signal_math_contract import (
+        composite_weights_from_block,
+        normalize_composite_weights,
+        validate_composite_weights,
+    )
+
+    weights = composite_weights_from_block(block, mode="position")
+    ok, errors = validate_composite_weights(weights, mode="position")
+    if ok:
+        return block
+    _LOG.warning(
+        "position_composite weight validation failed (%s) — using normalized weights",
+        ",".join(errors),
+    )
+    normalized = normalize_composite_weights(weights, mode="position")
+    return replace(block, **{f"{layer}_weight": w for layer, w in normalized.items()})
+
+
 def _merge_entry_zone_mode(base: EntryZoneModeParameters, raw: Any) -> EntryZoneModeParameters:
     """Override only the keys present in ``raw`` so missing keys keep the
     *mode-specific* defaults (swing's 0.005 ≠ the class default 0.002)."""
@@ -111,7 +140,9 @@ def signal_parameters_from_dict(data: dict[str, Any]) -> SignalParameters:
     comp = _coerce_dataclass(CompositeParameters, data.get("composite") or {})
     swing_comp = _parse_optional_composite_block(data.get("swing_composite"))
     day_comp = _parse_optional_composite_block(data.get("day_composite"))
+    position_comp = _parse_optional_position_composite_block(data.get("position_composite"))
     swing_t = _coerce_dataclass(SwingTechnicalParameters, data.get("swing_technical") or {})
+    position_t = _coerce_dataclass(PositionTechnicalParameters, data.get("position_technical") or {})
     entry_zone = _parse_entry_zone(data.get("entry_zone"))
     return SignalParameters(
         version=str(data.get("version") or base.version),
@@ -124,12 +155,32 @@ def signal_parameters_from_dict(data: dict[str, Any]) -> SignalParameters:
         composite=comp,
         swing_composite=swing_comp,
         day_composite=day_comp,
+        position_composite=position_comp,
         swing_technical=swing_t,
+        position_technical=position_t,
         entry_zone=entry_zone,
         swing_news_lookback_hours=int(data.get("swing_news_lookback_hours", base.swing_news_lookback_hours)),
         swing_macro_events_days=int(data.get("swing_macro_events_days", base.swing_macro_events_days)),
         swing_geo_lookback_hours=int(data.get("swing_geo_lookback_hours", base.swing_geo_lookback_hours)),
         swing_sector_use_weekly=bool(data.get("swing_sector_use_weekly", base.swing_sector_use_weekly)),
+        position_signal_valid_days=int(
+            data.get("position_signal_valid_days", base.position_signal_valid_days)
+        ),
+        position_news_lookback_hours=int(
+            data.get("position_news_lookback_hours", base.position_news_lookback_hours)
+        ),
+        position_macro_events_days=int(
+            data.get("position_macro_events_days", base.position_macro_events_days)
+        ),
+        position_geo_lookback_hours=int(
+            data.get("position_geo_lookback_hours", base.position_geo_lookback_hours)
+        ),
+        position_daily_bars_lookback=int(
+            data.get("position_daily_bars_lookback", base.position_daily_bars_lookback)
+        ),
+        position_sector_use_weekly=bool(
+            data.get("position_sector_use_weekly", base.position_sector_use_weekly)
+        ),
     )
 
 

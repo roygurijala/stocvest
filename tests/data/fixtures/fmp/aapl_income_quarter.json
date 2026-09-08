@@ -1,0 +1,52 @@
+[
+  {
+    "date": "2025-03-31",
+    "symbol": "AAPL",
+    "period": "Q2",
+    "calendarYear": 2025,
+    "revenue": 95359000000,
+    "grossProfit": 44867000000,
+    "operatingIncome": 29591000000,
+    "netIncome": 24780000000,
+    "eps": 1.65,
+    "epsdiluted": 1.64,
+    "weightedAverageShsOut": 15000000000,
+    "weightedAverageShsOutDil": 15100000000
+  },
+  {
+    "date": "2024-12-31",
+    "symbol": "AAPL",
+    "period": "Q1",
+    "calendarYear": 2025,
+    "revenue": 124300000000,
+    "grossProfit": 58275000000,
+    "operatingIncome": 42800000000,
+    "netIncome": 36330000000,
+    "eps": 2.40,
+    "epsdiluted": 2.38
+  },
+  {
+    "date": "2024-09-30",
+    "symbol": "AAPL",
+    "period": "Q4",
+    "calendarYear": 2024,
+    "revenue": 94930000000,
+    "grossProfit": 43879000000,
+    "operatingIncome": 29591000000,
+    "netIncome": 14736000000,
+    "eps": 0.97,
+    "epsdiluted": 0.96
+  },
+  {
+    "date": "2024-06-30",
+    "symbol": "AAPL",
+    "period": "Q3",
+    "calendarYear": 2024,
+    "revenue": 85777000000,
+    "grossProfit": 39678000000,
+    "operatingIncome": 25352000000,
+    "netIncome": 21448000000,
+    "eps": 1.40,
+    "epsdiluted": 1.39
+  }
+]

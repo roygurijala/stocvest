@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from stocvest.models.watchlist import MATURATION_LAYER_KEYS
-from stocvest.signals.signal_math_contract import ratio_to_layer_count
+from stocvest.signals.signal_math_contract import (
+    ratio_to_layer_count,
+    signal_layer_count_for_mode,
+    signal_layers_for_mode,
+)
 
 LayerVerdict = Literal["bullish", "bearish", "neutral", "unavailable"]
 
@@ -24,7 +27,8 @@ def _normalize_verdict(raw: object) -> LayerVerdict:
 def count_directional_layers(
     layers: list[dict[str, Any]] | None,
     *,
-    total: int = len(MATURATION_LAYER_KEYS),
+    mode: str | None = None,
+    total: int | None = None,
 ) -> dict[str, int | str | None]:
     """Count layer verdict buckets and derived alignment metrics.
 
@@ -33,6 +37,10 @@ def count_directional_layers(
       else bullish + bearish + neutral (available) layers — **not** all layers when composite is neutral.
     - ``directional_tilt``: long | short | None when bullish == bearish.
     """
+    layer_keys = signal_layers_for_mode(mode)
+    if total is None:
+        total = len(layer_keys)
+
     by_id: dict[str, dict[str, Any]] = {}
     for item in layers or []:
         if not isinstance(item, dict):
@@ -42,7 +50,7 @@ def count_directional_layers(
             by_id[lid] = item
 
     bullish = bearish = neutral = unavailable = 0
-    for lid in MATURATION_LAYER_KEYS:
+    for lid in layer_keys:
         row = by_id.get(lid)
         if row is None:
             unavailable += 1
@@ -94,17 +102,21 @@ def composite_direction_fields(body: dict[str, Any]) -> dict[str, Any]:
     else:
         bias = "neutral"
 
+    mode_raw = str(body.get("mode") or "").strip().lower()
+    desk_mode = mode_raw if mode_raw in ("day", "swing", "position") else "swing"
+
     metrics = count_directional_layers(
-        body.get("layers") if isinstance(body.get("layers"), list) else None
+        body.get("layers") if isinstance(body.get("layers"), list) else None,
+        mode=desk_mode,
     )
     from_ratio = body.get("alignment_ratio")
     consistency = metrics["consistency_aligned"]
     if isinstance(from_ratio, (int, float)) and float(from_ratio) == float(from_ratio):
         # Signal Math Contract: alignment ratio (0..1) → whole-layer count (0..N).
-        consistency = ratio_to_layer_count(float(from_ratio))
+        consistency = ratio_to_layer_count(float(from_ratio), mode=desk_mode)
 
     directional = int(metrics["directional_aligned"])
-    total = len(MATURATION_LAYER_KEYS)
+    total = signal_layer_count_for_mode(desk_mode)
     out: dict[str, Any] = {
         "layers_total": total,
         "consistency_layers_aligned": int(consistency),

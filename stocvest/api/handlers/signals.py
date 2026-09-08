@@ -21,6 +21,7 @@ from stocvest.api.services.historical_validation_service import HistoricalValida
 from stocvest.api.services.signal_analysis import analysis_authorized, build_signal_analysis_payload
 from stocvest.api.services.real_composite_engine import real_composite_body_sync
 from stocvest.api.services.swing_composite_engine import swing_composite_body_sync
+from stocvest.api.services.position_composite_engine import position_composite_body_sync
 from stocvest.api.services.signal_snapshot_builders import build_swing_composite_snapshot_payload
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
@@ -137,6 +138,15 @@ def _compute_with_thread_timeout(
             return None
 
 
+def _evidence_desk_mode(mode: str) -> str:
+    m = str(mode or "").strip().lower()
+    if m in ("day", "intraday", "real"):
+        return "day"
+    if m == "position":
+        return "position"
+    return "swing"
+
+
 def _try_sync_watchlist_maturation_from_evidence(
     *,
     user_id: str | None,
@@ -149,12 +159,15 @@ def _try_sync_watchlist_maturation_from_evidence(
         return None
     if body.get("error"):
         return None
+    if str(mode or "").strip().lower() == "position":
+        # POS-D9 adds position ledger / watchlist maturation — never blend into swing.
+        return None
     try:
         from stocvest.api.services.watchlist_maturation_sync import (
             sync_watchlist_maturation_from_composite,
         )
 
-        desk_mode = "day" if mode == "day" else "swing"
+        desk_mode = _evidence_desk_mode(mode)
         try:
             from stocvest.api.services.system_signal_maturation_sync import sync_system_signal_from_composite
 
@@ -262,7 +275,7 @@ def composite_response_with_evidence_cache(
         cache_key,
         dict(body),
         "evidence",
-        "day" if mode == "day" else "swing",
+        _evidence_desk_mode(mode),
     )
     out = dict(body)
     out["source"] = "computed"
@@ -412,6 +425,31 @@ def swing_real_composite_handler(event: LambdaEvent, context: LambdaContext) -> 
             user_id=rc.user_id,
             user_email=rc.email,
             perplexity_mode="deep_dive",
+        ),
+    )
+    return ok(body)
+
+
+def position_real_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/signals/composite/position — seven-layer position desk composite."""
+    _ = context
+    try:
+        payload = parse_json_body(event)
+    except ValueError as exc:
+        return bad_request(str(exc))
+    symbol = str(payload.get("symbol") or "").strip().upper()
+    if not symbol:
+        return bad_request("Body field 'symbol' is required.")
+    rc = build_request_context(event)
+    body = composite_response_with_evidence_cache(
+        symbol=symbol,
+        user_id=rc.user_id,
+        user_email=rc.email,
+        mode="position",
+        sync_compute=lambda: position_composite_body_sync(
+            symbol=symbol,
+            user_id=rc.user_id,
+            user_email=rc.email,
         ),
     )
     return ok(body)
@@ -1860,6 +1898,7 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         "POST /v1/public/assistant/chat": public_assistant_chat_handler,
         "POST /v1/signals/composite/real": real_composite_handler,
         "POST /v1/signals/composite/swing": swing_real_composite_handler,
+        "POST /v1/signals/composite/position": position_real_composite_handler,
         "POST /v1/signals/swing/composite": swing_composite_handler,
         "POST /v1/signals/swing/synthesis/parse": swing_synthesis_parse_handler,
         "POST /v1/signals/day/setups": day_setups_handler,

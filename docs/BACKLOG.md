@@ -90,6 +90,56 @@ _Next major lane when soak completes: **P1 (Phase 7 hardening)**._
 
 ---
 
+## ADR-004 — Position desk / AI-native investment intelligence (active)
+
+**Master plan:** [`adr/ADR-004-position-desk-long-term-investment.md`](./adr/ADR-004-position-desk-long-term-investment.md). **Third desk** (`mode=position`) + **glass-box AI** (deterministic pillars first, Claude/Perplexity narrates — never overrides scores). **Does not** change day/swing gates until phases explicitly say so.
+
+### Engine & fundamentals
+
+| ID | Theme | Status |
+|----|-------|--------|
+| POS-D0 | ADR + BACKLOG + cross-links | **DONE 2026-09-08** |
+| POS-D1 | Fundamentals data contracts (`FundamentalsProvider`, FMP map, `POSITION_FUNDAMENTALS_SPEC.md`) | **DONE 2026-09-08** |
+| POS-D2 | `position_fundamentals_analyzer` — F1–F5 pillars + sector overrides stub | **DONE 2026-09-08** |
+| POS-D3 | `position_technical_analyzer` — weekly/daily structural trend | **DONE 2026-09-08** |
+| POS-D4 | `position_composite_engine` + `POST /v1/signals/composite/position` + BFF | **DONE 2026-09-08** |
+| POS-D5 | Position geometry (wide stops, T1/T2, weekly ATR) | **DONE 2026-09-08** |
+| POS-D6 | Signal Math Contract — `position_composite` weights | **DONE 2026-09-08** |
+| POS-D11 | Position universe filters (leveraged/micro-cap/liquidity) | Pending |
+| POS-D12 | Counsel + investment + AI thesis copy review | Pending |
+
+### UI & discovery
+
+| ID | Theme | Status |
+|----|-------|--------|
+| POS-D7 | Deep Dive third lane + fundamentals grid + Investment Read slot | Pending |
+| POS-D8 | Discovery feed (optional; **off by default** until validation) | Pending |
+| POS-D13 | Investment home (`/dashboard/invest`) — **Gem Candidates** table, filters, symbol search (Journey A + B) | Pending |
+| POS-D14 | Watchlist investment quality badge (Gem / Strong / Monitor) | Pending |
+| POS-D15 | Position universe scan — weekly batch + `GET /v1/signals/position/candidates` | Pending |
+| POS-D16 | Market Brief gem tile (optional — top 3 candidates after soak) | Pending |
+
+### Validation & ops
+
+| ID | Theme | Status |
+|----|-------|--------|
+| POS-D9 | Ledger `mode=position` + weekly capture + report | Pending |
+| POS-D10 | Assistant three-desk rules; **no position emails** until soak | Pending |
+
+### AI layer (glass box)
+
+| ID | Theme | Status |
+|----|-------|--------|
+| POS-AI-1 | `position_thesis_packet` — bull/bear/open Q with pillar refs; `POSITION_AI_SPEC.md` | Pending |
+| POS-AI-2 | `position_setup_read` — AI Investment Read + deterministic fallback | Pending |
+| POS-AI-3 | Assistant Position mode — pillar-aware page context + prompt rules | Pending |
+| POS-AI-4 | Research tab — EDGAR 10-K excerpts + Perplexity citations | Pending |
+| POS-AI-5 | Sector pillar overrides (banks/REIT/biotech) + F7/F8 v2 | Pending |
+| POS-AI-6 | Investment compare — pillar matrix + AI diff (no winner pick) | Pending |
+| POS-AI-7 | Portfolio-aware context + thesis drift (informational) | Pending |
+
+---
+
 | A1-tests | **A1 follow-up test coverage** | **DONE 2026-06-02.** (1) `tests/utils/test_symbol_detector.py` — `detect_symbol` dollar-sign priority, blocklist correctness, `detect_symbol_from_messages` multi-turn fallback, empty/None input. (2) `tests/api/services/test_assistant_symbol_context.py` — `fetch_assistant_symbol_context` timeout returns partial data, empty symbol returns None, all sub-calls wrapped in try/except. (3) `tests/api/handlers/test_signals_assistant_chat.py` — image MIME validation (accepts PNG/JPG/WebP, rejects PDF), symbol detection wiring (mock `fetch_assistant_symbol_context`, verify it's called with detected symbol), `symbol_context` passed to `svc.reply`. (4) `frontend/tests/use-voice-input.test.ts` — `isSupported` false when SpeechRecognition absent, toggle start/stop, `onTranscript` called with result, FRIENDLY_ERRORS map. (5) `frontend/tests/assistant-panel-redesign.test.tsx` — placeholder text "Ask me anything about stocks", + button triggers file input, mic button present, image preview shows when attachment set, remove clears attachment. |
 | A2 | **Watchlist management via assistant chat** | **DONE 2026-06-02.** User types "add PE to my watchlist" → assistant detects intent + symbol, calls `POST /v1/watchlists/{default_id}/symbols`, confirms with company name. Patterns: "add X", "add X to watchlist", "watch X", "track X", "remove X from watchlist". Symbol validation before write. Response includes action_type=watchlist_add + confirmation text. |
 | A3 | **Discovery queries from scanner cache** | **DONE 2026-06-02.** User asks "what stocks have momentum today?" / "any gap setups?" → assistant pulls from cached desk/scanner results (no new scan), returns top 3–5 symbols with brief context. Patterns: "momentum stocks", "gap stocks", "what's moving", "top setups". Pull from opportunity desk cache; if no cache, route to scanner. |

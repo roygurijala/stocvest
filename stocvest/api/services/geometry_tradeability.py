@@ -10,11 +10,12 @@ from typing import Any, Literal
 
 from stocvest.api.services.market_environment import min_risk_reward_from_environment
 from stocvest.api.services.reference_stop_policy import MIN_SWING_STOP_DISTANCE_ATR
+from stocvest.api.services.position_reference_stop_policy import MIN_POSITION_STOP_DISTANCE_ATR
 from stocvest.api.services.risk_reward_structure import structure_risk_reward_for_mode
 from stocvest.api.services.swing_universe_filter import swing_exclusion_reason
 from stocvest.signals.composite_score import CompositeVerdict
 
-Mode = Literal["day", "swing"]
+Mode = Literal["day", "swing", "position"]
 
 
 def _float_or_none(v: Any) -> float | None:
@@ -83,7 +84,12 @@ def structure_rr_from_body(body: dict[str, Any], *, mode: Mode | None = None) ->
     resolved_mode = mode
     if resolved_mode is None:
         raw_mode = str(body.get("mode") or "").strip().lower()
-        resolved_mode = "day" if raw_mode == "day" else "swing"
+        if raw_mode == "day":
+            resolved_mode = "day"
+        elif raw_mode == "position":
+            resolved_mode = "position"
+        else:
+            resolved_mode = "swing"
     return structure_risk_reward_for_mode(
         entry,
         t1,
@@ -139,6 +145,10 @@ def geometry_tradeability(
         stop_atr = _stop_distance_atr_from_body(body)
         if stop_atr is None or stop_atr < MIN_SWING_STOP_DISTANCE_ATR:
             return False, "stop_too_tight_for_swing"
+    elif mode == "position":
+        stop_atr = _stop_distance_atr_from_body(body)
+        if stop_atr is None or stop_atr < MIN_POSITION_STOP_DISTANCE_ATR:
+            return False, "stop_too_tight_for_position"
     env = body.get("market_environment")
     env_dict = env if isinstance(env, dict) else None
     min_rr_raw = body.get("min_rr_desk")

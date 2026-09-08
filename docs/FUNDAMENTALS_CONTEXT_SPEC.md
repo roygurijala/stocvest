@@ -2,7 +2,9 @@
 
 **Status:** Phases A–D shipped (FMP optional when `FMP_API_KEY` or `fmp_api_key` in `stocvest/external-api-keys` is set).
 
-**Last updated:** 2026-05-16
+**Last updated:** 2026-09-08
+
+**Position desk exception (ADR-004):** For **`mode=position`** only, fundamentals become a **scored layer** via `position_fundamentals_analyzer.py`. Data contracts: [`POSITION_FUNDAMENTALS_SPEC.md`](./POSITION_FUNDAMENTALS_SPEC.md). Swing and day desks remain display-only per the table below.
 
 ---
 

@@ -19,13 +19,19 @@ _TINY = 1e-6
 _DESK_PARAMS: dict[str, dict[str, float]] = {
     "day": {"t1_alpha": 0.8, "t1_beta": 2.0, "t2_beta": 2.5},
     "swing": {"t1_alpha": 1.5, "t1_beta": 3.0, "t2_beta": 4.0},
+    "position": {"t1_alpha": 2.0, "t1_beta": 4.0, "t2_beta": 5.0},
 }
 _BASE_WINDOW_ATR = 2.0
 _MAX_CANDIDATES = 5
 
 
 def desk_geometry_params(trading_mode: str) -> dict[str, float]:
-    return _DESK_PARAMS["day"] if str(trading_mode).strip().lower() == "day" else _DESK_PARAMS["swing"]
+    mode = str(trading_mode).strip().lower()
+    if mode == "day":
+        return _DESK_PARAMS["day"]
+    if mode == "position":
+        return _DESK_PARAMS["position"]
+    return _DESK_PARAMS["swing"]
 
 
 def candidate_window_atr(trading_mode: str) -> float:
