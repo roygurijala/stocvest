@@ -27,6 +27,12 @@ describe("dashboardTradingRoomHref", () => {
     expect(u.searchParams.get("lane")).toBe("day");
   });
 
+  test("position lane is preserved", () => {
+    const href = dashboardTradingRoomHref("AAPL", "position");
+    const u = new URL(href, "http://local.test");
+    expect(u.searchParams.get("lane")).toBe("position");
+  });
+
   test("blank symbol falls back to bare dashboard path", () => {
     expect(dashboardTradingRoomHref("")).toBe("/dashboard");
     expect(dashboardTradingRoomHref("   ")).toBe("/dashboard");
@@ -76,7 +82,8 @@ describe("buildDashboardSymbolUrl", () => {
         changePct: null,
         alignment: null,
         rankScore: 0,
-        source: "desk"
+        source: "desk",
+        setupTier: "setup"
       },
       "/dashboard",
       ""

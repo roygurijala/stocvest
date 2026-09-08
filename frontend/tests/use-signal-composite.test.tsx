@@ -129,6 +129,18 @@ describe("useSignalComposite", () => {
     expect(String(url)).toBe("/api/stocvest/signals/composite/real");
   });
 
+  test("position mode → POSTs to /composite/position with isolated cache key", async () => {
+    fetchMock.mockResolvedValue(makeOkResponse({ mode: "position", signal_summary: "neutral" }));
+    const { result } = renderHook(
+      () => useSignalComposite("msft", "position"),
+      { wrapper: Provider }
+    );
+    await waitFor(() => expect(result.current.composite).not.toBeNull());
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe("/api/stocvest/signals/composite/position");
+    expect(result.current.composite?.mode).toBe("position");
+  });
+
   test("two hooks for same (symbol, mode) → fetcher called once (SWR dedupe)", async () => {
     fetchMock.mockResolvedValue(makeOkResponse({ signal_summary: "bullish" }));
     function PairedHooks() {

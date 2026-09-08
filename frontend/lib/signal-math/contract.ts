@@ -171,9 +171,10 @@ export function validateCompositeWeights(
   if (!weights || typeof weights !== "object") {
     return { ok: false, errors: ["missing_weights"] };
   }
+  const expectedSet = new Set<string>(expected);
   const keys = Object.keys(weights);
   for (const k of keys) {
-    if (!expected.includes(k)) errors.push(`unknown_layers:${k}`);
+    if (!expectedSet.has(k)) errors.push(`unknown_layers:${k}`);
   }
   for (const layer of expected) {
     if (!(layer in weights)) errors.push(`missing_layers:${layer}`);

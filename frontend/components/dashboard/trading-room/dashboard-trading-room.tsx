@@ -95,6 +95,8 @@ import {
   applyDashboardSymbolUrl,
   clearTradingRoomOpenIntent,
   feedCardIdForDeepLink,
+  feedLaneFromIdPrefix,
+  deepDiveLaneFromFeedCard,
   parseDashboardTradingRoomDeepLink,
   peekTradingRoomOpenIntent,
   syntheticFeedCardForDeepLink,
@@ -109,6 +111,7 @@ import {
   type FeedCard,
   type FeedFilters,
   type FeedLane,
+  type DeepDiveLane,
   type FeedState,
   DEFAULT_FEED_FILTERS,
   describeFeedFilterSummary,
@@ -552,7 +555,7 @@ function TradingRoomBody({
     setLastSelectedId(id);
     const colon = id.indexOf(":");
     if (colon > 0) {
-      const lane = (id.slice(0, colon) === "day" ? "day" : "swing") as FeedLane;
+      const lane = feedLaneFromIdPrefix(id.slice(0, colon));
       const sym = id.slice(colon + 1).trim().toUpperCase();
       if (sym) {
         syncSymbolInUrl(syntheticFeedCardForDeepLink({ symbol: sym, lane, key: id }));
@@ -562,11 +565,15 @@ function TradingRoomBody({
   // Open any searched symbol in the deep dive: reuse the richer feed card when
   // the symbol is already on the desk; otherwise synthesize a minimal card and
   // let the deep dive's composite fetch fill in the read.
-  const openSymbol = (symbol: string, company?: string | null, lane: FeedLane = "swing") => {
+  const openSymbol = (symbol: string, company?: string | null, lane: DeepDiveLane = "swing") => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
     userInitiatedSelectionRef.current = true;
-    const existing = findFeedCardForSymbolLane(allCards, sym, lane);
+    const feedLane: FeedLane = lane === "position" ? "swing" : lane;
+    const existing =
+      lane === "position"
+        ? allCards.find((c) => c.id === feedCardIdForDeepLink(sym, "position"))
+        : findFeedCardForSymbolLane(allCards, sym, feedLane);
     if (existing) {
       selectCard(existing);
       return;
@@ -576,7 +583,7 @@ function TradingRoomBody({
       id: feedCardIdForDeepLink(sym, lane),
       symbol: sym,
       company: company?.trim() || companyBySymbol.get(sym) || snap?.company_name?.trim() || null,
-      lane,
+      lane: feedLane,
       state: "potential",
       bias: "neutral",
       verdict: "Looked up from search — full read below.",
@@ -610,10 +617,10 @@ function TradingRoomBody({
     if (!selected) return;
     const sym = selected.symbol.trim().toUpperCase();
     if (!sym) return;
-    const lane = selected.lane === "day" ? "day" : "swing";
-    const key = signalCompositeCacheKey(sym, lane);
+    const compositeMode = deepDiveLaneFromFeedCard(selected);
+    const key = signalCompositeCacheKey(sym, compositeMode);
     if (key) {
-      void mutateSwr(key, () => __internal_fetchSignalComposite(sym, lane), { revalidate: false });
+      void mutateSwr(key, () => __internal_fetchSignalComposite(sym, compositeMode), { revalidate: false });
     }
   }, [selected?.id, selected?.symbol, selected?.lane]);
 
@@ -705,7 +712,7 @@ function TradingRoomBody({
     }
     const colon = lastId.indexOf(":");
     if (colon <= 0) return;
-    const lane = lastId.slice(0, colon) === "day" ? "day" : "swing";
+    const lane = feedLaneFromIdPrefix(lastId.slice(0, colon));
     const sym = lastId.slice(colon + 1).trim().toUpperCase();
     if (sym) openSymbol(sym, null, lane);
   };

@@ -5,7 +5,12 @@
 import { isInsufficientCompositeResponse } from "@/lib/api/swing-composite";
 import { catalystArticlesForNewsLayer } from "@/lib/signals/layer-catalyst-articles";
 import { signalLayerDisplayName } from "@/lib/signals/layer-display-names";
-import { normalizeSetupBias, type SignalsLayerRowInput, type SignalsSetupBias } from "@/lib/signals-page-present";
+import { signalLayersForMode } from "@/lib/signal-math/contract";
+import {
+  normalizeSetupBias,
+  type SignalsLayerRowInput,
+  type SignalsSetupBias
+} from "@/lib/signals-page-present";
 
 export const COMPOSITE_LAYER_KEYS = [
   "technical",
@@ -205,6 +210,13 @@ function layerMetadataFromEntry(
     }
   }
 
+  if (key === "fundamentals") {
+    const wp = strField(entry.weakest_pillar_id);
+    if (wp) meta.weakestPillarId = wp;
+    const dq = strField(entry.data_quality);
+    if (dq) meta.fundamentalsDataQuality = dq;
+  }
+
   if (key === "internals") {
     meta.breadthSignal = strField(entry.breadth_signal) || null;
     meta.participationSignal = strField(entry.participation) || null;
@@ -279,13 +291,22 @@ function applySectorTechnicalCalibration(
   row.techOverboughtMultiplier = numField(c.overbought_penalty_multiplier);
 }
 
+export function compositeLayerKeysForPayload(
+  composite: Record<string, unknown> | null | undefined
+): readonly string[] {
+  const mode = String(composite?.mode ?? "").trim().toLowerCase();
+  if (mode === "position") return signalLayersForMode("position");
+  return COMPOSITE_LAYER_KEYS;
+}
+
 export function compositeToSignalsLayerRows(
   composite: Record<string, unknown> | null | undefined
 ): SignalsLayerRowInput[] {
   if (!composite || isInsufficientCompositeResponse(composite)) return [];
   const rawLayers = composite.layers;
   if (!Array.isArray(rawLayers)) return [];
-  const rows = COMPOSITE_LAYER_KEYS.map((key) => {
+  const layerKeys = compositeLayerKeysForPayload(composite);
+  const rows = layerKeys.map((key) => {
     const entry = (rawLayers as Array<Record<string, unknown>>).find(
       (x) => String(x.layer ?? "").toLowerCase() === key
     );

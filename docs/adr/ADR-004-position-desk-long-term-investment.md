@@ -348,7 +348,7 @@ Each phase ships with **tests**, **BACKLOG row update**, and user **“go ahead�
 | 4 | **POS-D4** | **`position_composite_engine.py`** + **`POST /v1/signals/composite/position`** — mirror swing handler shape; `mode=position`, `signal_valid_days`, layer snapshots; API_CONTRACTS §4 | **DONE 2026-09-08** |
 | 5 | **POS-D5** | **Position geometry** — `position_reference_stop_policy.py`, wider ATR k, structural stop from structure engine; T2 analyst PT band rules (B78 provenance); frontend mirror | **DONE 2026-09-08** |
 | 6 | **POS-D6** | **Signal Math Contract** — extend `SIGNAL_LAYERS` / frontend mirror for `position` mode weights; `CompositeScoreEngine` mode=`position`; gate catalog doc | **DONE 2026-09-08** |
-| 7 | **POS-D7** | **Deep Dive UI** — third lane; `useSignalComposite(..., 'position')`; BFF route; fundamentals grid component; Vitest + Playwright smoke | Pending |
+| 7 | **POS-D7** | **Deep Dive UI** — third lane; `useSignalComposite(..., 'position')`; BFF route; fundamentals grid component; Vitest + Playwright smoke | **DONE 2026-09-08** |
 | 8 | **POS-D8** | **Trading Room gem rail (optional)** — compact “Gem candidates” strip linking to `/dashboard/invest`; **not** mixed into swing/day feed | Pending |
 | 9 | **POS-D9** | **Ledger & validation** — `SignalRecord.mode` adds `position`; weekly capture job `ledger_capture_position`; shadow rows; `ledger_signal_report.py` position section; extend setup-evolution mode dimension | Pending |
 | 10 | **POS-D10** | **Assistant & alerts** — `ASSISTANT_SYSTEM_PROMPT` three-desk rules; gem lookup intents; **no position emails** until VAL-POS soak sign-off | Pending |

@@ -1,8 +1,8 @@
-import type { FeedCard, FeedLane } from "@/lib/dashboard/trading-room/feed-model";
+import type { DeepDiveLane, FeedCard, FeedLane } from "@/lib/dashboard/trading-room/feed-model";
 
 export type DashboardTradingRoomDeepLink = {
   symbol: string;
-  lane: FeedLane;
+  lane: DeepDiveLane;
   /** Stable `${lane}:${symbol}` id used by feed cards. */
   key: string;
 };
@@ -10,21 +10,24 @@ export type DashboardTradingRoomDeepLink = {
 const INTENT_KEY = "stocvest:trading-room-open-intent";
 const INTENT_MAX_AGE_MS = 120_000;
 
-function normalizeLane(raw: string | null | undefined): FeedLane {
-  return raw === "day" ? "day" : "swing";
+function normalizeLane(raw: string | null | undefined): DeepDiveLane {
+  if (raw === "day") return "day";
+  if (raw === "position") return "position";
+  return "swing";
 }
 
-export function feedCardIdForDeepLink(symbol: string, lane: FeedLane): string {
+export function feedCardIdForDeepLink(symbol: string, lane: DeepDiveLane): string {
   return `${lane}:${symbol.trim().toUpperCase()}`;
 }
 
 /** Minimal desk card so Deep Dive can render before feed/tape hydrate. */
 export function syntheticFeedCardForDeepLink(intent: DashboardTradingRoomDeepLink): FeedCard {
+  const feedLane: FeedLane = intent.lane === "position" ? "swing" : intent.lane;
   return {
     id: intent.key,
     symbol: intent.symbol,
     company: null,
-    lane: intent.lane,
+    lane: feedLane,
     state: "potential",
     bias: "neutral",
     verdict: "Looked up from search — full read below.",
@@ -56,7 +59,7 @@ export function readDashboardDeepLinkKeyFromLocation(): string | null {
 
 export function dashboardTradingRoomHref(
   symbol: string,
-  lane: FeedLane = "swing",
+  lane: DeepDiveLane = "swing",
   opts?: { ref?: string }
 ): string {
   const sym = symbol.trim().toUpperCase();
@@ -68,9 +71,28 @@ export function dashboardTradingRoomHref(
   return `/dashboard?${q.toString()}`;
 }
 
+export function feedLaneFromIdPrefix(prefix: string): DeepDiveLane {
+  if (prefix === "day") return "day";
+  if (prefix === "position") return "position";
+  return "swing";
+}
+
 /** Map legacy `trading_mode` query values to trading-room `lane`. */
-export function tradingRoomLaneFromMode(mode: string | null | undefined): FeedLane {
-  return mode === "day" ? "day" : "swing";
+export function tradingRoomLaneFromMode(mode: string | null | undefined): DeepDiveLane {
+  if (mode === "day") return "day";
+  if (mode === "position") return "position";
+  return "swing";
+}
+
+/** Resolve deep-dive lane from a feed card id prefix (position cards use `lane: swing`). */
+export function deepDiveLaneFromFeedCard(card: FeedCard): DeepDiveLane {
+  const colon = card.id.indexOf(":");
+  if (colon > 0) return feedLaneFromIdPrefix(card.id.slice(0, colon));
+  return card.lane;
+}
+
+function laneForDashboardUrl(card: FeedCard): DeepDiveLane {
+  return deepDiveLaneFromFeedCard(card);
 }
 
 /**
@@ -99,7 +121,7 @@ export function buildDashboardSymbolUrl(
   const params = new URLSearchParams(existingSearch);
   if (card) {
     params.set("symbol", card.symbol.trim().toUpperCase());
-    params.set("lane", card.lane);
+    params.set("lane", laneForDashboardUrl(card));
   } else {
     params.delete("symbol");
     params.delete("lane");
@@ -126,7 +148,7 @@ export function applyDashboardSymbolUrl(
 }
 
 /** Stash scanner → dashboard handoff before client navigation (survives SPA routing quirks). */
-export function stashTradingRoomOpenIntent(symbol: string, lane: FeedLane = "swing"): void {
+export function stashTradingRoomOpenIntent(symbol: string, lane: DeepDiveLane = "swing"): void {
   if (typeof sessionStorage === "undefined") return;
   const sym = symbol.trim().toUpperCase();
   if (!sym) return;

@@ -18,11 +18,13 @@ export type MarketEnvironmentPayload = {
   vix_change_pct: number | null;
   vix_change_5d_pct?: number | null;
   macro_regime: string;
-  mode: "day" | "swing";
+  mode: "day" | "swing" | "position";
   new_swing_allowed: boolean;
   new_day_allowed: boolean;
+  new_position_allowed?: boolean;
   min_rr_swing: number;
   min_rr_day: number;
+  min_rr_position?: number;
   min_rr: number;
   target_policy: TargetPolicy;
   size_guidance: string;
@@ -58,11 +60,18 @@ export function parseMarketEnvironment(body: Record<string, unknown>): MarketEnv
     vix_change_pct: numOrNull(o.vix_change_pct),
     vix_change_5d_pct: numOrNull(o.vix_change_5d_pct),
     macro_regime: String(o.macro_regime ?? "neutral"),
-    mode: String(o.mode ?? "swing") === "day" ? "day" : "swing",
+    mode:
+      String(o.mode ?? "swing") === "day"
+        ? "day"
+        : String(o.mode ?? "swing") === "position"
+          ? "position"
+          : "swing",
     new_swing_allowed: Boolean(o.new_swing_allowed ?? true),
     new_day_allowed: Boolean(o.new_day_allowed ?? true),
+    new_position_allowed: Boolean(o.new_position_allowed ?? true),
     min_rr_swing: numOrNull(o.min_rr_swing) ?? 2,
     min_rr_day: numOrNull(o.min_rr_day) ?? 1.3,
+    min_rr_position: numOrNull(o.min_rr_position) ?? 1.5,
     min_rr: numOrNull(o.min_rr) ?? 2,
     target_policy: (String(o.target_policy ?? "t1_and_t2") as TargetPolicy) || "t1_and_t2",
     size_guidance: String(o.size_guidance ?? "full"),
@@ -87,10 +96,15 @@ export function environmentTierLabel(tier: EnvironmentTier): string {
 /** Desk min R/R for planning UI — prefers VIX-tier policy from composite, else static baseline. */
 export function minRrForDeskMode(
   environment: MarketEnvironmentPayload | null | undefined,
-  mode: "day" | "swing"
+  mode: "day" | "swing" | "position"
 ): number {
   if (environment) {
-    const modeKey = mode === "day" ? environment.min_rr_day : environment.min_rr_swing;
+    const modeKey =
+      mode === "day"
+        ? environment.min_rr_day
+        : mode === "position"
+          ? (environment.min_rr_position ?? minRiskRewardForVerdict("position"))
+          : environment.min_rr_swing;
     if (Number.isFinite(modeKey) && modeKey > 0) return modeKey;
     if (Number.isFinite(environment.min_rr) && environment.min_rr > 0) return environment.min_rr;
   }

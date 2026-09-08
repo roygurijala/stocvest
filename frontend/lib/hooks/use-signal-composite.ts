@@ -20,7 +20,7 @@
  *
  * Cache key shape:
  *
- *   `["stocvest:signal-composite", upperCaseSymbol, "swing" | "day"]`
+ *   `["stocvest:signal-composite", upperCaseSymbol, "swing" | "day" | "position"]`
  *   The mode is part of the key so a swing-engine composite for
  *   AAPL never aliases the day-engine composite for AAPL — Mode
  *   Separation invariant (`docs/PERFORMANCE.md` cross-cutting
@@ -70,7 +70,7 @@ import { notifyWatchlistMaturationUpdated } from "@/lib/watchlist-maturation-bum
 import { signalCompositeCacheKey } from "@/lib/signal-composite-cache";
 
 /** Trading-mode discriminator for the composite endpoint. */
-export type SignalCompositeMode = "swing" | "day";
+export type SignalCompositeMode = "swing" | "day" | "position";
 
 /** Loose record shape; callers narrow it via `isInsufficientCompositeResponse`. */
 export type SignalCompositeResult = Record<string, unknown>;
@@ -118,7 +118,9 @@ async function fetchSignalComposite(
   const path =
     mode === "swing"
       ? "/api/stocvest/signals/composite/swing"
-      : "/api/stocvest/signals/composite/real";
+      : mode === "position"
+        ? "/api/stocvest/signals/composite/position"
+        : "/api/stocvest/signals/composite/real";
   const maxAttempts = 3;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (opts.signal?.aborted) {
@@ -149,7 +151,7 @@ async function fetchSignalComposite(
       if (waitMs > 0) await sleep(waitMs);
       continue;
     }
-    if (!transport && !String(body.error ?? "").trim()) {
+    if (!transport && !String(body.error ?? "").trim() && mode !== "position") {
       notifyWatchlistMaturationUpdated(symbol.trim().toUpperCase(), mode);
     }
     return body;

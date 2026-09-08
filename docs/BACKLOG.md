@@ -112,7 +112,7 @@ _Next major lane when soak completes: **P1 (Phase 7 hardening)**._
 
 | ID | Theme | Status |
 |----|-------|--------|
-| POS-D7 | Deep Dive third lane + fundamentals grid + Investment Read slot | Pending |
+| POS-D7 | Deep Dive third lane + fundamentals grid + Investment Read slot | **DONE 2026-09-08** |
 | POS-D8 | Discovery feed (optional; **off by default** until validation) | Pending |
 | POS-D13 | Investment home (`/dashboard/invest`) — **Gem Candidates** table, filters, symbol search (Journey A + B) | Pending |
 | POS-D14 | Watchlist investment quality badge (Gem / Strong / Monitor) | Pending |
