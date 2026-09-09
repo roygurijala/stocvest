@@ -67,7 +67,15 @@ export const NAV_FEATURES = {
    * swing/day feed. Default OFF (ships dark) until the POS-D9 validation soak completes;
    * turn on with `NEXT_PUBLIC_STOCVEST_FEATURE_POSITION_FEED=true`.
    */
-  positionFeed: envFlag("POSITION_FEED", false)
+  positionFeed: envFlag("POSITION_FEED", false),
+  /**
+   * ADR-004 POS-AI-4 — Position deep-dive "Research" panel: external context (SEC 10-K
+   * Item 1A risk-factor excerpt + cited Perplexity recent developments). External content
+   * is badged "External · not scored" and never feeds the composite. Default OFF (ships
+   * dark, paid-gated on the backend too) until counsel sign-off (POS-D12). Turn on with
+   * `NEXT_PUBLIC_STOCVEST_FEATURE_POSITION_RESEARCH=true`.
+   */
+  positionResearch: envFlag("POSITION_RESEARCH", false)
 } as const;
 
 export type NavFeatureKey = keyof typeof NAV_FEATURES;
@@ -104,4 +112,8 @@ export function watchlistPositionQualityBadgeEnabled(): boolean {
 
 export function positionFeedEnabled(): boolean {
   return NAV_FEATURES.positionFeed === true;
+}
+
+export function positionResearchEnabled(): boolean {
+  return NAV_FEATURES.positionResearch === true;
 }

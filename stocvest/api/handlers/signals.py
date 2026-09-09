@@ -22,6 +22,7 @@ from stocvest.api.services.signal_analysis import analysis_authorized, build_sig
 from stocvest.api.services.real_composite_engine import real_composite_body_sync
 from stocvest.api.services.swing_composite_engine import swing_composite_body_sync
 from stocvest.api.services.position_composite_engine import position_composite_body_sync
+from stocvest.api.services.position_research import build_position_research_bundle
 from stocvest.api.services.signal_snapshot_builders import build_swing_composite_snapshot_payload
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
@@ -1309,6 +1310,46 @@ def ai_explanations_handler(event: LambdaEvent, context: LambdaContext) -> dict[
     )
 
 
+def position_research_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/signals/position/research — external Research tab (ADR-004 POS-AI-4).
+
+    Returns a paid-gated, flag-gated bundle of *external* context (SEC 10-K Item 1A excerpt
+    + a cited Perplexity "recent developments" summary). The content is INFORMATIONAL ONLY —
+    badged ``scored: false`` and never merged into the composite. Ships DARK behind
+    ``STOCVEST_POSITION_RESEARCH_ENABLED``.
+    """
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    try:
+        body = parse_json_body(event)
+    except (TypeError, ValueError, KeyError):
+        return bad_request("Invalid JSON body.")
+    if not isinstance(body, dict):
+        return bad_request("Body must be a JSON object.")
+
+    symbol = str(body.get("symbol") or "").strip().upper()
+    if not symbol:
+        return bad_request("symbol is required.")
+    company_name = str(body.get("company_name") or "").strip() or None
+
+    profile = get_user_profile_store().get_profile(rc.user_id)
+    # Admin entitlement bump — mirrors ai_explanations_handler so admins see the paid view.
+    headers = event.get("headers") or {}
+    if isinstance(headers, dict) and analysis_authorized(
+        user_id=rc.user_id, claims=rc.claims, headers=headers
+    ):
+        profile = profile.model_copy(update={"beta_full_access": True})
+
+    bundle = asyncio.run(
+        build_position_research_bundle(
+            symbol=symbol, user_profile=profile, company_name=company_name
+        )
+    )
+    return ok(bundle.to_api_dict())
+
+
 def founding_members_count_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """GET /v1/signals/founding-members — public pricing counter for landing page."""
     _ = event
@@ -1966,6 +2007,7 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
         "GET /v1/signals/founding-members": founding_members_count_handler,
         "POST /v1/signals/ai/explanations": ai_explanations_handler,
+        "POST /v1/signals/position/research": position_research_handler,
         "POST /v1/signals/assistant/chat": assistant_chat_handler,
         "POST /v1/public/assistant/chat": public_assistant_chat_handler,
         "POST /v1/signals/composite/real": real_composite_handler,

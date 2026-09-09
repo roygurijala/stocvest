@@ -8,6 +8,7 @@ import type {
 } from "@/lib/dashboard/trading-room/position-fundamentals-present";
 import { PositionFundamentalsGrid } from "@/components/dashboard/trading-room/position-fundamentals-grid";
 import { PositionInvestmentRead } from "@/components/dashboard/trading-room/position-investment-read";
+import { PositionResearchPanel } from "@/components/dashboard/trading-room/position-research-panel";
 import type { SignalsSetupBias } from "@/lib/signals-page-present";
 import type { useTheme } from "@/lib/theme-provider";
 
@@ -111,6 +112,9 @@ export function PositionSetupRead({
       {thesisPacket ? (
         <PositionInvestmentRead symbol={symbol} packet={thesisPacket} colors={colors} />
       ) : null}
+
+      {/* ADR-004 POS-AI-4 — external Research (renders only when the flag is on). */}
+      <PositionResearchPanel symbol={symbol} colors={colors} />
 
       <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
         Glass-box fundamentals for {symbol} — pillar scores and the thesis are informational only,
