@@ -5,8 +5,24 @@
 import type { SnapshotPayload } from "@/lib/api/market";
 import { vixSnapshotSessionChangePct } from "@/lib/api/market-snapshot-helpers";
 import type { FeedState } from "@/lib/dashboard/trading-room/feed-model";
+import type { WatchlistQualityTier } from "@/lib/dashboard/position-ranked-home-present";
 
 export type WatchlistRailViewMode = "list" | "heat";
+
+// ADR-004 POS-D14 — Position desk gold for the "Gem" quality dot (mirrors
+// `roleAccents.position.accent` on `/dashboard/invest`, theme-independent).
+export const POSITION_GEM_GOLD = "#fbbf24";
+
+/** Color for the watchlist investment-quality tier dot (POS-D14). Pure — takes only the
+ * two semantic tones it needs so both `Colors` and `ThemeColors` satisfy it. */
+export function watchlistQualityDotColor(
+  tier: WatchlistQualityTier,
+  colors: { bullish: string; textMuted: string }
+): string {
+  if (tier === "gem") return POSITION_GEM_GOLD;
+  if (tier === "strong") return colors.bullish;
+  return colors.textMuted; // monitor
+}
 
 /** Performance window for watchlist heat cells. */
 export type WatchlistHeatWindow = "1d" | "1w" | "3m" | "ytd";

@@ -53,7 +53,14 @@ export const NAV_FEATURES = {
    * renders the terminal; legacy UI at `/dashboard/scanner/classic`. Roll back with
    * `NEXT_PUBLIC_STOCVEST_FEATURE_SCANNER_TERMINAL=false`.
    */
-  scannerTerminal: envFlag("SCANNER_TERMINAL", true)
+  scannerTerminal: envFlag("SCANNER_TERMINAL", true),
+  /**
+   * ADR-004 POS-D14 — investment-quality tier dot (Gem / Strong / Monitor) on the
+   * watchlist rail, joined from the POS-D15 position candidates cache. Default on now
+   * that POS-D13 (`/dashboard/invest`) has shipped. Roll back with
+   * `NEXT_PUBLIC_STOCVEST_FEATURE_WATCHLIST_POSITION_QUALITY_BADGE=false`.
+   */
+  watchlistPositionQualityBadge: envFlag("WATCHLIST_POSITION_QUALITY_BADGE", true)
 } as const;
 
 export type NavFeatureKey = keyof typeof NAV_FEATURES;
@@ -82,4 +89,8 @@ export function brokersEnabled(): boolean {
 
 export function scannerTerminalEnabled(): boolean {
   return NAV_FEATURES.scannerTerminal === true;
+}
+
+export function watchlistPositionQualityBadgeEnabled(): boolean {
+  return NAV_FEATURES.watchlistPositionQualityBadge === true;
 }

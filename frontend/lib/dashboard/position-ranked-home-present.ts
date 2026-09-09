@@ -236,6 +236,61 @@ export function buildPositionGemDisplayRows(
   }));
 }
 
+// --------------------------------------------------------------- POS-D14 watchlist quality badge
+
+/** Tiers surfaced as a watchlist rail dot — `insufficient` is never badged. */
+export type WatchlistQualityTier = "gem" | "strong" | "monitor";
+
+export type WatchlistQualityBadge = {
+  tier: WatchlistQualityTier;
+  /** Short dot label, e.g. "Gem". */
+  short: string;
+  /** Full tooltip, e.g. "Gem candidate — weakest pillar: F4 · Valuation". */
+  tooltip: string;
+};
+
+const TIER_SHORT: Record<WatchlistQualityTier, string> = {
+  gem: "Gem",
+  strong: "Strong",
+  monitor: "Monitor"
+};
+
+/**
+ * ADR-004 POS-D14 — build the watchlist rail investment-quality badge for one candidate.
+ * Returns null for `insufficient` (or missing) candidates so those names carry no dot.
+ * The badge is informational (glass-box tier + weakest pillar), never a buy signal.
+ */
+export function buildWatchlistQualityBadge(
+  candidate: PositionGemCandidate | null | undefined
+): WatchlistQualityBadge | null {
+  if (!candidate) return null;
+  const tier = candidate.tier;
+  if (tier !== "gem" && tier !== "strong" && tier !== "monitor") return null;
+  const weak =
+    candidate.weakestPillarId && candidate.weakestPillarLabel
+      ? `${candidate.weakestPillarId} · ${candidate.weakestPillarLabel}`
+      : candidate.weakestPillarLabel || null;
+  const label = positionGemTierLabel(tier);
+  return {
+    tier,
+    short: TIER_SHORT[tier],
+    tooltip: weak ? `${label} — weakest pillar: ${weak}` : label
+  };
+}
+
+/** Symbol → quality badge map for the watchlist rail (skips `insufficient`). */
+export function buildWatchlistQualityMap(
+  candidates: readonly PositionGemCandidate[] | null | undefined
+): Map<string, WatchlistQualityBadge> {
+  const out = new Map<string, WatchlistQualityBadge>();
+  if (!candidates) return out;
+  for (const c of candidates) {
+    const badge = buildWatchlistQualityBadge(c);
+    if (badge) out.set(c.symbol.trim().toUpperCase(), badge);
+  }
+  return out;
+}
+
 // --------------------------------------------------------------------------- shareable filter URLs
 
 /** Parse `?tier=gem&fund=min:70&tech=min:55&q=AAPL` into a filter (ADR sharable links). */

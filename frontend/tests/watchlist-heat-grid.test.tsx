@@ -57,4 +57,23 @@ describe("WatchlistHeatGrid (ADR-003 UX-D7)", () => {
     fireEvent.click(cell);
     expect(onSelect).toHaveBeenCalled();
   });
+
+  it("renders an investment-quality dot only for symbols with a scan row (POS-D14)", () => {
+    render(
+      <WatchlistHeatGrid
+        cards={[card({ symbol: "NVDA", state: "actionable" }), card({ symbol: "AAPL", state: "potential" })]}
+        selectedId={null}
+        colors={colors}
+        onSelectCard={vi.fn()}
+        qualityBySymbol={
+          new Map([["NVDA", { tier: "gem" as const, short: "Gem", tooltip: "Gem candidate — weakest pillar: F4 · Valuation" }]])
+        }
+      />
+    );
+
+    const dots = screen.getAllByTestId("watchlist-heat-quality-dot");
+    expect(dots).toHaveLength(1);
+    expect(dots[0]).toHaveAttribute("data-tier", "gem");
+    expect(dots[0]).toHaveAttribute("title", "Gem candidate — weakest pillar: F4 · Valuation");
+  });
 });

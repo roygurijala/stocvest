@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   applyPositionGemFilter,
   buildPositionGemDisplayRows,
+  buildWatchlistQualityBadge,
+  buildWatchlistQualityMap,
   DEFAULT_POSITION_GEM_FILTER,
   parsePositionCandidates,
   parsePositionGemFilterFromParams,
@@ -11,6 +13,7 @@ import {
   positionGemTierLabel,
   type PositionGemCandidate
 } from "@/lib/dashboard/position-ranked-home-present";
+import { watchlistQualityDotColor } from "@/lib/dashboard/trading-room/watchlist-rail-present";
 
 function apiRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -117,5 +120,56 @@ describe("position-ranked-home-present", () => {
     const copy = positionGemTierCopy("strong");
     expect(copy.toLowerCase()).not.toContain("buy");
     expect(copy.toLowerCase()).not.toContain("recommend");
+  });
+});
+
+describe("position watchlist quality badge (POS-D14)", () => {
+  it("builds a badge with tier short label and weakest-pillar tooltip", () => {
+    const cand = parsePositionCandidates({ candidates: [apiRow({ tier: "gem" })] })!.candidates[0];
+    const badge = buildWatchlistQualityBadge(cand);
+    expect(badge).not.toBeNull();
+    expect(badge!.tier).toBe("gem");
+    expect(badge!.short).toBe("Gem");
+    expect(badge!.tooltip).toBe("Gem candidate — weakest pillar: F4 · Valuation");
+  });
+
+  it("omits the weakest-pillar clause when no weakest pillar is present", () => {
+    const cand = parsePositionCandidates({
+      candidates: [apiRow({ tier: "strong", weakest_pillar_id: null, weakest_pillar_label: null })]
+    })!.candidates[0];
+    const badge = buildWatchlistQualityBadge(cand);
+    expect(badge!.short).toBe("Strong");
+    expect(badge!.tooltip).toBe("Strong quality");
+  });
+
+  it("never badges insufficient candidates or null input", () => {
+    const cand = parsePositionCandidates({ candidates: [apiRow({ tier: "insufficient" })] })!.candidates[0];
+    expect(buildWatchlistQualityBadge(cand)).toBeNull();
+    expect(buildWatchlistQualityBadge(null)).toBeNull();
+    expect(buildWatchlistQualityBadge(undefined)).toBeNull();
+  });
+
+  it("maps symbols (uppercased) to badges and skips insufficient rows", () => {
+    const cands = parsePositionCandidates({
+      candidates: [
+        apiRow({ symbol: "aapl", tier: "gem" }),
+        apiRow({ symbol: "MSFT", tier: "strong" }),
+        apiRow({ symbol: "XYZ", tier: "monitor" }),
+        apiRow({ symbol: "BAD", tier: "insufficient" })
+      ]
+    })!.candidates;
+    const map = buildWatchlistQualityMap(cands);
+    expect([...map.keys()].sort()).toEqual(["AAPL", "MSFT", "XYZ"]);
+    expect(map.get("AAPL")!.tier).toBe("gem");
+    expect(map.get("XYZ")!.short).toBe("Monitor");
+    expect(map.get("BAD")).toBeUndefined();
+    expect(buildWatchlistQualityMap(null).size).toBe(0);
+  });
+
+  it("colors gem gold, strong bullish, monitor muted", () => {
+    const colors = { bullish: "#0a0", textMuted: "#888" };
+    expect(watchlistQualityDotColor("gem", colors)).toBe("#fbbf24");
+    expect(watchlistQualityDotColor("strong", colors)).toBe("#0a0");
+    expect(watchlistQualityDotColor("monitor", colors)).toBe("#888");
   });
 });

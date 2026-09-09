@@ -20,8 +20,10 @@ import type { FeedCard } from "@/lib/dashboard/trading-room/feed-model";
 import {
   watchlistHeatShowsStateBadge,
   watchlistHeatStateBadgeLabel,
+  watchlistQualityDotColor,
   type WatchlistHeatWindow
 } from "@/lib/dashboard/trading-room/watchlist-rail-present";
+import type { WatchlistQualityBadge } from "@/lib/dashboard/position-ranked-home-present";
 
 type WatchlistHeatGridProps = {
   cards: FeedCard[];
@@ -30,6 +32,7 @@ type WatchlistHeatGridProps = {
   onSelectCard: (card: FeedCard) => void;
   quotesLoading?: boolean;
   heatWindow?: WatchlistHeatWindow;
+  qualityBySymbol?: ReadonlyMap<string, WatchlistQualityBadge>;
 };
 
 export function WatchlistHeatGrid({
@@ -38,7 +41,8 @@ export function WatchlistHeatGrid({
   colors,
   onSelectCard,
   quotesLoading = false,
-  heatWindow = "1d"
+  heatWindow = "1d",
+  qualityBySymbol
 }: WatchlistHeatGridProps) {
   if (cards.length === 0) return null;
 
@@ -62,6 +66,7 @@ export function WatchlistHeatGrid({
             : sectorHeatCellStyle(colorPct, colors, { selected }).background ?? colors.surface;
         const vsLabel = formatHeatVsGroup(vsGroup);
         const missingQuote = pct == null && !quotesLoading;
+        const quality = qualityBySymbol?.get(card.symbol.trim().toUpperCase()) ?? null;
 
         const tileStyle: CSSProperties = {
           display: "flex",
@@ -103,8 +108,25 @@ export function WatchlistHeatGrid({
             onClick={() => onSelectCard(card)}
             style={tileStyle}
           >
-            <span style={{ fontWeight: 700, fontFamily: typography.fontFamilyMono, fontSize: typography.scale.xs }}>
-              {card.symbol}
+            <span style={{ display: "flex", alignItems: "center", gap: spacing[1], minWidth: 0 }}>
+              <span style={{ fontWeight: 700, fontFamily: typography.fontFamilyMono, fontSize: typography.scale.xs }}>
+                {card.symbol}
+              </span>
+              {quality ? (
+                <span
+                  title={quality.tooltip}
+                  aria-label={quality.tooltip}
+                  data-testid="watchlist-heat-quality-dot"
+                  data-tier={quality.tier}
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: borderRadius.full,
+                    background: watchlistQualityDotColor(quality.tier, colors),
+                    flex: "0 0 auto"
+                  }}
+                />
+              ) : null}
             </span>
             <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: moveTone }}>
               {quotesLoading && pct == null ? "…" : missingQuote ? formatHeatMissingQuote() : formatSectorHeatPct(pct)}
