@@ -130,7 +130,7 @@ _Next major lane when soak completes: **P1 (Phase 7 hardening)**._
 
 | ID | Theme | Status |
 |----|-------|--------|
-| POS-AI-1 | `position_thesis_packet` — bull/bear/open Q with pillar refs; `POSITION_AI_SPEC.md` | Pending |
+| POS-AI-1 | `position_thesis_packet` — bull/bear/open Q with pillar refs; `POSITION_AI_SPEC.md` | **DONE 2026-09-08** (PR #246) — pure `position_thesis_packet.py` builder (bull/bear/open_questions, every bullet cites `F1`–`F5` or `layer:<name>`, confidence scaling, value-trap watch, weakest-pillar surfacing, stable `pillar_snapshot_hash`) + `deterministic_investment_read`; `docs/POSITION_AI_SPEC.md`; 18 unit tests. |
 | POS-AI-2 | `position_setup_read` — AI Investment Read + deterministic fallback | Pending |
 | POS-AI-3 | Assistant Position mode — pillar-aware page context + prompt rules | Pending |
 | POS-AI-4 | Research tab — EDGAR 10-K excerpts + Perplexity citations | Pending |
