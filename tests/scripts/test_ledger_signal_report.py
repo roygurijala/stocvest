@@ -46,6 +46,20 @@ def test_report_mode_filter_restricts_to_position() -> None:
     assert "SWING DESK" not in body
 
 
+def test_report_sample_rows_scoped_to_selected_mode() -> None:
+    rows = [
+        {"symbol": "AAA", "mode": "position", "ledger_qualified": True},
+        {"symbol": "BBB", "mode": "swing", "ledger_qualified": True},
+        {"symbol": "CCC", "mode": "day", "ledger_qualified": True},
+    ]
+    scoped = _report(modes=("position",), sample_rows=rows)
+    assert "AAA" in scoped
+    assert "BBB" not in scoped and "CCC" not in scoped
+    # Default (all modes) keeps every sample row.
+    full = _report(sample_rows=rows)
+    assert "AAA" in full and "BBB" in full and "CCC" in full
+
+
 def test_period_window_daily() -> None:
     start, end, label = _period_window("daily", date(2026, 6, 9))
     assert start == end == date(2026, 6, 9)

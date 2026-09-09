@@ -633,9 +633,17 @@ def _format_report(
     if period == "weekly":
         stats = email_stats or {"total": 0, "swing": 0, "day": 0, "other_mode": 0}
         lines.extend(_format_val1_weekly_section(desks=desks, email_stats=stats))
-    if sample_rows:
+    # When a single desk is requested (--mode), scope the sample rows to match; the
+    # default all-modes report keeps every row (including any "unknown" mode).
+    sample_scoped = sample_rows
+    if len(modes) < 3:
+        wanted = set(modes)
+        sample_scoped = [
+            it for it in sample_rows if str(it.get("mode") or "").strip().lower() in wanted
+        ]
+    if sample_scoped:
         lines.append("--- SAMPLE ROWS (up to 15, newest first) ---")
-        for item in sample_rows[:15]:
+        for item in sample_scoped[:15]:
             sym = item.get("symbol")
             mode = item.get("mode")
             qual = item.get("ledger_qualified")
