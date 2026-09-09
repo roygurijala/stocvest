@@ -21,6 +21,7 @@ import httpx
 from stocvest.data.models import NewsArticle, Newssentiment, UserProfile
 from stocvest.signals.geopolitical_scanner import ANTHROPIC_API_URL, ANTHROPIC_VERSION
 from stocvest.signals.news_copy import no_qualifying_news_reasoning
+from stocvest.signals.position_copy_guard import enforce_position_read
 from stocvest.utils.api_rate_limits import await_claude_api_slot
 from stocvest.utils.config import AI_MODEL_FAST, get_settings
 from stocvest.utils.logging import get_logger
@@ -319,11 +320,19 @@ class AIExplanationService:
             max_tokens=280,
             temperature=0.6,
         )
-        if text_ai:
+        # POS-D12: never cache/serve an AI read that slips into advice/recommendation/hype
+        # language — fall back to the deterministic (already-compliant) brief instead.
+        safe_text, used_fallback = enforce_position_read(text_ai, det)
+        if text_ai and not used_fallback:
             result = ExplanationResult(
-                text=text_ai.strip(), source="ai", upgrade_available=False, cached=False
+                text=safe_text, source="ai", upgrade_available=False, cached=False
             )
         else:
+            if text_ai and used_fallback:
+                _LOG.warning(
+                    "position_read_copy_guard_fallback",
+                    extra={"symbol": sym, "reason": "banned_copy_or_empty"},
+                )
             result = ExplanationResult(
                 text=det, source="deterministic", upgrade_available=False, cached=False
             )

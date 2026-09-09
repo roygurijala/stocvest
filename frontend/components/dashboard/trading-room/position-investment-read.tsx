@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PositionThesisPacket, ThesisBullet } from "@/lib/dashboard/trading-room/position-fundamentals-present";
 import type { useTheme } from "@/lib/theme-provider";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 
 type Colors = ReturnType<typeof useTheme>["colors"];
 
@@ -184,6 +185,10 @@ export function PositionInvestmentRead({ symbol, packet, colors, upgradeHref = "
           {state.phase === "done" && source === "ai" && state.cached ? (
             <span style={{ fontSize: 9, color: colors.textMuted }}>cached</span>
           ) : null}
+          {/* POS-D12 — informational-only disclaimer on the Position read (no advice). */}
+          <span style={{ marginLeft: "auto" }}>
+            <SignalDisclaimerChip />
+          </span>
         </div>
         <p style={{ margin: 0, fontSize: typography.scale.sm, lineHeight: 1.6, color: colors.text }}>
           {isBusy ? `Reading the pillars for ${symbol}…` : readText}
