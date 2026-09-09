@@ -346,6 +346,14 @@ class Settings(BaseSettings):
         15,
         alias="STOCVEST_POSITION_RESEARCH_MAX_PER_USER_PER_DAY",
     )
+    # ADR-004 POS-AI-12: use the stronger (Sonnet/AI_MODEL_STANDARD) tier for the Position
+    # Investment Read ONLY (low call volume, high value). Paid-gated + cache-keyed as today;
+    # the deterministic fallback + copy guard are unchanged. Default off (OFF = Haiku, the
+    # existing behavior — byte-identical prompt/caching, only the model id differs when ON).
+    stocvest_position_read_strong_model_enabled: bool = Field(
+        False,
+        alias="STOCVEST_POSITION_READ_STRONG_MODEL_ENABLED",
+    )
     # B76 — swing/day target geometry v2. Fixes two defects that produce misleading
     # risk/reward in the deep-dive "what-if" planner:
     #   (A) analyst price targets (Benzinga/Perplexity, ~12-month fundamental PTs) reach

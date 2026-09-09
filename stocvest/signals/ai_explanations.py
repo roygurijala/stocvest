@@ -23,7 +23,7 @@ from stocvest.signals.geopolitical_scanner import ANTHROPIC_API_URL, ANTHROPIC_V
 from stocvest.signals.news_copy import no_qualifying_news_reasoning
 from stocvest.signals.position_copy_guard import enforce_position_read
 from stocvest.utils.api_rate_limits import await_claude_api_slot
-from stocvest.utils.config import AI_MODEL_FAST, get_settings
+from stocvest.utils.config import AI_MODEL_FAST, AI_MODEL_STANDARD, get_settings
 from stocvest.utils.logging import get_logger
 from stocvest.utils.redis_client import get_sync_redis
 
@@ -319,6 +319,13 @@ class AIExplanationService:
             ),
             max_tokens=280,
             temperature=0.6,
+            # POS-AI-12: Position Investment Read may use the stronger tier (Sonnet) when the
+            # flag is on; every other explanation stays on the fast tier. Default OFF = Haiku.
+            model=(
+                AI_MODEL_STANDARD
+                if get_settings().stocvest_position_read_strong_model_enabled
+                else AI_MODEL_FAST
+            ),
         )
         # POS-D12: never cache/serve an AI read that slips into advice/recommendation/hype
         # language — fall back to the deterministic (already-compliant) brief instead.
@@ -535,7 +542,13 @@ class AIExplanationService:
             _LOG.debug("ai_explanations cache write skip: %s", type(exc).__name__)
 
     async def _claude_text_or_none(
-        self, *, system: str, user_prompt: str, max_tokens: int, temperature: float = 0.0
+        self,
+        *,
+        system: str,
+        user_prompt: str,
+        max_tokens: int,
+        temperature: float = 0.0,
+        model: str | None = None,
     ) -> str | None:
         settings = get_settings()
         # Tests may monkeypatch env vars after settings cache is primed.
@@ -543,7 +556,7 @@ class AIExplanationService:
         if not api_key:
             return None
         payload = {
-            "model": AI_MODEL_FAST,
+            "model": model or AI_MODEL_FAST,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "messages": [{"role": "user", "content": f"{system}\n\n{user_prompt}"}],

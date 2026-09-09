@@ -9,6 +9,7 @@ import pytest
 
 from stocvest.api.handlers.signals import ai_explanations_handler
 from stocvest.data.models import UserProfile
+from stocvest.utils.config import AI_MODEL_FAST, AI_MODEL_STANDARD
 from stocvest.signals.ai_explanations import (
     AIExplanationService,
     reset_ai_explanation_caches_for_tests,
@@ -141,3 +142,40 @@ async def test_service_falls_back_when_claude_returns_none(monkeypatch: pytest.M
     )
     assert result.source == "deterministic"
     assert result.text.endswith("Signal data only.")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "flag_on, expected_model",
+    [(False, AI_MODEL_FAST), (True, AI_MODEL_STANDARD)],
+)
+async def test_position_read_model_tier_follows_flag(
+    monkeypatch: pytest.MonkeyPatch, flag_on: bool, expected_model: str
+) -> None:
+    """POS-AI-12: the Position Investment Read uses the strong tier only when the flag is on."""
+    reset_ai_explanation_caches_for_tests()
+    svc = AIExplanationService()
+    captured: dict[str, str | None] = {}
+
+    async def _fake_claude(*, model: str | None = None, **_kw):
+        captured["model"] = model
+        return "MSFT is a durable compounder on the Position desk; watch valuation (F4). Signal data only."
+
+    monkeypatch.setattr(svc, "_claude_text_or_none", _fake_claude)
+    monkeypatch.setattr(
+        "stocvest.signals.ai_explanations.get_settings",
+        lambda: type("S", (), {"stocvest_position_read_strong_model_enabled": flag_on})(),
+    )
+
+    p = _packet()
+    result = await svc.explain_position_setup_read(
+        symbol="MSFT",
+        verdict="bullish",
+        bull_case=p["bull_case"],
+        bear_case=p["bear_case"],
+        open_questions=p["open_questions"],
+        pillar_snapshot_hash=p["pillar_snapshot_hash"],
+        user_profile=UserProfile(user_id="u", subscription_plan="pro", beta_full_access=True),
+    )
+    assert result.source == "ai"
+    assert captured["model"] == expected_model
