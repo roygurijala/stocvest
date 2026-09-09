@@ -187,6 +187,17 @@ variable "position_ledger_capture_enabled" {
   default     = true
 }
 
+variable "position_scan_batch_enabled" {
+  description = <<-EOT
+    ADR-004 POS-D15 (full): enable the weekly Sunday Position gem-scan batch over the
+    expanded FMP-prefiltered universe. Default false — ships dark. Enabling also requires
+    the snapshot store to be provisioned (STOCVEST_POSITION_SCAN_TABLE) so the ranked list
+    is warm across Lambda instances; otherwise the batch only warms the invoking instance.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "lambda_account_concurrent_execution_quota" {
   description = <<-EOT
     AWS Lambda account concurrent execution quota (Service Quotas value).

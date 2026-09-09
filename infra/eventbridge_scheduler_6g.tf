@@ -246,6 +246,34 @@ resource "aws_scheduler_schedule" "scanner_ledger_capture_position" {
   }
 }
 
+# ADR-004 POS-D15 (full) — weekly Position gem-scan batch over the expanded FMP-prefiltered
+# universe; persists the snapshot to the cross-instance store. Gated by
+# var.position_scan_batch_enabled (default false — ships dark). Enabling ALSO requires the
+# snapshot store to be provisioned + STOCVEST_POSITION_SCAN_TABLE set (else the batch scans but
+# only warms the invoking instance). Sunday 06:00 ET (pre-week, off-peak).
+resource "aws_scheduler_schedule" "scanner_position_scan_batch" {
+  name       = "stocvest-development-scanner-position-scan-batch"
+  group_name = aws_scheduler_schedule_group.scanner.name
+
+  state = var.position_scan_batch_enabled ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(0 6 ? * SUN *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.api["scanner"].arn
+    role_arn = aws_iam_role.eventbridge_scanner_invoke.arn
+    input = jsonencode({
+      source    = "eventbridge"
+      scan_type = "position_scan_batch"
+    })
+  }
+}
+
 # Opportunity Desk — full batch (funnel + bounded composite) pre-open + mid-session.
 resource "aws_scheduler_schedule" "scanner_opportunity_desk_premarket" {
   name       = "stocvest-development-scanner-opportunity-desk-premarket"

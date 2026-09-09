@@ -45,6 +45,43 @@ def _cache_set(key: str, value: str) -> None:
         pass
 
 
+async def get_position_screener_rows(
+    *,
+    min_market_cap: float,
+    limit: int = 1000,
+    exchanges: str = "NYSE,NASDAQ,AMEX",
+) -> list[dict]:
+    """Best-effort FMP company-screener rows for the Position universe pre-filter (POS-D15).
+
+    Returns raw rows (``symbol``, ``companyName``, ``marketCap``, ``price``, ``volume``,
+    ``isEtf``, ``isFund``, ``exchangeShortName``) for actively-traded, non-ETF/fund US names
+    above ``min_market_cap`` — a cheap trim before the expensive composite scan. The precise
+    dollar-volume / leverage / SPAC exclusion is applied downstream. Never raises: any missing
+    key / network / parse failure returns ``[]`` so the caller falls back to the curated list.
+    """
+    key = _api_key()
+    if not key:
+        return []
+    params = {
+        "marketCapMoreThan": str(int(max(0.0, min_market_cap))),
+        "isEtf": "false",
+        "isFund": "false",
+        "isActivelyTrading": "true",
+        "exchange": exchanges,
+        "limit": str(int(max(1, limit))),
+        "apikey": key,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+            resp = await client.get(f"{FMP_STABLE_BASE}/company-screener", params=params)
+            resp.raise_for_status()
+            rows = resp.json()
+    except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:
+        _LOG.warning("fmp position screener failed: %s", type(exc).__name__)
+        return []
+    return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+
 async def get_revenue_trend(symbol: str) -> TrendDirection:
     """
     YoY revenue trend from the last four quarterly income statements.

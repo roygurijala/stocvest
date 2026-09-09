@@ -346,6 +346,12 @@ class Settings(BaseSettings):
         15,
         alias="STOCVEST_POSITION_RESEARCH_MAX_PER_USER_PER_DAY",
     )
+    # ADR-004 POS-D15: DynamoDB table for the weekly Position scan snapshot (cross-instance
+    # gem list). Empty = in-process store only (no persistence); set to enable the Dynamo store.
+    stocvest_position_scan_table: str = Field(
+        "",
+        alias="STOCVEST_POSITION_SCAN_TABLE",
+    )
     # ADR-004 POS-AI-12: use the stronger (Sonnet/AI_MODEL_STANDARD) tier for the Position
     # Investment Read ONLY (low call volume, high value). Paid-gated + cache-keyed as today;
     # the deterministic fallback + copy guard are unchanged. Default off (OFF = Haiku, the

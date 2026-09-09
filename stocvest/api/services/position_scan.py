@@ -61,6 +61,13 @@ def reset_position_scan_cache_for_tests() -> None:
     _snapshot_cache = None
 
 
+def set_position_scan_snapshot_cache(snapshot: "PositionScanSnapshot", *, ttl_seconds: int = _SCAN_TTL_SECONDS) -> None:
+    """Warm the in-process cache with a snapshot (used by the weekly batch worker)."""
+    global _snapshot_cache
+    with _cache_lock:
+        _snapshot_cache = (time.time() + max(0, ttl_seconds), snapshot)
+
+
 @dataclass(frozen=True)
 class GemCandidate:
     symbol: str
@@ -104,6 +111,30 @@ class GemCandidate:
             "failing_gates": list(self.failing_gates),
         }
 
+    @classmethod
+    def from_store_dict(cls, d: dict[str, Any]) -> "GemCandidate":
+        """Rehydrate from a persisted ``to_api_dict`` blob (POS-D15 snapshot store)."""
+        return cls(
+            symbol=str(d.get("symbol") or "").strip().upper(),
+            tier=str(d.get("tier") or TIER_INSUFFICIENT),
+            rank=float(d.get("rank") or 0.0),
+            composite_score=d.get("composite_score"),
+            verdict=str(d.get("verdict") or "neutral"),
+            fundamentals_score=d.get("fundamentals_score"),
+            fundamentals_verdict=str(d.get("fundamentals_verdict") or "neutral"),
+            technical_score=d.get("technical_score"),
+            technical_verdict=str(d.get("technical_verdict") or "neutral"),
+            sector_verdict=str(d.get("sector_verdict") or "neutral"),
+            data_quality=str(d.get("data_quality") or "unknown"),
+            weakest_pillar_id=d.get("weakest_pillar_id"),
+            weakest_pillar_label=d.get("weakest_pillar_label"),
+            rs_vs_spy_6m_pct=d.get("rs_vs_spy_6m_pct"),
+            signal_valid_days=d.get("signal_valid_days"),
+            why=str(d.get("why") or ""),
+            pillars=list(d.get("pillars") or []),
+            failing_gates=list(d.get("failing_gates") or []),
+        )
+
 
 @dataclass(frozen=True)
 class PositionScanSnapshot:
@@ -131,6 +162,36 @@ class PositionScanSnapshot:
             "cached": cached,
             "disclaimer": API_SIGNAL_DISCLAIMER,
         }
+
+    def to_store_dict(self) -> dict[str, Any]:
+        """Full snapshot blob for cross-instance persistence (POS-D15 weekly batch)."""
+        return {
+            "generated_at": self.generated_at.replace(microsecond=0).isoformat(),
+            "universe_size": self.universe_size,
+            "candidates": [c.to_api_dict() for c in self.candidates],
+        }
+
+    @classmethod
+    def from_store_dict(cls, d: dict[str, Any]) -> "PositionScanSnapshot":
+        raw = d.get("generated_at")
+        try:
+            gen = datetime.fromisoformat(str(raw).replace("Z", "+00:00")) if raw else datetime.now(timezone.utc)
+        except ValueError:
+            gen = datetime.now(timezone.utc)
+        if gen.tzinfo is None:
+            gen = gen.replace(tzinfo=timezone.utc)
+        cands: list[GemCandidate] = []
+        for row in d.get("candidates") or []:
+            if isinstance(row, dict):
+                try:
+                    cands.append(GemCandidate.from_store_dict(row))
+                except Exception:  # noqa: BLE001 — skip a malformed row, keep the rest
+                    continue
+        return cls(
+            generated_at=gen,
+            universe_size=int(d.get("universe_size") or len(cands)),
+            candidates=cands,
+        )
 
 
 def _bottom_quartile_threshold(values: list[float]) -> float | None:
@@ -260,7 +321,19 @@ def get_cached_position_scan_snapshot() -> PositionScanSnapshot | None:
     full POS-D15 persists it to Dynamo/S3 so it is effectively always warm).
     """
     cached = _snapshot_cache
-    return cached[1] if cached is not None else None
+    if cached is not None:
+        return cached[1]
+    # Cold in-process cache: hydrate from the persisted weekly-batch snapshot if one exists
+    # (POS-D15). Lazy import avoids a module import cycle; any failure degrades to None.
+    try:
+        from stocvest.api.services.position_scan_store import get_position_scan_store
+
+        stored = get_position_scan_store().get()
+    except Exception:  # noqa: BLE001 — store is best-effort
+        stored = None
+    if stored is not None:
+        set_position_scan_snapshot_cache(stored)
+    return stored
 
 
 def get_position_scan_snapshot_sync(*, force: bool = False) -> tuple[PositionScanSnapshot, bool]:
