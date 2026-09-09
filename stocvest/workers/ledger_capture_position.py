@@ -65,11 +65,14 @@ def _regime_label(body: dict[str, Any]) -> str:
 
 
 def _signal_strength(body: dict[str, Any]) -> int:
+    # Platform convention (real_composite_engine): SignalRecord.signal_strength is the
+    # composite *confidence* (0..1) scaled to 0..100. The composite body carries that
+    # confidence in its "signal_strength" field.
     try:
-        n = int(round(abs(float(body.get("composite_score")))))  # type: ignore[arg-type]
+        conf = float(body.get("signal_strength"))  # type: ignore[arg-type]
     except (TypeError, ValueError):
-        n = 0
-    return max(0, min(100, n))
+        return 0
+    return int(round(max(0.0, min(1.0, conf)) * 100))
 
 
 def _persist_body(body: dict[str, Any], *, user_id: str, params: Any) -> tuple[str, bool] | None:

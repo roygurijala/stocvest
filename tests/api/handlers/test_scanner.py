@@ -100,6 +100,24 @@ def test_handler_routes_ledger_capture_schedule(monkeypatch: pytest.MonkeyPatch)
     assert seen == ["both", "day", "swing"]
 
 
+def test_handler_routes_ledger_capture_position_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: list[bool] = []
+
+    def _fake_position_capture() -> dict:
+        called.append(True)
+        return {"job": "ledger_capture_position", "universe": 0, "shadow": 0, "qualified": 0}
+
+    monkeypatch.setattr(
+        "stocvest.workers.ledger_capture_position.run_position_ledger_capture_sync",
+        _fake_position_capture,
+    )
+    response = handler({"source": "eventbridge", "scan_type": "ledger_capture_position"}, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body.get("job") == "ledger_capture_position"
+    assert called == [True]
+
+
 def test_handler_rejects_unknown_eventbridge_scan_type() -> None:
     response = handler({"source": "eventbridge", "scan_type": "overnight"}, {})
     assert response["statusCode"] == 400

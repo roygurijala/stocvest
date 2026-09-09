@@ -19,6 +19,7 @@ def _body(symbol: str, *, status: str = "active", verdict: str = "neutral") -> d
         "status": status,
         "verdict": verdict,
         "composite_score": 42,
+        "signal_strength": 0.62,  # composite confidence (0..1) — scaled to 0..100 on the row
         "risk_reward": 2.1,
         "last_trade_price": 100.0,
         "reference_stop_level": 90.0,
@@ -47,9 +48,11 @@ def test_helpers_map_body_fields() -> None:
     assert _regime_label(body) == "risk_off"
     assert _regime_label({}) == "neutral"
     assert _regime_label({"regime": "bull"}) == "bull"  # top-level fallback
-    assert _signal_strength(body) == 42
-    assert _signal_strength({"composite_score": None}) == 0
-    assert _signal_strength({"composite_score": 250}) == 100
+    # signal_strength = confidence (0..1) scaled to 0..100, clamped.
+    assert _signal_strength(body) == 62
+    assert _signal_strength({}) == 0
+    assert _signal_strength({"signal_strength": None}) == 0
+    assert _signal_strength({"signal_strength": 1.5}) == 100
 
 
 @pytest.mark.asyncio
