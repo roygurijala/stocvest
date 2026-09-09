@@ -9,6 +9,7 @@ export type DashboardTradingRoomDeepLink = {
 
 const INTENT_KEY = "stocvest:trading-room-open-intent";
 const INTENT_MAX_AGE_MS = 120_000;
+const LANE_PREF_PREFIX = "stocvest:deep-dive-lane:";
 
 function normalizeLane(raw: string | null | undefined): DeepDiveLane {
   if (raw === "day") return "day";
@@ -89,6 +90,57 @@ export function deepDiveLaneFromFeedCard(card: FeedCard): DeepDiveLane {
   const colon = card.id.indexOf(":");
   if (colon > 0) return feedLaneFromIdPrefix(card.id.slice(0, colon));
   return card.lane;
+}
+
+/** Remember the user's last desk tab for a symbol (session-only). */
+export function stashDeepDiveLanePreference(symbol: string, lane: DeepDiveLane): void {
+  if (typeof sessionStorage === "undefined") return;
+  const sym = symbol.trim().toUpperCase();
+  if (!sym) return;
+  sessionStorage.setItem(`${LANE_PREF_PREFIX}${sym}`, lane);
+}
+
+export function peekDeepDiveLanePreference(symbol: string): DeepDiveLane | null {
+  if (typeof sessionStorage === "undefined") return null;
+  const sym = symbol.trim().toUpperCase();
+  const raw = sessionStorage.getItem(`${LANE_PREF_PREFIX}${sym}`);
+  if (!raw) return null;
+  return normalizeLane(raw);
+}
+
+export function clearDeepDiveLanePreference(symbol: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  const sym = symbol.trim().toUpperCase();
+  if (!sym) return;
+  sessionStorage.removeItem(`${LANE_PREF_PREFIX}${sym}`);
+}
+
+/**
+ * Resolve which deep-dive lane to show: explicit card id → URL intent → session pref → card lane.
+ */
+export function resolveDeepDiveLaneForCard(
+  card: FeedCard,
+  urlIntent?: DashboardTradingRoomDeepLink | null
+): DeepDiveLane {
+  const sym = card.symbol.trim().toUpperCase();
+  const fromId = deepDiveLaneFromFeedCard(card);
+  if (fromId === "position") return "position";
+  if (urlIntent && urlIntent.symbol === sym) return urlIntent.lane;
+  const pref = peekDeepDiveLanePreference(sym);
+  if (pref) return pref;
+  return fromId;
+}
+
+/** Re-key a feed card for a deep-dive lane toggle (position uses `position:SYMBOL` id). */
+export function feedCardForDeepDiveLane(card: FeedCard, lane: DeepDiveLane): FeedCard {
+  const sym = card.symbol.trim().toUpperCase();
+  const feedLane: FeedLane = lane === "position" ? "swing" : lane;
+  return {
+    ...card,
+    id: feedCardIdForDeepLink(sym, lane),
+    lane: feedLane,
+    setupTier: lane === "position" ? "setup" : card.setupTier
+  };
 }
 
 function laneForDashboardUrl(card: FeedCard): DeepDiveLane {

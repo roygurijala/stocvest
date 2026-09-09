@@ -2,13 +2,18 @@ import { describe, expect, test } from "vitest";
 
 import {
   buildDashboardSymbolUrl,
+  clearDeepDiveLanePreference,
   clearTradingRoomOpenIntent,
   dashboardTradingRoomHref,
+  feedCardForDeepDiveLane,
   feedCardIdForDeepLink,
   parseDashboardTradingRoomDeepLink,
+  peekDeepDiveLanePreference,
+  resolveDeepDiveLaneForCard,
   syntheticFeedCardForDeepLink,
   peekTradingRoomOpenIntent,
   resolveTradingRoomOpenIntent,
+  stashDeepDiveLanePreference,
   stashTradingRoomOpenIntent
 } from "@/lib/nav/dashboard-trading-room-deeplink";
 
@@ -63,6 +68,39 @@ describe("parseDashboardTradingRoomDeepLink", () => {
 describe("feedCardIdForDeepLink", () => {
   test("builds lane-prefixed id", () => {
     expect(feedCardIdForDeepLink("powi", "swing")).toBe("swing:POWI");
+  });
+});
+
+describe("resolveDeepDiveLaneForCard", () => {
+  const swingCard = syntheticFeedCardForDeepLink({ symbol: "AAPL", lane: "swing", key: "swing:AAPL" });
+
+  test("position card id wins", () => {
+    const card = syntheticFeedCardForDeepLink({ symbol: "MSFT", lane: "position", key: "position:MSFT" });
+    expect(resolveDeepDiveLaneForCard(card)).toBe("position");
+  });
+
+  test("url intent overrides swing card when symbol matches", () => {
+    expect(
+      resolveDeepDiveLaneForCard(swingCard, { symbol: "AAPL", lane: "position", key: "position:AAPL" })
+    ).toBe("position");
+  });
+
+  test("session preference applies when id and url are silent", () => {
+    clearDeepDiveLanePreference("NVDA");
+    stashDeepDiveLanePreference("NVDA", "position");
+    const card = syntheticFeedCardForDeepLink({ symbol: "NVDA", lane: "swing", key: "swing:NVDA" });
+    expect(resolveDeepDiveLaneForCard(card)).toBe("position");
+    clearDeepDiveLanePreference("NVDA");
+  });
+});
+
+describe("feedCardForDeepDiveLane", () => {
+  test("re-keys card to position id", () => {
+    const card = syntheticFeedCardForDeepLink({ symbol: "TSLA", lane: "swing", key: "swing:TSLA" });
+    const next = feedCardForDeepDiveLane(card, "position");
+    expect(next.id).toBe("position:TSLA");
+    expect(next.lane).toBe("swing");
+    expect(next.setupTier).toBe("setup");
   });
 });
 

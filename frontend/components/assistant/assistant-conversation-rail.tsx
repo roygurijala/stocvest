@@ -48,7 +48,7 @@ interface AssistantConversationRailProps {
   /** Live page trading mode. When set, it drives the expanded chart's candle
    * interval (day → hourly, swing → daily), overriding the server's resolved
    * desk so the chart always matches the desk toggle the user is looking at. */
-  tradingMode?: "day" | "swing" | null;
+  tradingMode?: "day" | "swing" | "position" | null;
 }
 
 function nodeColor(
@@ -121,7 +121,7 @@ interface ConversationRowProps {
   contextTone: AssistantConversationRailProps["contextTone"];
   loading?: boolean;
   onQuickReply?: (text: string) => void;
-  tradingMode?: "day" | "swing" | null;
+  tradingMode?: "day" | "swing" | "position" | null;
 }
 
 function ConversationRow({ message, colors, contextTone, loading, onQuickReply, tradingMode = null }: ConversationRowProps) {
@@ -658,7 +658,7 @@ function ChartCard({
 }: {
   chart: AssistantChart;
   colors: ThemeColors;
-  tradingMode?: "day" | "swing" | null;
+  tradingMode?: "day" | "swing" | "position" | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   // The live page desk toggle wins so the expanded chart always matches what the

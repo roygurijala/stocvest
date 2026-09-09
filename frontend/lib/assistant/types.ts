@@ -67,7 +67,7 @@ export interface AssistantPageContext {
   /** Public marketing surface vs signed-in app (backend whitelists marketing/* only on public route). */
   session_mode?: "public" | "authenticated";
   /** Active trading mode if the page exposes one. */
-  trading_mode?: "swing" | "day";
+  trading_mode?: "swing" | "day" | "position";
   /** User subscription tier — forwarded from dashboard pages that know the plan. */
   subscription_plan?: "free" | "swing_pro" | "swing_day_pro";
   /** Plan-based default-watchlist symbol cap (5 / 50 / 100). */

@@ -74,7 +74,7 @@ function mergeLayerStatus(
 
 function buildLoadedAssistantBase(input: {
   pageId: string;
-  tradingMode: "day" | "swing";
+  tradingMode: "day" | "swing" | "position";
   symbol: string;
   decision: TradeDecision;
   layerStatusForCtx?: Partial<Record<AssistantLayerKey, AssistantLayerStatus>>;
@@ -115,6 +115,11 @@ function buildLoadedAssistantBase(input: {
   };
 }
 
+/** Swing/day KPI helpers — position desk reuses swing execution copy until POS-AI-3. */
+function kpiTradingMode(mode: "day" | "swing" | "position"): "day" | "swing" {
+  return mode === "day" ? "day" : "swing";
+}
+
 export type BuildSignalsPageAssistantContextInput = {
   /**
    * Page identifier emitted to the assistant. Defaults to the Signals desk
@@ -122,7 +127,7 @@ export type BuildSignalsPageAssistantContextInput = {
    * assistant knows which surface is open while reusing the identical context depth.
    */
   pageId?: string;
-  tradingMode: "day" | "swing";
+  tradingMode: "day" | "swing" | "position";
   symbol: string;
   symbolCommitted: boolean;
   hasValidSignal: boolean;
@@ -168,7 +173,7 @@ export function buildSignalsPageAssistantContext(
     alignmentRatio: input.compositeAlignmentRatio,
     maturationState: input.maturationState,
     maturationLabel: input.maturationLabel,
-    tradingMode: input.tradingMode,
+    tradingMode: kpiTradingMode(input.tradingMode),
     regularSessionOpen: input.regularSessionOpen,
     setupJudgment: input.setupJudgment
   };
@@ -222,7 +227,7 @@ export function buildSignalsPageAssistantContext(
   if (input.signalEvidence) {
     const insight =
       input.signalEvidence.insight ?? deriveEvidenceInsightFallback(input.signalEvidence);
-    const decision = synthTradeDecision(input.signalEvidence, insight, input.tradingMode);
+    const decision = synthTradeDecision(input.signalEvidence, insight, kpiTradingMode(input.tradingMode));
     const layerAlignmentPct =
       insight.alignment_ratio != null && Number.isFinite(insight.alignment_ratio)
         ? Math.round(Math.max(0, Math.min(1, insight.alignment_ratio)) * 100)

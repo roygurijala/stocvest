@@ -97,7 +97,9 @@ import {
   feedCardIdForDeepLink,
   feedLaneFromIdPrefix,
   deepDiveLaneFromFeedCard,
+  feedCardForDeepDiveLane,
   parseDashboardTradingRoomDeepLink,
+  stashDeepDiveLanePreference,
   peekTradingRoomOpenIntent,
   syntheticFeedCardForDeepLink,
   type DashboardTradingRoomDeepLink
@@ -569,6 +571,7 @@ function TradingRoomBody({
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
     userInitiatedSelectionRef.current = true;
+    stashDeepDiveLanePreference(sym, lane);
     const feedLane: FeedLane = lane === "position" ? "swing" : lane;
     const existing =
       lane === "position"
@@ -597,6 +600,42 @@ function TradingRoomBody({
       lastEvaluatedAt: null
     });
   };
+  const openSymbolFromSearch = (symbol: string, company?: string | null) => {
+    openSymbol(symbol, company, "position");
+  };
+  const applyDeepDiveLane = useCallback(
+    (source: FeedCard, lane: DeepDiveLane) => {
+      const sym = source.symbol.trim().toUpperCase();
+      if (!sym) return;
+      stashDeepDiveLanePreference(sym, lane);
+      if (lane !== "position") {
+        const existing = findFeedCardForSymbolLane(allCards, sym, lane);
+        if (existing) {
+          selectCard(existing);
+          return;
+        }
+      }
+      const snap = snapshotsBySymbol.get(sym);
+      const next: FeedCard = {
+        ...feedCardForDeepDiveLane(source, lane),
+        company:
+          source.company?.trim() ||
+          companyBySymbol.get(sym) ||
+          snap?.company_name?.trim() ||
+          null,
+        price: source.price ?? resolveSnapshotDisplayPrice(snap),
+        changePct: source.changePct ?? snapPct(snap)
+      };
+      userInitiatedSelectionRef.current = true;
+      setSelectedId(next.id);
+      setOverrideCard(next);
+      setLastSelectedId(next.id);
+      recordTradingRoomVisit();
+      selectionBootstrappedRef.current = true;
+      syncSymbolInUrl(next);
+    },
+    [allCards, companyBySymbol, snapshotsBySymbol, searchParams, pathname]
+  );
   const selected = useMemo(() => {
     if (!selectedId) return null;
     const fromFeed = cardsWithNames.find((c) => c.id === selectedId);
@@ -1086,6 +1125,7 @@ function TradingRoomBody({
       companyBySymbol={resolvedCompanyBySymbol}
       snapshot={snapshotsBySymbol.get(centerCard.symbol) ?? null}
       onBackToBrief={() => select(null)}
+      onLaneChange={(lane) => applyDeepDiveLane(centerCard, lane)}
       isMobile={isMobile}
       colors={colors}
       dataRefreshNonce={centerDataRefreshNonce}
@@ -1096,7 +1136,7 @@ function TradingRoomBody({
       onViewTopSetup={() => topCard && selectCard(topCard)}
       onViewTopSwingSetup={() => topSwingCard && selectCard(topSwingCard)}
       onSearch={undefined}
-      onSelectSymbol={(sym, company, lane) => openSymbol(sym, company, lane ?? "swing")}
+      onSelectSymbol={(sym, company, lane) => openSymbol(sym, company, lane ?? "position")}
       trackedCards={allCards}
       briefExpanded={briefExpanded}
       onBriefExpandedChange={setBriefExpanded}
@@ -1216,7 +1256,8 @@ function TradingRoomBody({
         marketOpen={marketOpen}
         counts={counts}
         updatedAtIso={updatedAtIso}
-        onOpenSymbol={openSymbol}
+        onOpenSymbol={openSymbolFromSearch}
+        searchPlaceholder="Look up any symbol on the Position desk…"
         bleed={bleed}
         isMobile={isMobile}
         colors={colors}
