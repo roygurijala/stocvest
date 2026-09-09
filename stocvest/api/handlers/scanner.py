@@ -61,6 +61,7 @@ _SCHEDULED_SCAN_TYPES = frozenset({
     "ledger_capture",
     "ledger_capture_day",
     "ledger_capture_swing",
+    "ledger_capture_position",
     "opportunity_desk",
     "opportunity_desk_movers",
 })
@@ -216,6 +217,11 @@ def _handle_eventbridge_schedule(event: LambdaEvent, context: LambdaContext) -> 
                 desk = "swing"
             result = run_watchlist_ledger_capture_sync(desk=desk)
             return ok(result)
+        if scan_type == "ledger_capture_position":
+            from stocvest.workers.ledger_capture_position import run_position_ledger_capture_sync
+
+            result = run_position_ledger_capture_sync()
+            return ok(result)
         if scan_type in ("opportunity_desk", "opportunity_desk_movers"):
             from stocvest.api.services.opportunity_desk.batch import run_opportunity_desk_batch_sync
 
@@ -237,7 +243,7 @@ def handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
                 "Scheduled scanner event requires scan_type "
                 "premarket|intraday|eod_summary|maturation_refresh|maturation_refresh_swing|"
                 "maturation_refresh_day|ledger_capture|ledger_capture_day|ledger_capture_swing|"
-                "opportunity_desk|opportunity_desk_movers."
+                "ledger_capture_position|opportunity_desk|opportunity_desk_movers."
             )
         return _handle_eventbridge_schedule(event, context)
 

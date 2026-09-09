@@ -33,6 +33,12 @@ DAY_FLATTEN_CUTOFF_ET: Final = time(15, 55)
 # Swing: max calendar days an open validation row may persist before forced exit.
 MAX_HOLD_CALENDAR_DAYS_SWING: Final = 20
 
+# Position (ADR-004 POS-D9): weekly ledger. Entries logged on the Friday cash-close window;
+# holds evaluated once per week after the Friday close (weekly structural break / expiry).
+# Validity horizon mirrors the position composite default (signal_valid_days = 90).
+POSITION_LEDGER_ENTRY_WEEKDAY_ET: Final = 4  # Friday (Mon=0)
+MAX_HOLD_CALENDAR_DAYS_POSITION: Final = 90
+
 # Minimum session cumulative volume on entry snapshot (day ledger liquidity gate).
 MIN_SESSION_VOLUME_SHARES_DAY_LEDGER: Final = 100_000.0
 
@@ -61,6 +67,23 @@ def is_swing_ledger_entry_window_et(ref_utc: datetime) -> bool:
         return False
     t = et.time()
     return SWING_LEDGER_ENTRY_START_ET <= t <= SWING_LEDGER_ENTRY_END_ET
+
+
+def is_position_ledger_entry_window_et(ref_utc: datetime) -> bool:
+    """Position validation entries are only logged in the Friday post–cash-close window."""
+    et = now_et(ref_utc)
+    if et.weekday() != POSITION_LEDGER_ENTRY_WEEKDAY_ET:
+        return False
+    t = et.time()
+    return SWING_LEDGER_ENTRY_START_ET <= t <= SWING_LEDGER_ENTRY_END_ET
+
+
+def is_position_monitor_evaluation_window_et(ref_utc: datetime) -> bool:
+    """Evaluate position holds once per week, after the Friday cash close."""
+    et = now_et(ref_utc)
+    if et.weekday() != POSITION_LEDGER_ENTRY_WEEKDAY_ET:
+        return False
+    return et.time() >= time(16, 0)
 
 
 def is_day_ledger_entry_session_et(ref_utc: datetime) -> bool:

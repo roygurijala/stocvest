@@ -312,6 +312,14 @@ class Settings(BaseSettings):
         False,
         alias="STOCVEST_DAY_PROFIT_TARGET_EXIT_ENABLED",
     )
+    # ADR-004 POS-D9 — synthetic capture user for platform-wide Position ledger shadow rows.
+    # Position "gems" are platform-wide (no per-user watchlist basis like day/swing), so the
+    # weekly ledger_capture_position job writes user-scoped rows under this id and mirrors a
+    # de-identified PUBLIC copy the report/backtest scans. Not a real account.
+    stocvest_position_ledger_user: str = Field(
+        "platform-position-ledger",
+        alias="STOCVEST_POSITION_LEDGER_USER",
+    )
     # B76 — swing/day target geometry v2. Fixes two defects that produce misleading
     # risk/reward in the deep-dive "what-if" planner:
     #   (A) analyst price targets (Benzinga/Perplexity, ~12-month fundamental PTs) reach

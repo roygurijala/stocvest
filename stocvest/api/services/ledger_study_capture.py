@@ -12,6 +12,7 @@ from stocvest.api.services.ledger_gate_attempt import persist_ledger_gate_attemp
 from stocvest.api.services.signal_recorder import get_signal_recorder
 from stocvest.api.services.signal_validation_eligibility import (
     evaluate_day_ledger_entry,
+    evaluate_position_desk_entry,
     evaluate_swing_ledger_entry,
     entry_rationale_from_gates,
     gate_blob_json,
@@ -20,6 +21,7 @@ from stocvest.api.services.validation_timing import (
     MIN_SESSION_VOLUME_SHARES_DAY_LEDGER,
     build_regime_window_key,
     is_day_ledger_entry_session_et,
+    is_position_ledger_entry_window_et,
     is_swing_ledger_entry_window_et,
 )
 from stocvest.config.signal_parameters import SignalParameters
@@ -35,6 +37,109 @@ _EVAL_SOURCE_ON_DEMAND = "on_demand"
 
 def evaluation_source_for_ledger_capture(ledger_capture: bool) -> str | None:
     return _EVAL_SOURCE_LEDGER_CAPTURE if ledger_capture else _EVAL_SOURCE_ON_DEMAND
+
+
+def maybe_persist_position_ledger_row(
+    *,
+    ledger_capture: bool,
+    user_id: str | None,
+    symbol: str,
+    response_status: str,
+    verdict: CompositeVerdict,
+    risk_reward: float | None,
+    price_at_signal: float | None,
+    layer_scores: dict[str, float],
+    signal_strength: int,
+    pattern: str,
+    params: SignalParameters,
+    snapshot_blobs: dict[str, str | None],
+    layer_scores_json: str | None,
+    stop_level: float | None,
+    reference_structure_level: float | None,
+    regime_label: str,
+    sector_label: str,
+    market_environment: dict[str, Any] | None = None,
+) -> tuple[bool, dict[str, Any]]:
+    """Persist a qualified/shadow Position ledger row (ADR-004 POS-D9).
+
+    Weekly (Friday post-close) capture over the platform gem universe. Entry gates are the
+    grounded ``evaluate_position_desk_entry`` (decision_state actionable + market environment
+    + min R/R). During the soak most rows are shadow (``ledger_qualified=False``); qualified
+    rows open a validation position monitored for weekly structural break / validity expiry.
+    """
+    if not user_id:
+        return False, {}
+    if not ledger_capture and verdict == CompositeVerdict.NEUTRAL:
+        return False, {}
+    if price_at_signal is None or float(price_at_signal) <= 0:
+        if not ledger_capture:
+            return False, {}
+        price_at_signal = 0.01  # placeholder so the study row still records the gate outcome
+
+    gen_at = datetime.now(timezone.utc)
+    eligible, gates = evaluate_position_desk_entry(
+        response_status=response_status,
+        verdict=verdict,
+        risk_reward=risk_reward,
+        market_environment=market_environment,
+    )
+    if eligible:
+        if not is_position_ledger_entry_window_et(gen_at):
+            eligible = False
+            gates["entry_weekly_close_window"] = {
+                "pass": False,
+                "need": "friday_post_regular_close_window_et",
+            }
+        elif get_signal_recorder().has_open_validation_position(user_id, symbol, "position"):
+            eligible = False
+            gates["dedupe_open_position"] = {
+                "pass": False,
+                "reason": "one_open_validation_per_symbol_mode",
+            }
+
+    eval_src = evaluation_source_for_ledger_capture(ledger_capture)
+    ny_date = gen_at.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    rwk = build_regime_window_key(str(regime_label or "neutral"), gen_at)
+    record = SignalRecord(
+        signal_id=str(uuid4()),
+        symbol=symbol,
+        direction=str(verdict.value),
+        signal_strength=signal_strength,
+        pattern=pattern,
+        layer_scores=layer_scores,
+        price_at_signal=float(price_at_signal),
+        generated_at=gen_at,
+        user_id=user_id,
+        parameter_version=params.version,
+        technical_snapshot_json=snapshot_blobs.get("technical_snapshot_json"),
+        news_snapshot_json=snapshot_blobs.get("news_snapshot_json"),
+        macro_snapshot_json=snapshot_blobs.get("macro_snapshot_json"),
+        sector_snapshot_json=snapshot_blobs.get("sector_snapshot_json"),
+        internals_snapshot_json=snapshot_blobs.get("internals_snapshot_json"),
+        layer_scores_json=layer_scores_json or snapshot_blobs.get("layer_scores_json"),
+        status=response_status if response_status in ("active", "incomplete") else "active",
+        mode="position",
+        ledger_qualified=eligible,
+        gate_status_json=gate_blob_json(
+            gates,
+            qualified=eligible,
+            evaluation_source=eval_src,
+            market_environment=market_environment,
+        ),
+        entry_rationale=entry_rationale_from_gates(eligible, "position"),
+        decision_state_entry=None,
+        capture_kind="qualified" if eligible else "shadow",
+        ledger_entry_date_et=ny_date if eligible else None,
+        setup_type="position_composite",
+        stop_level=stop_level,
+        reference_structure_level=reference_structure_level,
+        regime_label_at_entry=regime_label,
+        sector_label_at_entry=sector_label,
+        regime_window_key=rwk,
+        ledger_position_open=bool(eligible),
+    )
+    persist_ledger_gate_attempt(record, ledger_capture=ledger_capture, mode="position")
+    return eligible, gates
 
 
 def maybe_persist_ledger_study_row(

@@ -161,3 +161,87 @@ async def test_day_profit_target_exit_inert_when_disabled(monkeypatch: pytest.Mo
     rec = _DayRecorder()
     await run_ledger_position_monitor(_DayPolygon(), rec)  # type: ignore[arg-type]
     assert all(c.get("exit_rule") != "day_profit_target" for c in rec.closed)
+
+
+# --- Position desk weekly exits (ADR-004 POS-D9) -------------------------------------------
+
+
+class _PositionRecorder:
+    def __init__(self, row: _OpenRow) -> None:
+        self._row = row
+        self.closed: list[dict] = []
+
+    def iter_open_validation_records(self):
+        return [self._row]
+
+    def close_validation_position(self, **kwargs):  # noqa: ANN003
+        self.closed.append(kwargs)
+        return True
+
+
+def _patch_position_monitor(monkeypatch: pytest.MonkeyPatch, *, window_open: bool) -> None:
+    async def _fake_regime(_client):  # noqa: ANN001
+        return "neutral"
+
+    monkeypatch.setattr(
+        "stocvest.api.services.ledger_position_monitor._current_macro_regime", _fake_regime
+    )
+    monkeypatch.setattr(
+        "stocvest.api.services.ledger_position_monitor.is_position_monitor_evaluation_window_et",
+        lambda _now: window_open,
+    )
+
+
+@pytest.mark.asyncio
+async def test_position_structure_break_closes(monkeypatch: pytest.MonkeyPatch):
+    """Weekly close through the reference stop closes via position_structure_invalidated."""
+    _patch_position_monitor(monkeypatch, window_open=True)
+    row = _OpenRow(
+        signal_id="pos-1",
+        symbol="AAPL",
+        mode="position",
+        direction="bullish",
+        generated_at=datetime(2026, 8, 1, 20, 0, tzinfo=timezone.utc),
+        stop_level=190.0,  # snapshot close 185 < 190 -> invalidated
+    )
+    rec = _PositionRecorder(row)
+    counts = await run_ledger_position_monitor(_FakePolygon(), rec)  # type: ignore[arg-type]
+    assert counts["position_closed"] == 1
+    assert rec.closed[0]["exit_rule"] == "position_structure_invalidated"
+    assert rec.closed[0]["mode"] == "position"
+
+
+@pytest.mark.asyncio
+async def test_position_validity_expiry_closes(monkeypatch: pytest.MonkeyPatch):
+    """No structure break, but >90 calendar days open -> position_validity_expiry."""
+    _patch_position_monitor(monkeypatch, window_open=True)
+    row = _OpenRow(
+        signal_id="pos-2",
+        symbol="AAPL",
+        mode="position",
+        direction="bullish",
+        generated_at=datetime(2026, 1, 1, 20, 0, tzinfo=timezone.utc),
+        stop_level=10.0,  # far below close 185 -> no break
+    )
+    rec = _PositionRecorder(row)
+    counts = await run_ledger_position_monitor(_FakePolygon(), rec)  # type: ignore[arg-type]
+    assert counts["position_closed"] == 1
+    assert rec.closed[0]["exit_rule"] == "position_validity_expiry"
+
+
+@pytest.mark.asyncio
+async def test_position_skipped_outside_weekly_window(monkeypatch: pytest.MonkeyPatch):
+    _patch_position_monitor(monkeypatch, window_open=False)
+    row = _OpenRow(
+        signal_id="pos-3",
+        symbol="AAPL",
+        mode="position",
+        direction="bullish",
+        generated_at=datetime(2026, 8, 1, 20, 0, tzinfo=timezone.utc),
+        stop_level=190.0,
+    )
+    rec = _PositionRecorder(row)
+    counts = await run_ledger_position_monitor(_FakePolygon(), rec)  # type: ignore[arg-type]
+    assert counts["position_closed"] == 0
+    assert counts["skipped"] == 1
+    assert rec.closed == []
