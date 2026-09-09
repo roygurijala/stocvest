@@ -5,12 +5,16 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
+import { PositionCompareTable } from "@/components/invest/position-compare-table";
 import { borderRadius, roleAccents, spacing, typography } from "@/lib/design-system";
 import {
   applyPositionGemFilter,
+  buildPositionCompareMatrix,
   buildPositionGemDisplayRows,
   DEFAULT_POSITION_GEM_FILTER,
+  POSITION_COMPARE_MAX,
   positionGemTierCopy,
+  togglePositionCompareSelection,
   type PositionGemDisplayRow,
   type PositionGemFilter,
   type PositionGemTierFilter
@@ -37,6 +41,7 @@ export function InvestPageClient() {
 
   const [filter, setFilter] = useState<PositionGemFilter>(DEFAULT_POSITION_GEM_FILTER);
   const [searchInput, setSearchInput] = useState("");
+  const [compareSelected, setCompareSelected] = useState<string[]>([]);
 
   const { response, isInitialLoading, error } = usePositionCandidates(filter.tier);
 
@@ -45,6 +50,15 @@ export function InvestPageClient() {
     const filtered = applyPositionGemFilter(response.candidates, filter);
     return buildPositionGemDisplayRows(filtered);
   }, [response, filter]);
+
+  const compareMatrix = useMemo(
+    () => buildPositionCompareMatrix(response?.candidates, compareSelected),
+    [response?.candidates, compareSelected]
+  );
+
+  function toggleCompare(symbol: string) {
+    setCompareSelected((prev) => togglePositionCompareSelection(prev, symbol));
+  }
 
   const scanLabel = useMemo(() => {
     if (!response?.scanGeneratedAt) return null;
@@ -196,6 +210,15 @@ export function InvestPageClient() {
         </label>
       </div>
 
+      {/* POS-AI-6 — deterministic 2–4 name compare (renders only when ≥2 selected) */}
+      <PositionCompareTable
+        matrix={compareMatrix}
+        colors={colors}
+        accentColor={accent.accent}
+        onRemove={(sym) => toggleCompare(sym)}
+        onClear={() => setCompareSelected([])}
+      />
+
       {/* Table */}
       {error ? (
         <p data-testid="invest-error" style={{ margin: 0, fontSize: typography.scale.sm, color: colors.caution }}>
@@ -214,6 +237,7 @@ export function InvestPageClient() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: typography.scale.sm }}>
             <thead>
               <tr style={{ textAlign: "left", color: colors.textMuted, fontSize: typography.scale.xs }}>
+                <th style={{ padding: spacing[2] }}>Compare</th>
                 <th style={{ padding: spacing[2] }}>Symbol</th>
                 <th style={{ padding: spacing[2] }}>Quality</th>
                 <th style={{ padding: spacing[2] }}>Fundamentals</th>
@@ -230,6 +254,19 @@ export function InvestPageClient() {
                   data-testid={`invest-row-${row.symbol}`}
                   style={{ borderTop: `1px solid ${colors.border}` }}
                 >
+                  <td style={{ padding: spacing[2] }}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Add ${row.symbol} to compare`}
+                      data-testid={`invest-compare-${row.symbol}`}
+                      checked={compareSelected.includes(row.symbol)}
+                      disabled={
+                        !compareSelected.includes(row.symbol) &&
+                        compareSelected.length >= POSITION_COMPARE_MAX
+                      }
+                      onChange={() => toggleCompare(row.symbol)}
+                    />
+                  </td>
                   <td style={{ padding: spacing[2], fontWeight: 700 }}>
                     <Link href={row.href} style={{ color: accent.accent, textDecoration: "none" }}>
                       {row.symbol}

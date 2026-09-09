@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyPositionGemFilter,
+  buildPositionCompareMatrix,
   buildPositionGemDisplayRows,
   buildPositionGemRailItems,
   buildWatchlistQualityBadge,
@@ -12,6 +13,7 @@ import {
   positionGemFilterToQuery,
   positionGemTierCopy,
   positionGemTierLabel,
+  togglePositionCompareSelection,
   type PositionGemCandidate
 } from "@/lib/dashboard/position-ranked-home-present";
 import { watchlistQualityDotColor } from "@/lib/dashboard/trading-room/watchlist-rail-present";
@@ -210,5 +212,85 @@ describe("position watchlist quality badge (POS-D14)", () => {
     expect(buildPositionGemRailItems(cands, 0)).toEqual([]);
     expect(buildPositionGemRailItems(null)).toEqual([]);
     expect(buildPositionGemRailItems(undefined)).toEqual([]);
+  });
+});
+
+// --------------------------------------------------------------- POS-AI-6 compare matrix
+
+function pillar(id: string, score: number | null, verdict = "neutral"): Record<string, unknown> {
+  return { pillar_id: id, label: `${id} label`, score, verdict, data_quality: "high" };
+}
+
+function compareCands(): PositionGemCandidate[] {
+  return parsePositionCandidates({
+    candidates: [
+      apiRow({
+        symbol: "AAPL",
+        tier: "gem",
+        fundamentals_score: 80,
+        technical_score: 66,
+        pillars: [pillar("F1", 80, "bullish"), pillar("F3", 55), pillar("F4", 40, "bearish"), pillar("F2", 70, "bullish")]
+      }),
+      apiRow({
+        symbol: "MSFT",
+        tier: "strong",
+        fundamentals_score: 72,
+        technical_score: 60,
+        // no F4 for MSFT (absent cell); adds an out-of-order extra id F6
+        pillars: [pillar("F1", 90, "bullish"), pillar("F2", 65), pillar("F6", 50), pillar("F3", 58)]
+      }),
+      apiRow({ symbol: "NVDA", tier: "gem", pillars: [pillar("F1", 75, "bullish")] })
+    ]
+  })!.candidates;
+}
+
+describe("buildPositionCompareMatrix", () => {
+  it("returns insufficient when fewer than two names resolve", () => {
+    const cands = compareCands();
+    expect(buildPositionCompareMatrix(cands, ["AAPL"]).status).toBe("insufficient");
+    expect(buildPositionCompareMatrix(cands, ["AAPL", "ZZZZ"]).status).toBe("insufficient");
+    expect(buildPositionCompareMatrix([], ["AAPL", "MSFT"]).status).toBe("insufficient");
+  });
+
+  it("orders columns by selection, canonicalizes pillars (F1..F5 then extras sorted)", () => {
+    const m = buildPositionCompareMatrix(compareCands(), ["msft", "aapl"]);
+    expect(m.status).toBe("ok");
+    expect(m.columns.map((c) => c.symbol)).toEqual(["MSFT", "AAPL"]);
+    // union present across both: F1,F2,F3,F4,F6 → F1..F4 canonical, then F6 (extra) sorted last
+    expect(m.pillarRows.map((r) => r.pillarId)).toEqual(["F1", "F2", "F3", "F4", "F6"]);
+    expect(m.columns[0].href).toContain("ref=invest-compare");
+  });
+
+  it("marks an absent pillar as a null cell and computes an informational spread only", () => {
+    const m = buildPositionCompareMatrix(compareCands(), ["MSFT", "AAPL"]);
+    const f4 = m.pillarRows.find((r) => r.pillarId === "F4")!;
+    // MSFT has no F4 → null; AAPL has F4=40
+    expect(f4.cells[0]).toBeNull();
+    expect(f4.cells[1]?.score).toBe(40);
+    expect(f4.spread).toBeNull(); // only one score → no spread
+    const f1 = m.pillarRows.find((r) => r.pillarId === "F1")!;
+    expect(f1.spread).toBe(10); // MSFT 90 vs AAPL 80
+    // never crowns a winner
+    expect(m.note.toLowerCase()).toContain("not a ranking");
+    expect(m).not.toHaveProperty("winner");
+    expect(m).not.toHaveProperty("best");
+  });
+
+  it("caps the comparison at four names and drops duplicates", () => {
+    const cands = parsePositionCandidates({
+      candidates: ["A", "B", "C", "D", "E"].map((s) => apiRow({ symbol: s }))
+    })!.candidates;
+    const m = buildPositionCompareMatrix(cands, ["A", "a", "B", "C", "D", "E"]);
+    expect(m.columns.map((c) => c.symbol)).toEqual(["A", "B", "C", "D"]);
+  });
+});
+
+describe("togglePositionCompareSelection", () => {
+  it("adds, removes, and caps at the max", () => {
+    expect(togglePositionCompareSelection([], "aapl")).toEqual(["AAPL"]);
+    expect(togglePositionCompareSelection(["AAPL"], "AAPL")).toEqual([]);
+    expect(togglePositionCompareSelection(["A", "B", "C", "D"], "E")).toEqual(["A", "B", "C", "D"]);
+    expect(togglePositionCompareSelection(["A", "B", "C", "D"], "A")).toEqual(["B", "C", "D"]);
+    expect(togglePositionCompareSelection([], "")).toEqual([]);
   });
 });

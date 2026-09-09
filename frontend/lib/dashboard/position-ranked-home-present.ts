@@ -328,6 +328,153 @@ export function buildWatchlistQualityMap(
   return out;
 }
 
+// --------------------------------------------------------------- POS-AI-6 FE compare matrix
+
+/**
+ * ADR-004 POS-AI-6 — deterministic pillar diff matrix for a visual 2–4 name head-to-head on
+ * `/dashboard/invest` (Journey C). Pure client-side over the already-fetched candidate rows —
+ * no new HTTP call. Mirrors the assistant compare contract: canonical F1..F5 pillar order
+ * (then any extra ids, sorted), differences surfaced pillar-by-pillar, and — critically — the
+ * matrix NEVER marks a single "best"/"winner" cell. It is informational glass box only.
+ */
+export const POSITION_COMPARE_MIN = 2;
+export const POSITION_COMPARE_MAX = 4;
+const COMPARE_PILLAR_ORDER = ["F1", "F2", "F3", "F4", "F5"] as const;
+
+export type PositionCompareCell = {
+  score: number | null;
+  verdict: string;
+  verdictLabel: string;
+  dataQuality: string;
+};
+
+export type PositionCompareColumn = {
+  symbol: string;
+  href: string;
+  tier: PositionGemTier;
+  tierLabel: string;
+  fundamentalsScore: number | null;
+  technicalScore: number | null;
+  weakestLabel: string;
+};
+
+export type PositionComparePillarRow = {
+  pillarId: string;
+  label: string;
+  /** Aligned 1:1 with `columns`; `null` = the pillar is absent for that symbol. */
+  cells: (PositionCompareCell | null)[];
+  /** Informational max−min of the available scores (no winner is implied). */
+  spread: number | null;
+};
+
+export type PositionCompareMatrix = {
+  columns: PositionCompareColumn[];
+  pillarRows: PositionComparePillarRow[];
+  status: "ok" | "insufficient";
+  note: string;
+};
+
+/**
+ * Resolve the caller's ordered `selectedSymbols` against the fetched candidates and build the
+ * compare matrix. Symbols not present in the current screen (e.g. after a tier switch) are
+ * dropped; fewer than two resolvable names yields `status:"insufficient"`.
+ */
+export function buildPositionCompareMatrix(
+  candidates: readonly PositionGemCandidate[] | null | undefined,
+  selectedSymbols: readonly string[]
+): PositionCompareMatrix {
+  const bySymbol = new Map<string, PositionGemCandidate>();
+  for (const c of candidates ?? []) bySymbol.set(c.symbol.trim().toUpperCase(), c);
+
+  const chosen: PositionGemCandidate[] = [];
+  const usedSymbols = new Set<string>();
+  for (const raw of selectedSymbols) {
+    const sym = String(raw ?? "").trim().toUpperCase();
+    if (!sym || usedSymbols.has(sym)) continue;
+    const cand = bySymbol.get(sym);
+    if (!cand) continue;
+    usedSymbols.add(sym);
+    chosen.push(cand);
+    if (chosen.length >= POSITION_COMPARE_MAX) break;
+  }
+
+  const columns: PositionCompareColumn[] = chosen.map((c) => ({
+    symbol: c.symbol,
+    href: dashboardTradingRoomHref(c.symbol, "position", { ref: "invest-compare" }),
+    tier: c.tier,
+    tierLabel: positionGemTierLabel(c.tier),
+    fundamentalsScore: c.fundamentalsScore,
+    technicalScore: c.technicalScore,
+    weakestLabel:
+      c.weakestPillarId && c.weakestPillarLabel
+        ? `${c.weakestPillarId} · ${c.weakestPillarLabel}`
+        : "—"
+  }));
+
+  if (columns.length < POSITION_COMPARE_MIN) {
+    return {
+      columns,
+      pillarRows: [],
+      status: "insufficient",
+      note: "Select 2–4 names to compare pillar by pillar."
+    };
+  }
+
+  const present = new Set<string>();
+  const labelById = new Map<string, string>();
+  for (const c of chosen) {
+    for (const p of c.pillars) {
+      present.add(p.pillarId);
+      if (!labelById.has(p.pillarId)) labelById.set(p.pillarId, p.label);
+    }
+  }
+  const orderedIds = [
+    ...COMPARE_PILLAR_ORDER.filter((id) => present.has(id)),
+    ...[...present].filter((id) => !COMPARE_PILLAR_ORDER.includes(id as (typeof COMPARE_PILLAR_ORDER)[number])).sort()
+  ];
+
+  const pillarRows: PositionComparePillarRow[] = orderedIds.map((id) => {
+    const cells: (PositionCompareCell | null)[] = chosen.map((c) => {
+      const p = c.pillars.find((pp) => pp.pillarId === id);
+      if (!p) return null;
+      return {
+        score: p.score,
+        verdict: p.verdict,
+        verdictLabel: verdictLabel(p.verdict),
+        dataQuality: p.dataQuality
+      };
+    });
+    const scores = cells
+      .map((cell) => cell?.score)
+      .filter((s): s is number => s != null && Number.isFinite(s));
+    const spread = scores.length >= 2 ? Math.max(...scores) - Math.min(...scores) : null;
+    return { pillarId: id, label: labelById.get(id) ?? id, cells, spread };
+  });
+
+  return {
+    columns,
+    pillarRows,
+    status: "ok",
+    note: "Pillar-by-pillar differences only — this is not a ranking and names no single \u201Cbest\u201D pick."
+  };
+}
+
+/**
+ * Toggle a symbol in an ordered selection, capped at `POSITION_COMPARE_MAX`. Returns the
+ * unchanged list when adding beyond the cap (the UI should disable those checkboxes too).
+ */
+export function togglePositionCompareSelection(
+  selected: readonly string[],
+  symbol: string,
+  max: number = POSITION_COMPARE_MAX
+): string[] {
+  const sym = String(symbol ?? "").trim().toUpperCase();
+  if (!sym) return [...selected];
+  if (selected.includes(sym)) return selected.filter((s) => s !== sym);
+  if (selected.length >= max) return [...selected];
+  return [...selected, sym];
+}
+
 // --------------------------------------------------------------------------- shareable filter URLs
 
 /** Parse `?tier=gem&fund=min:70&tech=min:55&q=AAPL` into a filter (ADR sharable links). */
