@@ -52,6 +52,19 @@ Single source of truth for signal scoring math, so scanner / watchlist / scenari
 - **Layer alignment** (`layer_directional_alignment`) — ratio→whole-layer count via `ratio_to_layer_count(..., mode=)`; swing/day use 6 layers, position uses 7 (includes fundamentals). `composite_direction_fields` reads `mode` from the response body.
 - **Frontend** — `signals-page-present` alignment count + `signal-evidence` directional→0-100 conversion route through the mirror; the fallback R/R path now threads T2 **provenance** so a resistance-anchored T2 is gate-eligible.
 
+### Position universe hygiene (gem gate G8, ADR-004 POS-D11)
+
+Gem discovery screens each candidate through `position_gem_gates.py` (G1–G9). **G8 — universe hygiene** delegates to **`position_universe_filter.py`** (`passes_position_universe_filter`). A failed G8 forces tier **Insufficient** (never surfaced), independent of fundamentals.
+
+| Check | Rule |
+|-------|------|
+| Leveraged / inverse | Symbol in the shared GEO-2 blocklist (`swing_universe_filter.SWING_EXCLUDED_SYMBOLS`) + a position-specific extension (`POSITION_EXTRA_EXCLUDED_SYMBOLS`), or a company-name marker (`3X`, `UltraPro`, `Daily Bull/Bear`, `Inverse`, …). **Always enforced.** |
+| SPAC / blank-check shell | Company-name markers (`Acquisition Corp`, `Blank Check`, `SPAC`). **Always enforced** when a name is present. |
+| Micro-cap | `market_cap < STOCVEST_POSITION_MIN_MARKET_CAP_USD` (default **$500M**). Applied **only when** `market_cap` is present (graceful pass otherwise, like G6). |
+| Illiquidity | `avg_dollar_volume < STOCVEST_POSITION_MIN_AVG_DOLLAR_VOLUME_USD` (default **$20M**). Applied **only when** the metric is present. |
+
+The curated v1 scan universe scores without reference financials, so the cap/ADV floors are inert there and bind once the full POS-D15 batch threads `market_cap` / `avg_dollar_volume` into the body. Both floors are disabled by setting the threshold to `0`.
+
 ## Layers
 
 ### Technical — day (`technical_analyzer.py`)

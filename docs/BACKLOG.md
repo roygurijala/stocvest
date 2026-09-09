@@ -105,7 +105,7 @@ _Next major lane when soak completes: **P1 (Phase 7 hardening)**._
 | POS-D4 | `position_composite_engine` + `POST /v1/signals/composite/position` + BFF | **DONE 2026-09-08** |
 | POS-D5 | Position geometry (wide stops, T1/T2, weekly ATR) | **DONE 2026-09-08** |
 | POS-D6 | Signal Math Contract — `position_composite` weights | **DONE 2026-09-08** |
-| POS-D11 | Position universe filters (leveraged/micro-cap/liquidity) | Pending |
+| POS-D11 | Position universe filters (leveraged/micro-cap/liquidity) | **DONE 2026-09-08** (PR #246) — `position_universe_filter.py` wires gem gate **G8** (was a `True` stub): reuses the GEO-2 `swing_universe_filter` leveraged/inverse blocklist + `POSITION_EXTRA_EXCLUDED_SYMBOLS` + company-name leveraged/SPAC markers, plus configurable micro-cap (`STOCVEST_POSITION_MIN_MARKET_CAP_USD`, $500M) / illiquidity (`STOCVEST_POSITION_MIN_AVG_DOLLAR_VOLUME_USD`, $20M) floors applied only when the body carries `market_cap`/`avg_dollar_volume` (graceful pass otherwise). Failed G8 → tier **Insufficient** (never surfaced). Documented in SIGNAL_ENGINE.md § Position universe hygiene; +19 tests. |
 | POS-D12 | Counsel + investment + AI thesis copy review | Pending |
 
 ### UI & discovery

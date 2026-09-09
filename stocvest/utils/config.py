@@ -320,6 +320,18 @@ class Settings(BaseSettings):
         "platform-position-ledger",
         alias="STOCVEST_POSITION_LEDGER_USER",
     )
+    # ADR-004 POS-D11 — Position universe hygiene (gem gate G8). Micro-cap / illiquidity
+    # floors, applied only when the candidate body carries market cap / avg dollar volume
+    # (graceful pass when absent, e.g. the curated v1 large-cap universe). Leveraged/inverse
+    # and SPAC-shell exclusions are symbol/name based and always enforced.
+    stocvest_position_min_market_cap_usd: float = Field(
+        500_000_000.0,
+        alias="STOCVEST_POSITION_MIN_MARKET_CAP_USD",
+    )
+    stocvest_position_min_avg_dollar_volume_usd: float = Field(
+        20_000_000.0,
+        alias="STOCVEST_POSITION_MIN_AVG_DOLLAR_VOLUME_USD",
+    )
     # B76 — swing/day target geometry v2. Fixes two defects that produce misleading
     # risk/reward in the deep-dive "what-if" planner:
     #   (A) analyst price targets (Benzinga/Perplexity, ~12-month fundamental PTs) reach

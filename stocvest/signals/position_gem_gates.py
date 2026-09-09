@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from stocvest.signals.position_universe_filter import passes_position_universe_filter
+
 # ---------------------------------------------------------------------------
 # Constants (v1 defaults — Secrets-tunable when POS-D15 batch scales)
 # ---------------------------------------------------------------------------
@@ -83,6 +85,11 @@ class CandidateFeatures:
     macro_verdict: str
     regime: str
     signal_valid_days: int | None
+    # POS-D11 universe hygiene inputs (optional — absent in the curated v1 large-cap body,
+    # threaded in when the full POS-D15 batch carries reference financials).
+    company_name: str | None = None
+    market_cap: float | None = None
+    avg_dollar_volume: float | None = None
 
 
 def _layer_row(body: dict[str, Any], layer: str) -> dict[str, Any]:
@@ -182,6 +189,9 @@ def extract_candidate_features(body: dict[str, Any]) -> CandidateFeatures:
         macro_verdict=str(macro_row.get("verdict") or "neutral").strip().lower(),
         regime=str(body.get("regime") or body.get("market_regime") or "").strip().lower(),
         signal_valid_days=_as_int(body.get("signal_valid_days")),
+        company_name=(str(body.get("company_name")).strip() or None) if body.get("company_name") else None,
+        market_cap=_as_float(body.get("market_cap")),
+        avg_dollar_volume=_as_float(body.get("avg_dollar_volume") or body.get("dollar_volume")),
     )
 
 
@@ -259,9 +269,15 @@ def evaluate_gem_gates(
     # G7 — Macro / sector: regime not avoid; sector not strongly bearish.
     g7 = f.regime not in _AVOID_REGIMES and f.sector_verdict != "bearish"
 
-    # G8 — Universe hygiene: passes position_universe_filter (POS-D11).
-    # Stub: curated liquid US universe is pre-filtered upstream; always passes here.
-    g8 = True
+    # G8 — Universe hygiene: passes position_universe_filter (POS-D11). Blocks leveraged/
+    # inverse ETFs and SPAC shells (symbol/name based, always enforced) plus configurable
+    # micro-cap / illiquidity floors when reference financials are available.
+    g8 = passes_position_universe_filter(
+        f.symbol,
+        company_name=f.company_name,
+        market_cap=f.market_cap,
+        avg_dollar_volume=f.avg_dollar_volume,
+    )
 
     # G9 — Data quality: layer data_quality >= medium and >= 4 pillars medium+.
     dq_ok = f.fundamentals_data_quality in ("high", "medium")
@@ -304,6 +320,10 @@ def compute_gem_rank(f: CandidateFeatures) -> float:
 def resolve_gem_tier(f: CandidateFeatures, gates: dict[str, bool]) -> str:
     if f.status == "insufficient_data" or f.fundamentals_score is None:
         return TIER_INSUFFICIENT
+    # POS-D11: a failed universe filter (leveraged/inverse, SPAC shell, micro-cap/illiquid)
+    # is not investable — never surfaced, regardless of fundamentals.
+    if not gates.get("G8", False):
+        return TIER_INSUFFICIENT
     if all(gates.get(gid, False) for gid in GEM_GATE_IDS):
         return TIER_GEM
     strong_core = all(gates.get(gid, False) for gid in ("G1", "G2", "G3", "G8", "G9"))
@@ -333,6 +353,8 @@ def build_gem_why(f: CandidateFeatures, gates: dict[str, bool], tier: str) -> st
         missing_txt = ", ".join(env[g] for g in missing) or "environment"
         return f"Strong fundamentals; {missing_txt} needs review. Screening only."
     if tier == TIER_INSUFFICIENT:
+        if not gates.get("G8", False):
+            return "Excluded by universe hygiene (leveraged/inverse, SPAC, or micro-cap/illiquid) — not screened."
         return "Insufficient fundamentals coverage — not screened."
     fails = failing_gates(gates)
     return f"Mixed read — {weak_txt} (gates missed: {', '.join(fails) or 'none'})."

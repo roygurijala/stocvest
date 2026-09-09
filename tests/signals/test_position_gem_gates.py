@@ -401,3 +401,50 @@ def test_evaluate_does_not_mutate_body() -> None:
     snapshot = deepcopy(body)
     evaluate_gem_gates(_features(body))
     assert body == snapshot
+
+
+# --------------------------------------------------------------------------- G8 (POS-D11)
+
+
+def test_g8_passes_for_plain_equity() -> None:
+    assert evaluate_gem_gates(_features(_gem_body()))["G8"] is True
+
+
+def test_g8_fails_for_leveraged_symbol() -> None:
+    body = _gem_body()
+    body["symbol"] = "SQQQ"
+    gates = evaluate_gem_gates(_features(body))
+    assert gates["G8"] is False
+
+
+def test_g8_fails_for_leveraged_name_marker() -> None:
+    body = _gem_body()
+    body["symbol"] = "XYZ"
+    body["company_name"] = "ProShares UltraPro QQQ"
+    gates = evaluate_gem_gates(_features(body))
+    assert gates["G8"] is False
+
+
+def test_g8_fails_for_spac_shell_name() -> None:
+    body = _gem_body()
+    body["company_name"] = "Foo Acquisition Corp"
+    gates = evaluate_gem_gates(_features(body))
+    assert gates["G8"] is False
+
+
+def test_g8_fails_below_market_cap_when_present() -> None:
+    body = _gem_body()
+    body["market_cap"] = 100_000_000  # below the 500M default floor
+    gates = evaluate_gem_gates(_features(body))
+    assert gates["G8"] is False
+
+
+def test_failed_g8_forces_insufficient_tier() -> None:
+    body = _gem_body()  # otherwise a clean gem
+    body["symbol"] = "SQQQ"
+    f = _features(body)
+    gates = evaluate_gem_gates(f, rs_bottom_quartile_threshold=-5.0)
+    assert gates["G8"] is False
+    assert resolve_gem_tier(f, gates) == TIER_INSUFFICIENT
+    why = build_gem_why(f, gates, TIER_INSUFFICIENT)
+    assert "universe hygiene" in why.lower()
