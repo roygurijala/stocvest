@@ -1463,7 +1463,7 @@ def test_prompt_carries_gem_discovery_and_lookup_block_rules() -> None:
     """The prompt must teach the model how to use the two long-horizon gem blocks
     and forbid inventing tiers or crowning a single 'best' pick."""
     text = ASSISTANT_SYSTEM_PROMPT
-    assert "GEM DISCOVERY & LOOKUP CONTEXT BLOCKS" in text
+    assert "GEM DISCOVERY, LOOKUP & COMPARE CONTEXT BLOCKS" in text
     assert "=== POSITION GEM CANDIDATES ===" in text
     assert "=== POSITION GEM LOOKUP (SYMBOL) ===" in text
     assert "on_gem_list=false" in text
