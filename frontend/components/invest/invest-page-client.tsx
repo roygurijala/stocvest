@@ -144,7 +144,14 @@ export function InvestPageClient() {
               type="button"
               data-testid={`invest-tier-${tab.id}`}
               aria-pressed={active}
-              onClick={() => setFilter((f) => ({ ...f, tier: tab.id }))}
+              onClick={() => {
+                if (tab.id === filter.tier) return;
+                // Reset compare on a tier switch so selections can't linger invisibly
+                // (a name may not exist in the new tier's screen). Filter/slider changes
+                // deliberately keep the selection.
+                setCompareSelected([]);
+                setFilter((f) => ({ ...f, tier: tab.id }));
+              }}
               style={{
                 background: active ? accent.accent : colors.surface,
                 border: `1px solid ${active ? accent.borderAccent : colors.border}`,
