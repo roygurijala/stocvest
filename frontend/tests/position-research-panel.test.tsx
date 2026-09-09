@@ -101,6 +101,43 @@ describe("PositionResearchPanel — SEC financials", () => {
     expect(screen.getByText(/differs 21\.7%/i)).toBeTruthy();
   });
 
+  it("renders the 10-K filings digest passages when present", async () => {
+    const payload = {
+      ...okResponse(),
+      filings_digest: {
+        symbol: "AAPL",
+        source_url: "https://www.sec.gov/x/aapl-10k.htm",
+        filing_date: "2025-10-30",
+        form: "10-K",
+        scored: false,
+        passages: [
+          { text: "Services revenue drove growth across the installed base.", section_label: "Item 7 · MD&A", source_url: "https://www.sec.gov/x/aapl-10k.htm", score: 1.23 },
+          { text: "Supply chain concentration is a key risk.", section_label: "Item 1A · Risk Factors", source_url: "https://www.sec.gov/x/aapl-10k.htm", score: 1.01 }
+        ]
+      }
+    };
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => payload }) as unknown as typeof fetch;
+
+    render(<PositionResearchPanel symbol="AAPL" colors={colorTokens.dark} />);
+    fireEvent.click(screen.getByTestId("position-research-load"));
+
+    await waitFor(() => expect(screen.getByTestId("position-research-filings")).toBeTruthy());
+    expect(screen.getAllByTestId("position-research-filing-passage").length).toBe(2);
+    expect(screen.getByText(/Services revenue drove growth/i)).toBeTruthy();
+    expect(screen.getByText("Item 1A · Risk Factors")).toBeTruthy();
+  });
+
+  it("omits the filings digest when it has no passages", async () => {
+    const payload = { ...okResponse(), filings_digest: { symbol: "AAPL", source_url: "", filing_date: "", form: "10-K", scored: false, passages: [] } };
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => payload }) as unknown as typeof fetch;
+
+    render(<PositionResearchPanel symbol="AAPL" colors={colorTokens.dark} />);
+    fireEvent.click(screen.getByTestId("position-research-load"));
+
+    await waitFor(() => expect(screen.getByTestId("position-research-financials")).toBeTruthy());
+    expect(screen.queryByTestId("position-research-filings")).toBeNull();
+  });
+
   it("omits the cross-check block when none is comparable", async () => {
     const payload = {
       ...okResponse(),

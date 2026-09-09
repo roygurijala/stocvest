@@ -11,7 +11,9 @@ import respx
 from stocvest.data import edgar_10k as e10k
 from stocvest.data.edgar_10k import (
     extract_item_1a,
+    extract_sections,
     fetch_10k_item_1a,
+    fetch_10k_sections,
     html_to_text,
     reset_edgar_10k_cache_for_tests,
     _select_latest_10k,
@@ -84,6 +86,56 @@ def test_extract_item_1a_returns_none_when_absent() -> None:
 def test_extract_item_1a_returns_none_when_too_short() -> None:
     html = "<h2>Item 1A. Risk Factors</h2><p>Short.</p><h2>Item 1B.</h2>"
     assert extract_item_1a(html) is None
+
+
+def _multi_section_html() -> str:
+    biz = "We design, manufacture and sell smartphones, computers and services worldwide. " * 6
+    mda = "Net sales increased driven by higher services revenue and gross margin expansion. " * 6
+    return f"""<html><body>
+      <h2>Item 1. Business</h2><p>{biz}</p>
+      <h2>Item 1A. Risk Factors</h2><p>{_RISK_BODY}</p>
+      <h2>Item 1B. Unresolved Staff Comments</h2><p>None.</p>
+      <h2>Item 2. Properties</h2><p>Offices.</p>
+      <h2>Item 7. Management's Discussion and Analysis of Financial Condition</h2><p>{mda}</p>
+      <h2>Item 7A. Quantitative and Qualitative Disclosures</h2><p>Rates.</p>
+      <h2>Item 8. Financial Statements</h2>
+    </body></html>"""
+
+
+def test_extract_sections_returns_business_risk_and_mda() -> None:
+    out = extract_sections(_multi_section_html())
+    ids = [s[0] for s in out]
+    assert ids == ["item1", "item1a", "item7"]
+    labels = {s[0]: s[1] for s in out}
+    assert labels["item7"] == "Item 7 · MD&A"
+    biz_text = next(t for (i, _l, t) in out if i == "item1")
+    assert "smartphones" in biz_text
+    assert "Risk Factors" not in biz_text  # bounded before Item 1A
+    mda_text = next(t for (i, _l, t) in out if i == "item7")
+    assert "gross margin" in mda_text
+
+
+def test_extract_sections_empty_when_absent() -> None:
+    assert extract_sections("<p>Nothing structured here.</p>") == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_10k_sections_happy_path() -> None:
+    respx.get(e10k.COMPANY_TICKERS_URL).mock(return_value=httpx.Response(200, text=_TICKERS))
+    respx.get(e10k.SUBMISSIONS_URL.format(cik10="0000320193")).mock(
+        return_value=httpx.Response(200, text=_submissions())
+    )
+    doc_url = e10k.ARCHIVES_DOC_URL.format(
+        cik="320193", accession="000032019323000106", doc="aapl-10k.htm"
+    )
+    respx.get(doc_url).mock(return_value=httpx.Response(200, text=_multi_section_html()))
+
+    out = await fetch_10k_sections("AAPL")
+    assert out is not None
+    assert out.symbol == "AAPL" and out.form == "10-K"
+    assert out.source_url == doc_url
+    assert [s[0] for s in out.sections] == ["item1", "item1a", "item7"]
 
 
 def test_select_latest_10k_picks_first_annual_form() -> None:

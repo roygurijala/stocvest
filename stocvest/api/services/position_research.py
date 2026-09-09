@@ -9,6 +9,9 @@ sources, all clearly badged "External · not scored" and NEVER fed into the pill
     (``stocvest.data.edgar_10k``), with the source filing URL.
   * Financials (POS-AI-10) — headline latest-fiscal-year figures straight from the SEC
     XBRL companyfacts API (``stocvest.data.sec_xbrl``), primary-source display only.
+  * Filings digest (POS-AI-10 RAG) — top cited passages retrieved from the latest 10-K
+    (Business / Risk Factors / MD&A) via deterministic lexical retrieval
+    (``stocvest.signals.filings_rag``); verbatim primary-source text, never scored.
 
 Gating (ships DARK):
   * ``STOCVEST_POSITION_RESEARCH_ENABLED`` flag, AND
@@ -29,11 +32,17 @@ from datetime import datetime
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from stocvest.data.edgar_10k import TenKRiskExcerpt, fetch_10k_item_1a
+from stocvest.data.edgar_10k import (
+    TenKRiskExcerpt,
+    extract_item_1a,
+    extract_sections,
+    fetch_latest_10k_document,
+)
 from stocvest.data.fundamentals_crosscheck import (
     FundamentalsCrossCheck,
     build_fundamentals_crosscheck,
 )
+from stocvest.signals.filings_rag import FilingsDigest, build_filings_digest
 from stocvest.data.fundamentals_models import IncomeStatement
 from stocvest.data.fundamentals_provider import get_fundamentals_provider
 from stocvest.data.models import UserProfile
@@ -82,6 +91,7 @@ class PositionResearchBundle:
     risk_factors: TenKRiskExcerpt | None = None
     financials: CompanyFacts | None = None
     financials_crosscheck: FundamentalsCrossCheck | None = None
+    filings_digest: FilingsDigest | None = None
     upgrade_available: bool = False
     disclaimer: str = RESEARCH_DISCLAIMER
 
@@ -103,6 +113,11 @@ class PositionResearchBundle:
             "financials_crosscheck": (
                 self.financials_crosscheck.to_api_dict()
                 if self.financials_crosscheck and self.financials_crosscheck.has_data
+                else None
+            ),
+            "filings_digest": (
+                self.filings_digest.to_api_dict()
+                if self.filings_digest and self.filings_digest.passages
                 else None
             ),
             "upgrade_available": self.upgrade_available,
@@ -220,6 +235,47 @@ Use [] when none apply. Max 5 key_points and 6 sources."""
     )
 
 
+async def _fetch_edgar_bundle(
+    symbol: str,
+) -> tuple[TenKRiskExcerpt | None, FilingsDigest | None]:
+    """Fetch the latest 10-K ONCE and derive both the Item 1A excerpt and the RAG digest.
+
+    Combining the two SEC pulls into a single document download (was two before POS-AI-10 RAG)
+    halves the EDGAR traffic. Best-effort: any failure returns ``(None, None)``.
+    """
+    doc = await fetch_latest_10k_document(symbol)
+    if doc is None:
+        return None, None
+
+    excerpt: TenKRiskExcerpt | None = None
+    ex = extract_item_1a(doc.document)
+    if ex is not None:
+        excerpt = TenKRiskExcerpt(
+            symbol=doc.symbol,
+            excerpt=ex[0],
+            source_url=doc.source_url,
+            filing_date=doc.filing_date,
+            form=doc.form,
+            truncated=ex[1],
+        )
+
+    digest: FilingsDigest | None = None
+    try:
+        sections = extract_sections(doc.document)
+        if sections:
+            digest = build_filings_digest(
+                doc.symbol,
+                sections,
+                source_url=doc.source_url,
+                filing_date=doc.filing_date,
+                form=doc.form,
+            )
+    except Exception as exc:  # noqa: BLE001 — retrieval is informational, never blocks
+        _LOG.warning("position_research filings digest failed for %s: %s", symbol, type(exc).__name__)
+
+    return excerpt, digest
+
+
 async def _fetch_provider_annuals(symbol: str) -> list[IncomeStatement]:
     """Best-effort FMP annual income statements for the SEC↔provider cross-check (POS-AI-10 v2)."""
     try:
@@ -256,16 +312,18 @@ async def build_position_research_bundle(
     if not _within_daily_budget(user_profile.user_id, cap):
         return PositionResearchBundle(symbol=sym, status="over_budget")
 
-    recent, excerpt, financials, annuals = await asyncio.gather(
+    recent, edgar, financials, annuals = await asyncio.gather(
         _fetch_recent_developments(sym, company_name),
-        fetch_10k_item_1a(sym),
+        _fetch_edgar_bundle(sym),
         fetch_company_facts(sym),
         _fetch_provider_annuals(sym),
     )
+    excerpt, filings_digest = edgar
 
     has_recent = recent is not None and recent.has_data
     has_financials = financials is not None and financials.has_data
-    if not has_recent and excerpt is None and not has_financials:
+    has_filings = filings_digest is not None and bool(filings_digest.passages)
+    if not has_recent and excerpt is None and not has_financials and not has_filings:
         return PositionResearchBundle(symbol=sym, status="empty")
 
     # POS-AI-10 v2: informational SEC↔provider data-quality flag (only when SEC facts exist).
@@ -283,4 +341,5 @@ async def build_position_research_bundle(
         risk_factors=excerpt,
         financials=financials if has_financials else None,
         financials_crosscheck=crosscheck,
+        filings_digest=filings_digest if has_filings else None,
     )

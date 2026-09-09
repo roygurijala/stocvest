@@ -75,12 +75,29 @@ type FinancialsCrosscheck = {
   scored: boolean;
 };
 
+type FilingPassageRow = {
+  text: string;
+  section_label: string;
+  source_url: string;
+  score: number;
+};
+
+type FilingsDigest = {
+  symbol: string;
+  passages: FilingPassageRow[];
+  source_url: string;
+  filing_date: string;
+  form: string;
+  scored: boolean;
+};
+
 type ResearchResponse = {
   status: "ok" | "disabled" | "upgrade_required" | "over_budget" | "empty";
   recent_developments: RecentDevelopments | null;
   risk_factors: RiskFactors | null;
   financials: Financials | null;
   financials_crosscheck?: FinancialsCrosscheck | null;
+  filings_digest?: FilingsDigest | null;
   upgrade_available?: boolean;
   disclaimer?: string;
 };
@@ -239,8 +256,9 @@ export function PositionResearchPanel({ symbol, companyName, colors, upgradeHref
 
       {state.phase === "idle" ? (
         <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.5 }}>
-          Pull external context for {symbol}: recent developments, the latest 10-K risk factors,
-          and headline SEC financials. Informational only — never part of the STOCVEST signal.
+          Pull external context for {symbol}: recent developments, the latest 10-K risk factors
+          and key passages, and headline SEC financials. Informational only — never part of the
+          STOCVEST signal.
         </p>
       ) : null}
 
@@ -408,6 +426,41 @@ export function PositionResearchPanel({ symbol, companyName, colors, upgradeHref
                   </div>
                 );
               })()}
+            </div>
+          ) : null}
+
+          {state.data.filings_digest && state.data.filings_digest.passages.length > 0 ? (
+            <div style={box} data-testid="position-research-filings">
+              <SectionHeader
+                title={`From the 10-K · key passages${state.data.filings_digest.form ? ` · ${state.data.filings_digest.form}` : ""}`}
+                colors={colors}
+              />
+              <div style={{ display: "flex", flexDirection: "column", gap: spacing[2], marginTop: spacing[2] }}>
+                {state.data.filings_digest.passages.map((p, i) => (
+                  <div
+                    key={i}
+                    data-testid="position-research-filing-passage"
+                    style={{ borderLeft: `2px solid ${colors.border}`, paddingLeft: spacing[2] }}
+                  >
+                    <span style={{ fontSize: typography.scale.xs, fontWeight: 700, color: colors.textMuted, letterSpacing: "0.04em" }}>
+                      {p.section_label}
+                    </span>
+                    <p style={{ margin: `2px 0 0`, fontSize: typography.scale.sm, color: colors.text, lineHeight: 1.55 }}>
+                      {p.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {state.data.filings_digest.source_url ? (
+                <a
+                  href={state.data.filings_digest.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: "inline-block", marginTop: spacing[2], fontSize: typography.scale.xs, color: colors.accent, fontWeight: 700, textDecoration: "none" }}
+                >
+                  Read the full 10-K →
+                </a>
+              ) : null}
             </div>
           ) : null}
 

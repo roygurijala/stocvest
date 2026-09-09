@@ -110,6 +110,20 @@ def _no_annuals_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pr, "_fetch_provider_annuals", _empty)
 
 
+@pytest.fixture(autouse=True)
+def _no_edgar_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    # POS-AI-10: the combined EDGAR fetch (Item 1A excerpt + RAG digest) is network-free by
+    # default. Returns (excerpt, digest) = (None, None). EDGAR-specific tests override.
+    async def _none_bundle(*a: Any, **k: Any):
+        return (None, None)
+
+    monkeypatch.setattr(pr, "_fetch_edgar_bundle", _none_bundle)
+
+
+async def _edgar_excerpt_only():
+    return (_excerpt(), None)
+
+
 @pytest.mark.asyncio
 async def test_disabled_flag_short_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pr, "get_settings", lambda: _settings(enabled=False))
@@ -119,12 +133,12 @@ async def test_disabled_flag_short_circuits(monkeypatch: pytest.MonkeyPatch) -> 
         called["recent"] = True
         return None
 
-    async def _edgar(*a: Any, **k: Any) -> None:
+    async def _edgar(*a: Any, **k: Any):
         called["edgar"] = True
-        return None
+        return (None, None)
 
     monkeypatch.setattr(pr, "_fetch_recent_developments", _recent)
-    monkeypatch.setattr(pr, "fetch_10k_item_1a", _edgar)
+    monkeypatch.setattr(pr, "_fetch_edgar_bundle", _edgar)
 
     out = await pr.build_position_research_bundle(symbol="AAPL", user_profile=_paid())
     assert out.status == "disabled"
@@ -146,11 +160,11 @@ async def test_ok_bundle_merges_both_sources(monkeypatch: pytest.MonkeyPatch) ->
     async def _recent(symbol: str, company_name: str | None) -> pr.RecentDevelopments:
         return _developments()
 
-    async def _edgar(symbol: str, **k: Any) -> TenKRiskExcerpt:
-        return _excerpt()
+    async def _edgar(symbol: str, **k: Any):
+        return (_excerpt(), None)
 
     monkeypatch.setattr(pr, "_fetch_recent_developments", _recent)
-    monkeypatch.setattr(pr, "fetch_10k_item_1a", _edgar)
+    monkeypatch.setattr(pr, "_fetch_edgar_bundle", _edgar)
 
     out = await pr.build_position_research_bundle(symbol="aapl", user_profile=_paid())
     assert out.status == "ok"
@@ -167,7 +181,7 @@ async def test_ok_bundle_merges_both_sources(monkeypatch: pytest.MonkeyPatch) ->
 async def test_partial_bundle_when_only_edgar(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pr, "get_settings", lambda: _settings())
     monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _none())
-    monkeypatch.setattr(pr, "fetch_10k_item_1a", lambda *a, **k: _some_excerpt())
+    monkeypatch.setattr(pr, "_fetch_edgar_bundle", lambda *a, **k: _edgar_excerpt_only())
 
     out = await pr.build_position_research_bundle(symbol="AAPL", user_profile=_paid())
     assert out.status == "ok"
@@ -180,15 +194,47 @@ async def _none() -> None:
     return None
 
 
-async def _some_excerpt() -> TenKRiskExcerpt:
-    return _excerpt()
+@pytest.mark.asyncio
+async def test_ok_bundle_includes_filings_digest(monkeypatch: pytest.MonkeyPatch) -> None:
+    from stocvest.signals.filings_rag import FilingPassage, FilingsDigest
+
+    monkeypatch.setattr(pr, "get_settings", lambda: _settings())
+    monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _none())
+
+    digest = FilingsDigest(
+        symbol="AAPL",
+        passages=[
+            FilingPassage(
+                text="Services revenue drove growth across the installed base.",
+                section_label="Item 7 · MD&A",
+                source_url="https://www.sec.gov/x/aapl-10k.htm",
+                score=1.23,
+            )
+        ],
+        source_url="https://www.sec.gov/x/aapl-10k.htm",
+        filing_date="2025-10-30",
+        form="10-K",
+    )
+
+    async def _edgar(*a: Any, **k: Any):
+        return (None, digest)
+
+    monkeypatch.setattr(pr, "_fetch_edgar_bundle", _edgar)
+
+    out = await pr.build_position_research_bundle(symbol="AAPL", user_profile=_paid())
+    assert out.status == "ok"  # a filings digest alone is enough to be non-empty
+    d = out.to_api_dict()
+    fd = d["filings_digest"]
+    assert fd is not None and fd["scored"] is False
+    assert fd["passages"][0]["section_label"] == "Item 7 · MD&A"
+    assert fd["form"] == "10-K"
 
 
 @pytest.mark.asyncio
 async def test_empty_bundle_when_both_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pr, "get_settings", lambda: _settings())
     monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _none())
-    monkeypatch.setattr(pr, "fetch_10k_item_1a", lambda *a, **k: _none())
+    # EDGAR bundle returns (None, None) via the autouse fixture.
 
     out = await pr.build_position_research_bundle(symbol="AAPL", user_profile=_paid())
     assert out.status == "empty"
@@ -205,11 +251,11 @@ async def test_over_budget_short_circuits(monkeypatch: pytest.MonkeyPatch) -> No
 
     called = {"edgar": False}
 
-    async def _edgar(*a: Any, **k: Any) -> None:
+    async def _edgar(*a: Any, **k: Any):
         called["edgar"] = True
-        return None
+        return (None, None)
 
-    monkeypatch.setattr(pr, "fetch_10k_item_1a", _edgar)
+    monkeypatch.setattr(pr, "_fetch_edgar_bundle", _edgar)
 
     out = await pr.build_position_research_bundle(symbol="AAPL", user_profile=_paid())
     assert out.status == "over_budget"
@@ -263,7 +309,7 @@ async def test_recent_developments_none_on_empty(monkeypatch: pytest.MonkeyPatch
 async def test_ok_bundle_includes_sec_financials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pr, "get_settings", lambda: _settings())
     monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _none())
-    monkeypatch.setattr(pr, "fetch_10k_item_1a", lambda *a, **k: _none())
+    # EDGAR bundle returns (None, None) via the autouse fixture.
 
     async def _facts(*a: Any, **k: Any) -> CompanyFacts:
         return _company_facts()
@@ -289,7 +335,7 @@ async def test_ok_bundle_includes_sec_provider_crosscheck(monkeypatch: pytest.Mo
 
     monkeypatch.setattr(pr, "get_settings", lambda: _settings())
     monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _none())
-    monkeypatch.setattr(pr, "fetch_10k_item_1a", lambda *a, **k: _none())
+    # EDGAR bundle returns (None, None) via the autouse fixture.
 
     async def _facts(*a: Any, **k: Any) -> CompanyFacts:
         return _company_facts()  # SEC revenue FY2024 = 383B
@@ -330,7 +376,7 @@ async def test_crosscheck_absent_without_sec_financials(monkeypatch: pytest.Monk
 
     monkeypatch.setattr(pr, "get_settings", lambda: _settings())
     monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _developments_async())
-    monkeypatch.setattr(pr, "fetch_10k_item_1a", lambda *a, **k: _none())
+    # EDGAR bundle returns (None, None) via the autouse fixture.
 
     async def _annuals(symbol: str) -> list[IncomeStatement]:
         return [IncomeStatement(symbol="AAPL", as_of_date=date(2024, 9, 28), period="FY", calendar_year=2024, revenue=1.0)]
@@ -350,7 +396,7 @@ async def _developments_async() -> pr.RecentDevelopments:
 async def test_empty_bundle_when_all_three_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pr, "get_settings", lambda: _settings())
     monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _none())
-    monkeypatch.setattr(pr, "fetch_10k_item_1a", lambda *a, **k: _none())
+    # EDGAR bundle returns (None, None) via the autouse fixture.
     # fetch_company_facts already returns None via the autouse fixture.
 
     out = await pr.build_position_research_bundle(symbol="AAPL", user_profile=_paid())

@@ -39,6 +39,9 @@ ARCHIVES_DOC_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{d
 # always fetch then fail extraction, so they are excluded to avoid wasted SEC calls.
 _TENK_FORMS = ("10-K", "10-K405", "10-KSB")
 _DEFAULT_MAX_CHARS = 4000
+# Per-section cap for multi-section RAG retrieval (larger than the 1A excerpt — this text is
+# chunked + retrieved, not shown whole).
+_SECTION_MAX_CHARS = 12000
 _MIN_USEFUL_CHARS = 200
 _HTTP_TIMEOUT = 20.0
 
@@ -83,6 +86,42 @@ _ITEM_1A_BARE_RE = re.compile(r"item\s*1a\b", re.IGNORECASE)
 _ITEM_END_RE = re.compile(r"item\s*1b\b|item\s*2\b", re.IGNORECASE)
 
 
+@dataclass(frozen=True)
+class _SectionSpec:
+    section_id: str
+    label: str
+    head_re: re.Pattern[str]
+    bare_re: re.Pattern[str]
+    end_re: re.Pattern[str]
+
+
+# POS-AI-10 RAG: the annual-report sections worth retrieving over (in 10-K item order).
+# Each has a precise heading, a bare fallback, and the next-item anchor that bounds it.
+_SECTION_SPECS: tuple[_SectionSpec, ...] = (
+    _SectionSpec(
+        "item1",
+        "Item 1 · Business",
+        re.compile(r"item\s*1[\.\):\s]+business", re.IGNORECASE),
+        re.compile(r"item\s*1\b(?!\s*a)", re.IGNORECASE),
+        re.compile(r"item\s*1a\b|item\s*1b\b", re.IGNORECASE),
+    ),
+    _SectionSpec(
+        "item1a",
+        "Item 1A · Risk Factors",
+        _ITEM_1A_HEAD_RE,
+        _ITEM_1A_BARE_RE,
+        _ITEM_END_RE,
+    ),
+    _SectionSpec(
+        "item7",
+        "Item 7 · MD&A",
+        re.compile(r"item\s*7[\.\):\s]+management", re.IGNORECASE),
+        re.compile(r"item\s*7\b(?!\s*a)", re.IGNORECASE),
+        re.compile(r"item\s*7a\b|item\s*8\b", re.IGNORECASE),
+    ),
+)
+
+
 def html_to_text(raw: str) -> str:
     """Strip a filing's HTML to readable plain text (scripts/styles removed, entities decoded)."""
     if not raw:
@@ -125,6 +164,42 @@ def extract_item_1a(document: str, *, max_chars: int = _DEFAULT_MAX_CHARS) -> tu
                 return section[:max_chars].rstrip() + " …", True
             return section, False
     return None
+
+
+def _extract_by_spec(text: str, spec: _SectionSpec, *, max_chars: int) -> tuple[str, bool] | None:
+    """Generic 'last real heading wins' section extraction (POS-AI-10 multi-section RAG)."""
+    heads = list(spec.head_re.finditer(text)) or list(spec.bare_re.finditer(text))
+    if not heads:
+        return None
+    for head in reversed(heads):
+        start = head.end()
+        end_match = spec.end_re.search(text, start)
+        end = end_match.start() if end_match else len(text)
+        section = text[start:end].strip(" .:\u2014-\n")
+        if len(section) >= _MIN_USEFUL_CHARS:
+            if max_chars and len(section) > max_chars:
+                return section[:max_chars].rstrip() + " …", True
+            return section, False
+    return None
+
+
+def extract_sections(
+    document: str, *, max_chars_each: int = _SECTION_MAX_CHARS
+) -> list[tuple[str, str, str]]:
+    """Extract the RAG sections (Business, Risk Factors, MD&A) from a 10-K.
+
+    Returns a list of ``(section_id, label, text)`` for every section that resolves with
+    enough content. Purely lexical — no network. Empty list when none are found.
+    """
+    text = html_to_text(document) if "<" in document else document
+    if not text:
+        return []
+    out: list[tuple[str, str, str]] = []
+    for spec in _SECTION_SPECS:
+        got = _extract_by_spec(text, spec, max_chars=max_chars_each)
+        if got is not None:
+            out.append((spec.section_id, spec.label, got[0]))
+    return out
 
 
 # --------------------------------------------------------------------------- fetch
@@ -185,11 +260,33 @@ def _select_latest_10k(submissions: dict) -> tuple[str, str, str, str] | None:
     return None
 
 
-async def fetch_10k_item_1a(symbol: str, *, max_chars: int = _DEFAULT_MAX_CHARS) -> TenKRiskExcerpt | None:
-    """Fetch the newest 10-K Item 1A risk-factor excerpt for ``symbol``, or ``None``.
+@dataclass(frozen=True)
+class TenKDocument:
+    """The newest 10-K primary document + provenance, before section extraction."""
 
-    Best-effort and fully self-contained: any network/parse failure logs at WARNING and
-    returns ``None`` so the caller can degrade. Never raises to the caller.
+    symbol: str
+    document: str
+    source_url: str
+    filing_date: str
+    form: str
+
+
+@dataclass(frozen=True)
+class TenKSections:
+    """Multi-section 10-K text for RAG retrieval — informational, never scored."""
+
+    symbol: str
+    sections: list[tuple[str, str, str]]  # (section_id, label, text)
+    source_url: str
+    filing_date: str
+    form: str
+
+
+async def fetch_latest_10k_document(symbol: str) -> TenKDocument | None:
+    """Fetch the newest 10-K primary document for ``symbol`` (shared fetch pipeline).
+
+    Best-effort and self-contained: any network/parse failure logs at WARNING and returns
+    ``None``. Never raises to the caller.
     """
     sym = (symbol or "").strip().upper()
     if not sym:
@@ -216,18 +313,50 @@ async def fetch_10k_item_1a(symbol: str, *, max_chars: int = _DEFAULT_MAX_CHARS)
     except Exception as exc:  # noqa: BLE001 — external primary source is best-effort
         log.warning("edgar_10k fetch failed for %s: %s", sym, type(exc).__name__)
         return None
+    return TenKDocument(
+        symbol=sym,
+        document=document,
+        source_url=source_url,
+        filing_date=filing_date,
+        form=form,
+    )
 
-    extracted = extract_item_1a(document, max_chars=max_chars)
+
+async def fetch_10k_item_1a(symbol: str, *, max_chars: int = _DEFAULT_MAX_CHARS) -> TenKRiskExcerpt | None:
+    """Fetch the newest 10-K Item 1A risk-factor excerpt for ``symbol``, or ``None``."""
+    doc = await fetch_latest_10k_document(symbol)
+    if doc is None:
+        return None
+    extracted = extract_item_1a(doc.document, max_chars=max_chars)
     if extracted is None:
         return None
     excerpt, truncated = extracted
     return TenKRiskExcerpt(
-        symbol=sym,
+        symbol=doc.symbol,
         excerpt=excerpt,
-        source_url=source_url,
-        filing_date=filing_date,
-        form=form,
+        source_url=doc.source_url,
+        filing_date=doc.filing_date,
+        form=doc.form,
         truncated=truncated,
+    )
+
+
+async def fetch_10k_sections(
+    symbol: str, *, max_chars_each: int = _SECTION_MAX_CHARS
+) -> TenKSections | None:
+    """Fetch the newest 10-K and extract the RAG sections (Business, Risk Factors, MD&A)."""
+    doc = await fetch_latest_10k_document(symbol)
+    if doc is None:
+        return None
+    sections = extract_sections(doc.document, max_chars_each=max_chars_each)
+    if not sections:
+        return None
+    return TenKSections(
+        symbol=doc.symbol,
+        sections=sections,
+        source_url=doc.source_url,
+        filing_date=doc.filing_date,
+        form=doc.form,
     )
 
 
