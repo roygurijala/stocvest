@@ -914,6 +914,48 @@ def scanner_trace_handler(event: LambdaEvent, context: LambdaContext) -> dict[st
     return ok(payload)
 
 
+def position_candidates_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/signals/position/candidates — ranked gem candidates (ADR-004 POS-D15).
+
+    Transparent gem-gate screening over a curated liquid US universe. Informational
+    only — a "gem candidate" has passed internal quality gates, not a recommendation.
+    """
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    qs = event.get("queryStringParameters") or {}
+    tier = str(qs.get("tier") or "gem").strip().lower()
+    if tier not in ("gem", "strong", "monitor", "all"):
+        return bad_request("Query param 'tier' must be gem, strong, monitor, or all.")
+    try:
+        limit = max(1, min(100, int(str(qs.get("limit") or "50"))))
+    except (TypeError, ValueError):
+        limit = 50
+    force = str(qs.get("refresh") or "").strip().lower() in ("1", "true", "yes")
+
+    from stocvest.api.services.position_scan import get_position_scan_snapshot_sync
+
+    try:
+        snapshot, cached = get_position_scan_snapshot_sync(force=force)
+    except Exception as exc:  # scan should never 500 the discovery home
+        _LOG.warning("position_candidates scan failed: %s", exc)
+        return ok(
+            {
+                "mode": "position",
+                "tier": tier,
+                "candidates": [],
+                "count": 0,
+                "universe_size": 0,
+                "scan_generated_at": None,
+                "cached": False,
+                "degraded": True,
+                "disclaimer": API_SIGNAL_DISCLAIMER,
+            }
+        )
+    return ok(snapshot.to_api_dict(tier=tier, limit=limit, cached=cached))
+
+
 def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """POST /v1/signals/swing/setups — rank swing candidates from daily (DAY_1) bars."""
     _ = context
@@ -1890,6 +1932,10 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         return historical_validation_summary_handler(event, context)
     if route == "GET /v1/signals/scanner-trace" or route.startswith("GET /v1/signals/scanner-trace?"):
         return scanner_trace_handler(event, context)
+    if route == "GET /v1/signals/position/candidates" or route.startswith(
+        "GET /v1/signals/position/candidates?"
+    ):
+        return position_candidates_handler(event, context)
 
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
         "GET /v1/signals/founding-members": founding_members_count_handler,

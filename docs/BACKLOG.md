@@ -116,7 +116,7 @@ _Next major lane when soak completes: **P1 (Phase 7 hardening)**._
 | POS-D8 | Discovery feed (optional; **off by default** until validation) | Pending |
 | POS-D13 | Investment home (`/dashboard/invest`) — **Gem Candidates** table, filters, symbol search (Journey A + B) | Pending |
 | POS-D14 | Watchlist investment quality badge (Gem / Strong / Monitor) | Pending |
-| POS-D15 | Position universe scan — weekly batch + `GET /v1/signals/position/candidates` | Pending |
+| POS-D15 | Position universe scan — weekly batch + `GET /v1/signals/position/candidates` | **STUB DONE 2026-09-08** (PR #246) — pure gem gates G1–G9 (`position_gem_gates.py`) + `gem_rank` + tier resolver; `position_scan.py` curated liquid US universe (v1 lite) with concurrent composite batch, RS bottom-quartile gate, 6h snapshot cache; `GET /v1/signals/position/candidates` handler + BFF route; 45 tests. **Pending full:** weekly EventBridge batch, FMP pre-filter, ~500-name universe, Dynamo/S3 snapshot persistence (scale after POS-D9). |
 | POS-D16 | Market Brief gem tile (optional — top 3 candidates after soak) | Pending |
 
 ### Validation & ops
