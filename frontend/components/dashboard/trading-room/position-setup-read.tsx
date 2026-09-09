@@ -2,8 +2,12 @@
 
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
-import type { PositionFundamentalsSummary } from "@/lib/dashboard/trading-room/position-fundamentals-present";
+import type {
+  PositionFundamentalsSummary,
+  PositionThesisPacket
+} from "@/lib/dashboard/trading-room/position-fundamentals-present";
 import { PositionFundamentalsGrid } from "@/components/dashboard/trading-room/position-fundamentals-grid";
+import { PositionInvestmentRead } from "@/components/dashboard/trading-room/position-investment-read";
 import type { SignalsSetupBias } from "@/lib/signals-page-present";
 import type { useTheme } from "@/lib/theme-provider";
 
@@ -13,6 +17,7 @@ type Props = {
   symbol: string;
   bias: SignalsSetupBias;
   fundamentals: PositionFundamentalsSummary;
+  thesisPacket?: PositionThesisPacket | null;
   signalBasisLabel?: string | null;
   layerAlignmentLine?: string | null;
   signalValidDays?: number | null;
@@ -29,6 +34,7 @@ export function PositionSetupRead({
   symbol,
   bias,
   fundamentals,
+  thesisPacket,
   signalBasisLabel,
   layerAlignmentLine,
   signalValidDays,
@@ -102,9 +108,13 @@ export function PositionSetupRead({
 
       <PositionFundamentalsGrid summary={fundamentals} colors={colors} />
 
+      {thesisPacket ? (
+        <PositionInvestmentRead symbol={symbol} packet={thesisPacket} colors={colors} />
+      ) : null}
+
       <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}>
-        Glass-box fundamentals for {symbol} — pillar scores are informational only, not buy/sell instructions.
-        AI Investment Read (thesis + research tab) ships in a later phase.
+        Glass-box fundamentals for {symbol} — pillar scores and the thesis are informational only,
+        not buy/sell instructions.
       </p>
       <SignalDisclaimerChip />
     </article>

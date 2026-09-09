@@ -74,6 +74,62 @@ export function parsePositionFundamentals(
   };
 }
 
+export type ThesisConfidence = "high" | "medium" | "low";
+
+export type ThesisBullet = {
+  text: string;
+  source: string; // "F1".."F5" or "layer:<name>"
+  confidence: ThesisConfidence;
+};
+
+export type PositionThesisPacket = {
+  symbol: string;
+  verdict: string;
+  bullCase: ThesisBullet[];
+  bearCase: ThesisBullet[];
+  openQuestions: ThesisBullet[];
+  pillarSnapshotHash: string;
+};
+
+function parseBullet(raw: unknown): ThesisBullet | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const text = str(o.text);
+  if (!text) return null;
+  const conf = str(o.confidence).toLowerCase();
+  return {
+    text,
+    source: str(o.source),
+    confidence: conf === "high" || conf === "medium" || conf === "low" ? (conf as ThesisConfidence) : "low"
+  };
+}
+
+function parseBullets(raw: unknown): ThesisBullet[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(parseBullet).filter((b): b is ThesisBullet => b != null);
+}
+
+/** Parse the server-built glass-box thesis packet (ADR-004 POS-AI-1/AI-2). */
+export function parsePositionThesisPacket(
+  body: Record<string, unknown> | null | undefined
+): PositionThesisPacket | null {
+  const raw = body?.position_thesis_packet;
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const packet: PositionThesisPacket = {
+    symbol: str(o.symbol),
+    verdict: str(o.verdict) || "neutral",
+    bullCase: parseBullets(o.bull_case),
+    bearCase: parseBullets(o.bear_case),
+    openQuestions: parseBullets(o.open_questions),
+    pillarSnapshotHash: str(o.pillar_snapshot_hash)
+  };
+  if (!packet.bullCase.length && !packet.bearCase.length && !packet.openQuestions.length) {
+    return null;
+  }
+  return packet;
+}
+
 export function pillarVerdictTone(verdict: string): "bullish" | "bearish" | "neutral" | "muted" {
   const v = verdict.toLowerCase();
   if (v === "bullish") return "bullish";

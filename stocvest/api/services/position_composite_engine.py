@@ -70,6 +70,7 @@ from stocvest.signals.position_technical_analyzer import (
     PositionTechnicalAnalyzer,
     aggregate_daily_to_weekly_bars,
 )
+from stocvest.signals.position_thesis_packet import build_position_thesis_packet
 from stocvest.signals.sector_analyzer import SectorAnalyzer
 from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
 from stocvest.signals.sector_momentum import (
@@ -281,7 +282,7 @@ async def build_position_composite_response(
     position_composite = resolve_composite_block(params, mode="position")
     min_layers = int(position_composite.min_available_layers)  # type: ignore[attr-defined]
     if len(available) < min_layers:
-        return {
+        insufficient_body = {
             "symbol": sym,
             "status": "insufficient_data",
             "decision_state": "blocked",
@@ -293,6 +294,10 @@ async def build_position_composite_response(
             "mode": "position",
             "position_fundamentals": fundamentals.to_api_dict(),
         }
+        insufficient_body["position_thesis_packet"] = build_position_thesis_packet(
+            insufficient_body
+        ).to_api_dict()
+        return insufficient_body
 
     signals: list[LayerSignal] = []
     for lid, res in zip(layer_ids, layer_results):
@@ -460,6 +465,9 @@ async def build_position_composite_response(
     if last_px:
         response_body.setdefault("last_trade_price", last_px)
     apply_entry_gates_to_response_body(response_body, mode="position")
+
+    # POS-AI-1/AI-2: glass-box thesis packet from the fully-populated body (pillars + layers + verdict).
+    response_body["position_thesis_packet"] = build_position_thesis_packet(response_body).to_api_dict()
 
     return response_body
 

@@ -22,7 +22,7 @@ import { borderRadius, roleAccents, spacing, typography, animationDurations } fr
 import { DeepDiveEvidenceTabs } from "@/components/dashboard/trading-room/deep-dive-evidence-tabs";
 import { DeepDiveLaneToggle } from "@/components/dashboard/trading-room/deep-dive-lane-toggle";
 import { PositionSetupRead } from "@/components/dashboard/trading-room/position-setup-read";
-import { parsePositionFundamentals } from "@/lib/dashboard/trading-room/position-fundamentals-present";
+import { parsePositionFundamentals, parsePositionThesisPacket } from "@/lib/dashboard/trading-room/position-fundamentals-present";
 import type { DeepDiveLane, FeedLane } from "@/lib/dashboard/trading-room/feed-model";
 import { parseDashboardTradingRoomDeepLink, resolveDeepDiveLaneForCard, stashDeepDiveLanePreference } from "@/lib/nav/dashboard-trading-room-deeplink";
 import {
@@ -1445,6 +1445,14 @@ export function DeepDive({
     [activeLane, composite]
   );
 
+  const positionThesisPacket = useMemo(
+    () =>
+      activeLane === "position" && composite
+        ? parsePositionThesisPacket(composite as Record<string, unknown>)
+        : null,
+    [activeLane, composite]
+  );
+
   const signalValidDays = useMemo(() => {
     if (!composite || isInsufficient) return null;
     const raw = (composite as Record<string, unknown>).signal_valid_days;
@@ -1859,6 +1867,7 @@ export function DeepDive({
                       symbol={card.symbol}
                       bias={setupBias}
                       fundamentals={positionFundamentals}
+                      thesisPacket={positionThesisPacket}
                       signalBasisLabel={signalBasisLabel}
                       layerAlignmentLine={layerAlignmentLine}
                       signalValidDays={signalValidDays}

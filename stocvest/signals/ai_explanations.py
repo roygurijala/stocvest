@@ -259,6 +259,128 @@ class AIExplanationService:
         await self._cache_write(key, result)
         return result
 
+    async def explain_position_setup_read(
+        self,
+        *,
+        symbol: str,
+        verdict: str,
+        bull_case: list[dict[str, Any]],
+        bear_case: list[dict[str, Any]],
+        open_questions: list[dict[str, Any]],
+        pillar_snapshot_hash: str,
+        user_profile: UserProfile,
+    ) -> ExplanationResult:
+        """Long-horizon Investment Read for the Position deep-dive (ADR-004 POS-AI-2).
+
+        Narrates the deterministic thesis packet (F1-F5 pillars + supporting layers) into a
+        short, non-advisory read. Paid users get a Claude narration keyed by
+        ``pillar_snapshot_hash`` (reused until the underlying pillars change); free users and
+        any failure get the deterministic brief woven from the same packet. The AI never sets
+        or overrides scores/verdicts and never emits buy/sell/allocation guidance.
+        """
+        sym = symbol.strip().upper()
+        v = (verdict or "neutral").strip().lower() or "neutral"
+        det = self._deterministic_position_read(sym, v, bull_case, bear_case, open_questions)
+
+        if not user_profile.has_ai_explanations:
+            return ExplanationResult(
+                text=det, source="deterministic", upgrade_available=True, cached=False
+            )
+
+        ny_date = _ny_calendar_date()
+        h = (pillar_snapshot_hash or "nohash").strip() or "nohash"
+        key = f"stocvest:ai_explain:position_read:{sym}:{v}:{ny_date}:{h}"
+
+        hit = await self._cache_read(key)
+        if hit is not None:
+            return hit
+
+        text_ai = await self._claude_text_or_none(
+            system=(
+                "You are a long-horizon investment research analyst writing a short Investment "
+                "Read for the Position desk (multi-year quality holdings, NOT day/swing trades). "
+                "Write 3-5 sentences in a natural, varied voice — never a template. Narrate ONLY "
+                "the provided bull points, bear/watch points, and open questions; do not invent "
+                "data. Reference the specific pillars by name (F1 profitability/quality, F2 growth, "
+                "F3 balance sheet, F4 valuation, F5 earnings quality) or supporting layers when "
+                "citing a point. Lead with what actually stands out for THIS company, name the key "
+                "risk or open question, and surface uncertainty where data quality is limited. "
+                "Do NOT mention numeric scores or percentages. Never give investment advice: no "
+                "buy/sell/hold, no price targets, no allocation or position-sizing guidance. "
+                "End with exactly: Signal data only."
+            ),
+            user_prompt=self._build_position_read_prompt(
+                symbol=sym,
+                verdict=v,
+                bull_case=bull_case,
+                bear_case=bear_case,
+                open_questions=open_questions,
+            ),
+            max_tokens=280,
+            temperature=0.6,
+        )
+        if text_ai:
+            result = ExplanationResult(
+                text=text_ai.strip(), source="ai", upgrade_available=False, cached=False
+            )
+        else:
+            result = ExplanationResult(
+                text=det, source="deterministic", upgrade_available=False, cached=False
+            )
+        await self._cache_write(key, result)
+        return result
+
+    def _deterministic_position_read(
+        self,
+        symbol: str,
+        verdict: str,
+        bull_case: list[dict[str, Any]],
+        bear_case: list[dict[str, Any]],
+        open_questions: list[dict[str, Any]],
+    ) -> str:
+        sym = symbol or "This name"
+        parts = [
+            f"On the Position desk (long-horizon quality), {sym} reads {verdict} on fundamentals."
+        ]
+        top_bull = next((str(b.get("text") or "").strip() for b in (bull_case or []) if b.get("text")), "")
+        top_bear = next((str(b.get("text") or "").strip() for b in (bear_case or []) if b.get("text")), "")
+        top_q = next((str(b.get("text") or "").strip() for b in (open_questions or []) if b.get("text")), "")
+        if top_bull:
+            parts.append(f"Bull: {top_bull}")
+        if top_bear:
+            parts.append(f"Watch: {top_bear}")
+        if top_q:
+            parts.append(f"Open question: {top_q}")
+        parts.append("Signal data only.")
+        return " ".join(parts)
+
+    def _build_position_read_prompt(
+        self,
+        *,
+        symbol: str,
+        verdict: str,
+        bull_case: list[dict[str, Any]],
+        bear_case: list[dict[str, Any]],
+        open_questions: list[dict[str, Any]],
+    ) -> str:
+        def _compact(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+            out: list[dict[str, str]] = []
+            for x in (rows or [])[:6]:
+                text = str(x.get("text") or "").strip()
+                if not text:
+                    continue
+                out.append({"text": text[:240], "source": str(x.get("source") or "")})
+            return out
+
+        lines = [
+            f"symbol={symbol}",
+            f"fundamentals_verdict={verdict}",
+            f"bull_points={json.dumps(_compact(bull_case))}",
+            f"bear_or_watch_points={json.dumps(_compact(bear_case))}",
+            f"open_questions={json.dumps(_compact(open_questions))}",
+        ]
+        return "\n".join(lines)
+
     def _deterministic_setup_read_copy(self, symbol: str, direction: str, desk: str) -> str:
         lean = (
             "leans long" if direction in ("long", "bullish")

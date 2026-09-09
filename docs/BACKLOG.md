@@ -131,7 +131,7 @@ _Next major lane when soak completes: **P1 (Phase 7 hardening)**._
 | ID | Theme | Status |
 |----|-------|--------|
 | POS-AI-1 | `position_thesis_packet` — bull/bear/open Q with pillar refs; `POSITION_AI_SPEC.md` | **DONE 2026-09-08** (PR #246) — pure `position_thesis_packet.py` builder (bull/bear/open_questions, every bullet cites `F1`–`F5` or `layer:<name>`, confidence scaling, value-trap watch, weakest-pillar surfacing, stable `pillar_snapshot_hash`) + `deterministic_investment_read`; `docs/POSITION_AI_SPEC.md`; 18 unit tests. |
-| POS-AI-2 | `position_setup_read` — AI Investment Read + deterministic fallback | Pending |
+| POS-AI-2 | `position_setup_read` — AI Investment Read + deterministic fallback | **DONE 2026-09-08** (PR #246) — `position_thesis_packet` wired into the position composite response; `AIExplanationService.explain_position_setup_read` (paid=Claude keyed by `pillar_snapshot_hash`, free/failure=deterministic, locked non-advisory system prompt); handler `type=position_setup_read`; FE `PositionInvestmentRead` (bull/bear/open-questions columns with pillar/layer source tags + on-demand AI read) replaces the deep-dive placeholder; `parsePositionThesisPacket` presenter; tests (7 backend + 4 FE) + build clean; `POSITION_AI_SPEC.md` + `API_CONTRACTS.md` updated. |
 | POS-AI-3 | Assistant Position mode — pillar-aware page context + prompt rules | Pending |
 | POS-AI-4 | Research tab — EDGAR 10-K excerpts + Perplexity citations | Pending |
 | POS-AI-5 | Sector pillar overrides (banks/REIT/biotech) + F7/F8 v2 | Pending |

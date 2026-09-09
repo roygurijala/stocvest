@@ -1267,8 +1267,34 @@ def ai_explanations_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     user_profile=profile,
                 )
             )
+        elif typ == "position_setup_read":
+            symbol = str(body.get("symbol") or "").strip().upper()
+            if not symbol:
+                return bad_request("symbol is required.")
+            verdict = str(body.get("verdict") or "neutral")
+            packet = body.get("packet")
+            packet = packet if isinstance(packet, dict) else {}
+
+            def _bullets(value: object) -> list[dict[str, Any]]:
+                if not isinstance(value, list):
+                    return []
+                return [x for x in value if isinstance(x, dict)][:6]
+
+            result = asyncio.run(
+                svc.explain_position_setup_read(
+                    symbol=symbol,
+                    verdict=verdict,
+                    bull_case=_bullets(packet.get("bull_case")),
+                    bear_case=_bullets(packet.get("bear_case")),
+                    open_questions=_bullets(packet.get("open_questions")),
+                    pillar_snapshot_hash=str(packet.get("pillar_snapshot_hash") or ""),
+                    user_profile=profile,
+                )
+            )
         else:
-            return bad_request("type must be signal_capture, news_synthesis, or setup_read.")
+            return bad_request(
+                "type must be signal_capture, news_synthesis, setup_read, or position_setup_read."
+            )
     except (TypeError, ValueError) as exc:
         return bad_request(f"Invalid explanation request: {exc}")
 
