@@ -434,6 +434,8 @@ class SignalRecord(BaseModel):
     sector_snapshot_json: str | None = None
     internals_snapshot_json: str | None = None
     layer_scores_json: str | None = None
+    #: ADR-004 POS-AI-7: entry-time F1–F5 pillar baseline (JSON) for informational thesis drift.
+    pillar_snapshot_json: str | None = None
     #: Parameter bundle version; used as **logic_version_id** on the API for validation audit.
     parameter_version: str | None = None
     status: str = "active"  # active | incomplete
@@ -578,6 +580,7 @@ class SignalRecord(BaseModel):
             sector_snapshot_json=_s("sector_snapshot_json"),
             internals_snapshot_json=_s("internals_snapshot_json"),
             layer_scores_json=_s("layer_scores_json"),
+            pillar_snapshot_json=_s("pillar_snapshot_json"),
             parameter_version=_s("parameter_version"),
             status=str(item.get("status") or "active"),
             mode=_coerce_signal_mode(item.get("mode")),

@@ -16,8 +16,13 @@ from typing import Any, Awaitable, Callable
 from stocvest.api.services.ledger_study_capture import maybe_persist_position_ledger_row
 from stocvest.api.services.position_composite_engine import build_position_composite_response
 from stocvest.api.services.position_scan import POSITION_SCAN_UNIVERSE_V1
+from stocvest.api.services.signal_recorder import get_signal_recorder
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.signals.composite_score import CompositeVerdict
+from stocvest.signals.position_thesis_drift import (
+    compute_pillar_drift,
+    pillar_snapshot_to_json,
+)
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -108,8 +113,29 @@ def _persist_body(body: dict[str, Any], *, user_id: str, params: Any) -> tuple[s
         regime_label=_regime_label(body),
         sector_label=str(body.get("sector") or ""),
         market_environment=env if isinstance(env, dict) else None,
+        pillar_snapshot_json=pillar_snapshot_to_json(body),
     )
     return sym, bool(eligible)
+
+
+def _open_position_baselines(user_id: str) -> dict[str, str]:
+    """Map ``symbol -> entry pillar_snapshot_json`` for the capture user's OPEN position rows.
+
+    Best-effort: any recorder failure yields an empty map (drift reporting is skipped, capture
+    is unaffected).
+    """
+    out: dict[str, str] = {}
+    try:
+        for rec in get_signal_recorder().iter_open_validation_records():
+            if (
+                getattr(rec, "mode", "") == "position"
+                and getattr(rec, "user_id", None) == user_id
+                and getattr(rec, "pillar_snapshot_json", None)
+            ):
+                out[str(rec.symbol).strip().upper()] = rec.pillar_snapshot_json  # type: ignore[assignment]
+    except Exception as exc:  # noqa: BLE001 — drift is informational, never blocks capture
+        _LOG.warning("position ledger drift baseline fetch failed: %s", type(exc).__name__)
+    return out
 
 
 async def run_position_ledger_capture_async(
@@ -132,6 +158,11 @@ async def run_position_ledger_capture_async(
     sem = asyncio.Semaphore(max(1, concurrency))
     stats = {"evaluated": 0, "qualified": 0, "shadow": 0, "errors": 0}
 
+    # ADR-004 POS-AI-7: informational thesis drift. Compare the fresh composite of any OPEN
+    # validation position against its entry-time pillar baseline. Never closes/alerts.
+    open_baselines = _open_position_baselines(user_id)
+    drift_events: list[dict[str, Any]] = []
+
     async def _one(sym: str) -> None:
         async with sem:
             try:
@@ -140,6 +171,14 @@ async def run_position_ledger_capture_async(
                 stats["errors"] += 1
                 _LOG.warning("position ledger capture compose failed sym=%s: %s", sym, exc)
                 return
+        baseline = open_baselines.get(sym.strip().upper())
+        if baseline:
+            try:
+                drift = compute_pillar_drift(baseline, body, symbol=sym)
+                if drift is not None and drift.has_drift:
+                    drift_events.append(drift.to_dict())
+            except Exception as exc:  # noqa: BLE001 — informational only
+                _LOG.warning("position ledger drift compute failed sym=%s: %s", sym, type(exc).__name__)
         try:
             res = _persist_body(body, user_id=user_id, params=params)
         except Exception as exc:
@@ -160,15 +199,21 @@ async def run_position_ledger_capture_async(
         "job": "ledger_capture_position",
         "universe": len(symbols),
         "capture_user": user_id,
+        "open_positions_checked": len(open_baselines),
+        "drift_detected": len(drift_events),
+        "drift": drift_events,
         **stats,
     }
     _LOG.info(
-        "position ledger capture done universe=%s evaluated=%s qualified=%s shadow=%s errors=%s",
+        "position ledger capture done universe=%s evaluated=%s qualified=%s shadow=%s "
+        "errors=%s open_checked=%s drift=%s",
         len(symbols),
         stats["evaluated"],
         stats["qualified"],
         stats["shadow"],
         stats["errors"],
+        len(open_baselines),
+        len(drift_events),
     )
     return out
 

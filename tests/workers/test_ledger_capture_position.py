@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from datetime import datetime, timezone
+
 from stocvest.api.services.signal_recorder import InMemorySignalRecorder
+from stocvest.data.models import SignalRecord
+from stocvest.signals.position_thesis_drift import pillar_snapshot_to_json
 from stocvest.workers.ledger_capture_position import (
     _layer_scores,
     _regime_label,
@@ -13,8 +17,14 @@ from stocvest.workers.ledger_capture_position import (
 )
 
 
-def _body(symbol: str, *, status: str = "active", verdict: str = "neutral") -> dict:
-    return {
+def _body(
+    symbol: str,
+    *,
+    status: str = "active",
+    verdict: str = "neutral",
+    pillars: list[tuple[str, int, str]] | None = None,
+) -> dict:
+    body = {
         "symbol": symbol,
         "status": status,
         "verdict": verdict,
@@ -32,6 +42,14 @@ def _body(symbol: str, *, status: str = "active", verdict: str = "neutral") -> d
             {"layer": "bogus", "score": None},
         ],
     }
+    if pillars is not None:
+        body["position_fundamentals"] = {
+            "pillars": [
+                {"pillar_id": pid, "label": f"{pid} label", "score": sc, "verdict": pv}
+                for pid, sc, pv in pillars
+            ]
+        }
+    return body
 
 
 @pytest.fixture()
@@ -83,3 +101,52 @@ async def test_sweep_writes_shadow_rows_and_counts(recorder: InMemorySignalRecor
     rows = [r for r in recorder.scan_all_records() if r.mode == "position"]
     assert rows and all(r.capture_kind == "shadow" for r in rows)
     assert all(r.symbol == "AAA" for r in rows if r.user_id)
+
+
+@pytest.mark.asyncio
+async def test_sweep_persists_pillar_snapshot(recorder: InMemorySignalRecorder) -> None:
+    async def _compose(sym: str) -> dict:
+        return _body(sym, verdict="bullish", pillars=[("F1", 80, "bullish"), ("F4", 40, "bearish")])
+
+    await run_position_ledger_capture_async(universe=["AAA"], compose=_compose, concurrency=1)
+    rows = [r for r in recorder.scan_all_records() if r.mode == "position" and r.user_id]
+    assert rows and rows[0].pillar_snapshot_json  # baseline persisted + round-trips through Dynamo item
+
+
+@pytest.mark.asyncio
+async def test_sweep_reports_informational_drift_for_open_position(
+    recorder: InMemorySignalRecorder,
+) -> None:
+    # Seed an OPEN position under the capture user with an entry pillar baseline.
+    baseline = pillar_snapshot_to_json(
+        _body("AAA", verdict="bullish", pillars=[("F1", 80, "bullish"), ("F2", 60, "neutral")])
+    )
+    recorder.record_signal(
+        SignalRecord(
+            signal_id="open-1",
+            symbol="AAA",
+            direction="bullish",
+            signal_strength=70,
+            pattern="position_composite",
+            layer_scores={},
+            price_at_signal=100.0,
+            generated_at=datetime.now(timezone.utc),
+            user_id="platform-position-ledger",
+            mode="position",
+            ledger_qualified=True,
+            ledger_position_open=True,
+            pillar_snapshot_json=baseline,
+        )
+    )
+
+    # Fresh composite degrades F1 (80→60, −20) and the overall verdict (bullish→neutral).
+    async def _compose(sym: str) -> dict:
+        return _body(sym, verdict="neutral", pillars=[("F1", 60, "bullish"), ("F2", 60, "neutral")])
+
+    out = await run_position_ledger_capture_async(universe=["AAA"], compose=_compose, concurrency=1)
+    assert out["open_positions_checked"] == 1
+    assert out["drift_detected"] == 1
+    ev = out["drift"][0]
+    assert ev["symbol"] == "AAA"
+    assert ev["verdict_downgraded"] is True
+    assert [p["pillar_id"] for p in ev["degraded_pillars"]] == ["F1"]

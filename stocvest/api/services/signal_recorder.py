@@ -125,6 +125,8 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
         item["internals_snapshot_json"] = rec.internals_snapshot_json
     if rec.layer_scores_json:
         item["layer_scores_json"] = rec.layer_scores_json
+    if rec.pillar_snapshot_json:
+        item["pillar_snapshot_json"] = rec.pillar_snapshot_json
     if rec.parameter_version:
         item["parameter_version"] = rec.parameter_version
     if rec.status != "active":

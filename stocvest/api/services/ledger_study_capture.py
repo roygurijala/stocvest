@@ -59,6 +59,7 @@ def maybe_persist_position_ledger_row(
     regime_label: str,
     sector_label: str,
     market_environment: dict[str, Any] | None = None,
+    pillar_snapshot_json: str | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     """Persist a qualified/shadow Position ledger row (ADR-004 POS-D9).
 
@@ -117,6 +118,7 @@ def maybe_persist_position_ledger_row(
         sector_snapshot_json=snapshot_blobs.get("sector_snapshot_json"),
         internals_snapshot_json=snapshot_blobs.get("internals_snapshot_json"),
         layer_scores_json=layer_scores_json or snapshot_blobs.get("layer_scores_json"),
+        pillar_snapshot_json=pillar_snapshot_json,
         status=response_status if response_status in ("active", "incomplete") else "active",
         mode="position",
         ledger_qualified=eligible,
