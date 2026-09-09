@@ -49,12 +49,18 @@ def _layer_scores(body: dict[str, Any]) -> dict[str, float]:
 
 
 def _regime_label(body: dict[str, Any]) -> str:
+    # market_environment (build_market_environment_from_macro) exposes the coarse macro
+    # regime under "macro_regime"; the composite body may also carry a top-level "regime".
     env = body.get("market_environment")
     if isinstance(env, dict):
-        for key in ("regime_label", "regime", "market_regime"):
+        for key in ("macro_regime", "regime_label", "regime", "market_regime"):
             val = env.get(key)
             if val:
                 return str(val).strip().lower()
+    for key in ("regime", "market_regime"):
+        val = body.get(key)
+        if val:
+            return str(val).strip().lower()
     return "neutral"
 
 

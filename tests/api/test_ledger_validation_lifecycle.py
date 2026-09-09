@@ -123,6 +123,7 @@ class _FakeDynamoTable:
     ("mode", "used_trio", "unused_trio"),
     [
         ("swing", ("#p1d", "#o1d", "#r1d"), ("#p1h", "#o1h", "#r1h")),
+        ("position", ("#p1d", "#o1d", "#r1d"), ("#p1h", "#o1h", "#r1h")),
         ("day", ("#p1h", "#o1h", "#r1h"), ("#p1d", "#o1d", "#r1d")),
     ],
 )

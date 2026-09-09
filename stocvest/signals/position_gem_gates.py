@@ -191,7 +191,11 @@ def extract_candidate_features(body: dict[str, Any]) -> CandidateFeatures:
         signal_valid_days=_as_int(body.get("signal_valid_days")),
         company_name=(str(body.get("company_name")).strip() or None) if body.get("company_name") else None,
         market_cap=_as_float(body.get("market_cap")),
-        avg_dollar_volume=_as_float(body.get("avg_dollar_volume") or body.get("dollar_volume")),
+        # Prefer avg_dollar_volume when the key is present (even 0.0 → a real illiquidity
+        # signal); only fall back to dollar_volume when the primary key is absent.
+        avg_dollar_volume=_as_float(
+            body["avg_dollar_volume"] if body.get("avg_dollar_volume") is not None else body.get("dollar_volume")
+        ),
     )
 
 

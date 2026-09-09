@@ -38,7 +38,6 @@ POSITION_EXTRA_EXCLUDED_SYMBOLS: frozenset[str] = frozenset(
         "ZSL",
         "TMF",
         "TMV",
-        "TQQQ",
         "YINN",
         "YANG",
         "FNGU",

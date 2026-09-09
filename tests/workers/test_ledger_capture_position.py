@@ -24,7 +24,7 @@ def _body(symbol: str, *, status: str = "active", verdict: str = "neutral") -> d
         "reference_stop_level": 90.0,
         "reference_target_1": 130.0,
         "sector": "Technology",
-        "market_environment": {"environment_tier": "normal", "regime_label": "neutral"},
+        "market_environment": {"environment_tier": "normal", "macro_regime": "risk_off"},
         "layers": [
             {"layer": "fundamentals", "score": 61.0},
             {"layer": "technical", "score": 48.0},
@@ -43,7 +43,10 @@ def recorder(monkeypatch: pytest.MonkeyPatch) -> InMemorySignalRecorder:
 def test_helpers_map_body_fields() -> None:
     body = _body("AAPL")
     assert _layer_scores(body) == {"fundamentals": 61.0, "technical": 48.0}
-    assert _regime_label(body) == "neutral"
+    # regime is read from market_environment["macro_regime"] (the real key).
+    assert _regime_label(body) == "risk_off"
+    assert _regime_label({}) == "neutral"
+    assert _regime_label({"regime": "bull"}) == "bull"  # top-level fallback
     assert _signal_strength(body) == 42
     assert _signal_strength({"composite_score": None}) == 0
     assert _signal_strength({"composite_score": 250}) == 100
