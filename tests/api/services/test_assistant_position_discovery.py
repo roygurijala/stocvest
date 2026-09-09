@@ -8,10 +8,13 @@ import pytest
 
 import stocvest.api.services.assistant_position_discovery as gem_mod
 from stocvest.api.services.assistant_position_discovery import (
+    fetch_gem_compare_context,
     fetch_gem_lookup_context,
     fetch_position_gem_context,
+    gem_compare_payload,
     gem_lookup_payload,
     position_gem_payload,
+    serialize_gem_compare_context,
     serialize_gem_lookup_context,
     serialize_position_gem_context,
 )
@@ -180,3 +183,92 @@ def test_lookup_blank_symbol_is_error(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.source == "error"
     assert serialize_gem_lookup_context(result) == ""
     assert gem_lookup_payload(result) is None
+
+
+# ── Journey C — head-to-head compare (POS-AI-6) ───────────────────────────────
+
+
+def test_compare_builds_pillar_matrix(monkeypatch: pytest.MonkeyPatch) -> None:
+    snap = _snapshot(
+        [
+            _candidate("KO", "gem", rank=88),
+            _candidate("PEP", "strong", rank=72, fund_verdict="neutral"),
+        ]
+    )
+    _patch_snapshot(monkeypatch, snap)
+    result = fetch_gem_compare_context(["ko", "PEP"])
+    assert result.source == "scan_cache"
+    assert result.symbols == ["KO", "PEP"]
+    assert result.found_count == 2
+    # Canonical pillar ordering, union across cells.
+    assert result.pillar_ids == ["F1", "F4"]
+
+    block = serialize_gem_compare_context(result)
+    assert "=== POSITION GEM COMPARE ===" in block
+    assert "NEVER crown a single 'best' pick" in block
+    assert "KO: tier=gem" in block
+    assert "PEP: tier=strong" in block
+    assert "F1 Profitability: score=82" in block
+
+    payload = gem_compare_payload(result)
+    assert payload is not None
+    assert payload["symbols"] == ["KO", "PEP"]
+    assert payload["pillar_ids"] == ["F1", "F4"]
+    assert payload["cells"][0]["on_gem_list"] is True
+    assert payload["cells"][0]["pillars"]["F1"]["score"] == 82
+
+
+def test_compare_dedupes_and_caps_symbols(monkeypatch: pytest.MonkeyPatch) -> None:
+    snap = _snapshot(
+        [_candidate(s, "gem") for s in ("A", "B", "C", "D", "E")]
+    )
+    _patch_snapshot(monkeypatch, snap)
+    result = fetch_gem_compare_context(["A", "a", "B", "C", "D", "E"])
+    # Deduped (A/a collapse) and capped at 4.
+    assert result.symbols == ["A", "B", "C", "D"]
+
+
+def test_compare_marks_names_not_on_universe(monkeypatch: pytest.MonkeyPatch) -> None:
+    snap = _snapshot([_candidate("KO", "gem")])
+    _patch_snapshot(monkeypatch, snap)
+    result = fetch_gem_compare_context(["KO", "TSLA"])
+    assert result.found_count == 1
+    cells = {c.symbol: c for c in result.cells}
+    assert cells["KO"].found is True
+    assert cells["TSLA"].found is False
+
+    block = serialize_gem_compare_context(result)
+    assert "TSLA: on_gem_list=false" in block
+    # No invented tier for the unscored name.
+    assert "TSLA: tier=" not in block
+
+
+def test_compare_insufficient_when_under_two_symbols(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_snapshot(monkeypatch, _snapshot([_candidate("KO", "gem")]))
+    result = fetch_gem_compare_context(["KO"])
+    assert result.source == "insufficient"
+    block = serialize_gem_compare_context(result)
+    assert "source=insufficient" in block
+    assert gem_compare_payload(result) is None
+
+
+def test_compare_not_loaded_when_cache_cold(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_snapshot(monkeypatch, None)
+    result = fetch_gem_compare_context(["KO", "PEP"])
+    assert result.source == "not_loaded"
+    block = serialize_gem_compare_context(result)
+    assert "source=not_loaded" in block
+    assert "/dashboard/invest" in block
+    # not_loaded still returns a payload so the UI can prompt the invest screen.
+    assert gem_compare_payload(result) is not None
+
+
+def test_compare_swallows_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom():  # type: ignore[no-untyped-def]
+        raise RuntimeError("scan down")
+
+    monkeypatch.setattr(gem_mod, "get_cached_position_scan_snapshot", _boom)
+    result = fetch_gem_compare_context(["KO", "PEP"])
+    assert result.source == "error"
+    assert serialize_gem_compare_context(result) == ""
+    assert gem_compare_payload(result) is None

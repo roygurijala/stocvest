@@ -9,6 +9,9 @@ scanner:
 * Journey B — single-name lookup ("is MSFT a gem?"): the symbol's cached tier, pillars,
   and reason if it is in the weekly universe; otherwise an explicit "not on the gem list"
   note so the assistant offers the Position tab instead of guessing a tier.
+* Journey C — head-to-head compare ("compare KO vs PEP for the long term", POS-AI-6): a
+  deterministic pillar diff matrix across 2–4 cached candidates that presents differences
+  only — the assistant never crowns a single "best" pick.
 
 The assistant only *narrates* these; the tier is the fixed output of gates G1–G9 and is
 never invented, upgraded, or overridden.
@@ -245,4 +248,172 @@ def gem_lookup_payload(result: GemLookupResult) -> dict[str, Any] | None:
         "weakest_pillar_label": result.weakest_pillar_label,
         "why": result.why,
         "invest_href": _INVEST_HREF,
+    }
+
+
+# ── Journey C — head-to-head compare (POS-AI-6) ───────────────────────────────
+# A deterministic pillar diff matrix across 2–4 cached candidates. Presents *differences*
+# only — it never ranks a single "best" pick (that rule is enforced in the locked prompt).
+
+_MAX_COMPARE = 4
+_PILLAR_ORDER = ("F1", "F2", "F3", "F4", "F5")
+
+
+@dataclass
+class GemCompareCell:
+    symbol: str
+    found: bool = False
+    tier: str | None = None
+    verdict: str | None = None
+    fundamentals_verdict: str | None = None
+    weakest_pillar_label: str | None = None
+    why: str | None = None
+    #: pillar_id → {label, score, verdict}
+    pillars: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+@dataclass
+class GemCompareResult:
+    symbols: list[str] = field(default_factory=list)
+    cells: list[GemCompareCell] = field(default_factory=list)
+    #: canonical F1..F5 (then any extra ids) present on at least one found cell
+    pillar_ids: list[str] = field(default_factory=list)
+    generated_at: str | None = None
+    source: str = "scan_cache"  # scan_cache | not_loaded | insufficient | error
+    found_count: int = 0
+
+
+def _normalize_compare_symbols(symbols: list[str]) -> list[str]:
+    seen: list[str] = []
+    for s in symbols or []:
+        sym = str(s or "").strip().upper()
+        if sym and sym not in seen:
+            seen.append(sym)
+        if len(seen) >= _MAX_COMPARE:
+            break
+    return seen
+
+
+def fetch_gem_compare_context(symbols: list[str]) -> GemCompareResult:
+    """Build a deterministic pillar diff matrix across the named symbols (Journey C)."""
+    seen = _normalize_compare_symbols(symbols)
+    result = GemCompareResult(symbols=seen)
+    if len(seen) < 2:
+        result.source = "insufficient"
+        return result
+    try:
+        snapshot = get_cached_position_scan_snapshot()
+        if snapshot is None:
+            result.source = "not_loaded"
+            return result
+        result.generated_at = snapshot.generated_at.replace(microsecond=0).isoformat()
+        by_symbol = {c.symbol: c for c in snapshot.candidates}
+        present: set[str] = set()
+        for sym in seen:
+            cand = by_symbol.get(sym)
+            if cand is None:
+                result.cells.append(GemCompareCell(symbol=sym, found=False))
+                continue
+            pillars: dict[str, dict[str, Any]] = {}
+            for p in cand.pillars:
+                pid = str(p.get("pillar_id") or "").upper()
+                if not pid:
+                    continue
+                pillars[pid] = {
+                    "label": str(p.get("label") or pid),
+                    "score": p.get("score"),
+                    "verdict": str(p.get("verdict") or ""),
+                }
+                present.add(pid)
+            result.cells.append(
+                GemCompareCell(
+                    symbol=sym,
+                    found=True,
+                    tier=cand.tier,
+                    verdict=cand.verdict,
+                    fundamentals_verdict=cand.fundamentals_verdict,
+                    weakest_pillar_label=cand.weakest_pillar_label,
+                    why=cand.why,
+                    pillars=pillars,
+                )
+            )
+        result.found_count = sum(1 for c in result.cells if c.found)
+        result.pillar_ids = [pid for pid in _PILLAR_ORDER if pid in present]
+        result.pillar_ids += sorted(pid for pid in present if pid not in _PILLAR_ORDER)
+        return result
+    except Exception as exc:  # noqa: BLE001 — compare must never break the reply
+        _LOG.debug("gem compare fetch failed symbols=%s err=%s", seen, exc)
+        result.source = "error"
+        return result
+
+
+def serialize_gem_compare_context(result: GemCompareResult) -> str:
+    """Render the compare matrix as a context block for Claude (differences, no winner)."""
+    if result.source == "error" or not result.symbols:
+        return ""
+    header = "=== POSITION GEM COMPARE ==="
+    if result.source == "insufficient":
+        return (
+            f"{header}\n"
+            "source=insufficient\n"
+            "note=Fewer than two named symbols were detected. Ask the user which two-to-four names "
+            "to compare — do NOT invent a comparison.\n"
+        )
+    if result.source == "not_loaded":
+        return (
+            f"{header}\n"
+            "source=not_loaded\n"
+            f"note=The weekly gem scan is not loaded in this session yet, so these names have no "
+            f"cached tiers. Tell the user to open {_INVEST_HREF} to run the screen — do NOT guess "
+            "tiers.\n"
+        )
+    lines = [
+        f"{header} (long-horizon; deterministic tiers — present pillar-by-pillar differences, "
+        "NEVER crown a single 'best' pick)"
+    ]
+    if result.generated_at:
+        lines.append(f"scan_generated_at={result.generated_at}")
+    lines.append(f"symbols={','.join(result.symbols)}")
+    lines.append(f"invest_href={_INVEST_HREF}")
+    for cell in result.cells:
+        if not cell.found:
+            lines.append(
+                f"- {cell.symbol}: on_gem_list=false — not in the current weekly universe, so it "
+                "has no tier. Do NOT guess a tier; note it is unscored and offer its Position tab."
+            )
+            continue
+        weak = f"; weakest {cell.weakest_pillar_label}" if cell.weakest_pillar_label else ""
+        lines.append(f"- {cell.symbol}: tier={cell.tier}, fundamentals={cell.fundamentals_verdict}{weak}")
+        for pid in result.pillar_ids:
+            p = cell.pillars.get(pid)
+            if not p:
+                continue
+            lines.append(f"    {pid} {p['label']}: score={p['score']}, verdict={p['verdict']}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gem_compare_payload(result: GemCompareResult) -> dict[str, Any] | None:
+    """Structured compare matrix for the UI. None when there is nothing to render."""
+    if not result.symbols or result.source in ("error", "insufficient"):
+        return None
+    return {
+        "source": result.source,
+        "generated_at": result.generated_at,
+        "invest_href": _INVEST_HREF,
+        "symbols": result.symbols,
+        "pillar_ids": result.pillar_ids,
+        "cells": [
+            {
+                "symbol": cell.symbol,
+                "on_gem_list": cell.found,
+                "tier": cell.tier,
+                "verdict": cell.verdict,
+                "fundamentals_verdict": cell.fundamentals_verdict,
+                "weakest_pillar_label": cell.weakest_pillar_label,
+                "why": cell.why,
+                "pillars": cell.pillars,
+            }
+            for cell in result.cells
+        ],
     }

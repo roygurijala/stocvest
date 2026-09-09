@@ -231,8 +231,38 @@ def is_gem_lookup_query(text: str) -> bool:
 
 
 def is_position_intent_query(text: str) -> bool:
-    """Any position/gem intent — discovery or single-name lookup."""
-    return is_gem_discovery_query(text) or is_gem_lookup_query(text)
+    """Any position/gem intent — discovery, single-name lookup, or compare."""
+    return is_gem_discovery_query(text) or is_gem_lookup_query(text) or is_gem_compare_query(text)
+
+
+# ADR-004 POS-AI-6 — long-horizon *compare* intent ("compare AAPL vs MSFT for the long term",
+# "which is the better quality compounder, KO or PEP?"). Distinguished from the swing/day
+# multi-symbol comparison by requiring an investment/long-horizon cue in the same message; the
+# handler additionally requires ≥2 distinct tickers (and treats any comparison as a gem compare
+# when the Position tab is already in scope).
+_GEM_COMPARE_CONTEXT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bgems?\b", re.IGNORECASE),
+    re.compile(r"\blong[\s-]?term\b", re.IGNORECASE),
+    re.compile(r"\binvest(ing|ment)?\b", re.IGNORECASE),
+    re.compile(r"\bfundamentals?\b", re.IGNORECASE),
+    re.compile(r"\bquality\b", re.IGNORECASE),
+    re.compile(r"\bcompounder\b", re.IGNORECASE),
+    re.compile(r"\bbuy[\s-]?and[\s-]?hold\b", re.IGNORECASE),
+    re.compile(r"\bhold\s+(for\s+)?(the\s+)?long\b", re.IGNORECASE),
+)
+
+
+def is_gem_compare_query(text: str) -> bool:
+    """Return True for a long-horizon head-to-head comparison (POS-AI-6, Journey C).
+
+    Requires both comparison language *and* an investment/long-horizon cue so a plain
+    "compare NVDA vs AMD" stays on the swing/day desk unless the user frames it as a
+    long-term / quality / fundamentals question."""
+    if not text or not text.strip():
+        return False
+    return is_comparison_query(text) and any(
+        p.search(text) for p in _GEM_COMPARE_CONTEXT_PATTERNS
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

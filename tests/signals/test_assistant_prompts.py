@@ -1470,6 +1470,14 @@ def test_prompt_carries_gem_discovery_and_lookup_block_rules() -> None:
     assert "/dashboard/invest" in text
 
 
+def test_prompt_carries_gem_compare_block_rules() -> None:
+    """POS-AI-6 — the compare block must present differences and never crown a winner."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "=== POSITION GEM COMPARE ===" in text
+    assert 'NEVER declare a single "best" or "winner"' in text
+    assert "pillar-by-pillar" in text
+
+
 def test_serialize_page_context_rejects_invalid_position_values() -> None:
     """Bad verdict/tier values are dropped (whitelist), mode still emitted."""
     ctx = {

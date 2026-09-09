@@ -31,10 +31,13 @@ from stocvest.api.services.assistant_discovery import (
     serialize_discovery_context,
 )
 from stocvest.api.services.assistant_position_discovery import (
+    fetch_gem_compare_context,
     fetch_gem_lookup_context,
     fetch_position_gem_context,
+    gem_compare_payload,
     gem_lookup_payload,
     position_gem_payload,
+    serialize_gem_compare_context,
     serialize_gem_lookup_context,
     serialize_position_gem_context,
 )
@@ -74,6 +77,7 @@ from stocvest.utils.intent_detector import (
     is_comparison_query,
     is_discovery_query,
     is_forecast_query,
+    is_gem_compare_query,
     is_gem_discovery_query,
     is_gem_lookup_query,
     is_market_overview_query,
@@ -276,6 +280,18 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     wants_gem_discovery = (
         profile.has_ai_explanations and is_gem_discovery_query(last_user_text_for_intent)
     )
+    # ADR-004 POS-AI-6 — long-horizon head-to-head compare. A comparison framed as
+    # long-term/quality/investment, OR any comparison while the Position tab is in scope,
+    # routes to the gem-compare matrix (never the swing/day multi-symbol read). Requires
+    # ≥2 distinct tickers, so single-symbol questions never trip it.
+    wants_gem_compare = profile.has_ai_explanations and (
+        is_gem_compare_query(last_user_text_for_intent)
+        or (is_position_scope and is_comparison_query(last_user_text_for_intent))
+    )
+    gem_compare_syms = (
+        detect_symbols(last_user_text_for_intent, limit=4) if wants_gem_compare else []
+    )
+    gem_compare_active = wants_gem_compare and len(gem_compare_syms) >= 2
 
     explicit_desk = (
         detect_explicit_desk(last_user_text_for_intent) if profile.has_ai_explanations else None
@@ -309,6 +325,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         and not is_position_scope
         and not wants_gem_discovery
         and not wants_gem_lookup
+        and not wants_gem_compare
         and is_discovery_query(last_user_text_for_intent)
     ):
         try:
@@ -375,6 +392,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     if (
         profile.has_ai_explanations
         and not is_position_scope
+        and not gem_compare_active
         and is_comparison_query(last_user_text_for_intent)
     ):
         comparison_syms = detect_symbols(last_user_text_for_intent, limit=3)
@@ -396,7 +414,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # up?") with real data rather than generic explanations.
     symbol_context = None
     detected_sym: str | None = None
-    if profile.has_ai_explanations and not multi_symbol_block:
+    if profile.has_ai_explanations and not multi_symbol_block and not gem_compare_active:
         try:
             messages_list = raw_messages if isinstance(raw_messages, list) else []
             # The CURRENT message is authoritative. Resolve the symbol from it
@@ -499,7 +517,17 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     position_gem_block = ""
     gem_candidates_out: dict | None = None
     gem_lookup_out: dict | None = None
-    if wants_gem_lookup and detected_sym:
+    gem_compare_out: dict | None = None
+    if gem_compare_active:
+        try:
+            compare = fetch_gem_compare_context(gem_compare_syms)
+            block = serialize_gem_compare_context(compare)
+            if block:
+                position_gem_block = block
+                gem_compare_out = gem_compare_payload(compare)
+        except Exception:  # noqa: BLE001 — gem compare must never break the reply
+            position_gem_block = ""
+    elif wants_gem_lookup and detected_sym:
         try:
             lookup = fetch_gem_lookup_context(detected_sym)
             block = serialize_gem_lookup_context(lookup)
@@ -635,6 +663,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             "discovery": discovery_payload_out,
             "gem_candidates": gem_candidates_out,
             "gem_lookup": gem_lookup_out,
+            "gem_compare": gem_compare_out,
             "citations": citations_out,
             "clarify": clarify_out,
             "web_sources": web_sources_out,

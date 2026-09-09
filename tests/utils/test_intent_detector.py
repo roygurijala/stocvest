@@ -3,6 +3,7 @@ from stocvest.utils.intent_detector import (
     is_chart_relevant_query,
     is_discovery_query,
     is_forecast_query,
+    is_gem_compare_query,
     is_gem_discovery_query,
     is_gem_lookup_query,
     is_market_overview_query,
@@ -169,8 +170,25 @@ def test_gem_lookup_query_ignores_unrelated_and_empty() -> None:
     assert not is_gem_lookup_query("")
 
 
-def test_is_position_intent_query_covers_both() -> None:
+def test_is_position_intent_query_covers_all() -> None:
     assert is_position_intent_query("what are today's gems?")
     assert is_position_intent_query("is MSFT a gem?")
+    assert is_position_intent_query("compare KO vs PEP for the long term")
     assert not is_position_intent_query("how's the market today")
+
+
+def test_is_gem_compare_query_true_for_long_horizon_comparisons() -> None:
+    assert is_gem_compare_query("compare KO vs PEP for the long term")
+    assert is_gem_compare_query("which is the better quality compounder, KO or PEP?")
+    assert is_gem_compare_query("MSFT vs AAPL on fundamentals")
+    assert is_gem_compare_query("compare these two as long-term investments")
+
+
+def test_is_gem_compare_query_false_without_investment_cue() -> None:
+    # Plain swing/day comparison — stays off the gem-compare path.
+    assert not is_gem_compare_query("compare NVDA vs AMD")
+    assert not is_gem_compare_query("which is stronger, NVDA or AMD, for a day trade")
+    # Comparison cue but no second signal, or empty.
+    assert not is_gem_compare_query("long-term outlook for NVDA")  # no comparison cue
+    assert not is_gem_compare_query("")
 
