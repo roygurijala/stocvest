@@ -21,8 +21,10 @@ describe("formatXbrlValue", () => {
     expect(formatXbrlValue(97_000_000, "USD")).toBe("$97.0M");
     expect(formatXbrlValue(-2_000_000_000, "USD")).toBe("-$2.00B");
     expect(formatXbrlValue(6.13, "USD/shares")).toBe("$6.13");
+    expect(formatXbrlValue(-1.5, "USD/shares")).toBe("-$1.50"); // diluted loss per share
     expect(formatXbrlValue(12345, "USD")).toBe("$12,345");
     expect(formatXbrlValue(Number.NaN, "USD")).toBe("—");
+    expect(formatXbrlValue(Number.POSITIVE_INFINITY, "USD")).toBe("—");
   });
 });
 

@@ -67,9 +67,10 @@ type ResearchResponse = {
 /** Format a SEC XBRL fact for display. USD → compact $T/$B/$M; USD/shares → $x.xx (EPS). */
 export function formatXbrlValue(value: number, unit: string): string {
   if (!Number.isFinite(value)) return "—";
-  if (unit === "USD/shares") return `$${value.toFixed(2)}`;
   const sign = value < 0 ? "-" : "";
   const abs = Math.abs(value);
+  // Per-share (EPS) — keep full precision; place the sign before the $ (e.g. -$1.50 loss).
+  if (unit === "USD/shares") return `${sign}$${abs.toFixed(2)}`;
   if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`;
   if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
