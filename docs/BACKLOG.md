@@ -123,7 +123,7 @@ _Next major lane when soak completes: **P1 (Phase 7 hardening)**._
 
 | ID | Theme | Status |
 |----|-------|--------|
-| POS-D9 | Ledger `mode=position` + weekly capture + report | Pending |
+| POS-D9 | Ledger `mode=position` + weekly capture + report | **IN PROGRESS** (PR #246) — **foundation DONE 2026-09-08**: `SignalRecord.mode` Literal + validator + `_coerce_signal_mode` now accept `position` (Dynamo rows unchanged; hydration coerces casing); `scripts/ledger_signal_report.py` recognizes `position` (new POSITION DESK + gate-breakdown sections, `ledger_capture_position` schedule note, new `--mode day\|swing\|position\|all` filter); +8 tests. **Pending:** `ledger_capture_position` worker (weekly position composites → shadow rows), EventBridge Fri 4:10 PM ET wiring (Terraform + deploy), setup-evolution mode dimension, then 4–8 wk shadow soak (VAL-POS) before POS-D10 alerts. |
 | POS-D10 | Assistant three-desk rules; **no position emails** until soak | Pending |
 
 ### AI layer (glass box)
