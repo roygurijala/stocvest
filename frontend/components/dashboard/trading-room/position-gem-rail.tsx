@@ -23,13 +23,16 @@ import { watchlistQualityDotColor } from "@/lib/dashboard/trading-room/watchlist
 
 const INVEST_HREF = "/dashboard/invest";
 const MAX_ITEMS = 6;
+// Match the watchlist rail's `usePositionCandidates("all", { limit: 100 })` so both
+// share one SWR key and dedupe into a single fetch when both flags are on.
+const SCAN_LIMIT = 100;
 
 export function PositionGemRail() {
   const enabled = positionFeedEnabled();
   const { colors } = useTheme();
   // `enabled` gates the SWR key inside the hook, so this network call is a no-op when the
   // flag is off (dark ship). Pull the whole screen and let the presenter pick gem/strong.
-  const { response } = usePositionCandidates("all", { limit: 50, enabled });
+  const { response } = usePositionCandidates("all", { limit: SCAN_LIMIT, enabled });
   const items = useMemo(
     () => buildPositionGemRailItems(response?.candidates ?? null, MAX_ITEMS),
     [response?.candidates]
@@ -104,9 +107,9 @@ export function PositionGemRail() {
                 whiteSpace: "nowrap"
               }}
             >
+              {/* Decorative — the tier is already announced by the visible text label below. */}
               <span
-                role="img"
-                aria-label={item.tierShort}
+                aria-hidden
                 style={{ width: 7, height: 7, borderRadius: "50%", background: dot, flex: "none" }}
               />
               {item.symbol}
