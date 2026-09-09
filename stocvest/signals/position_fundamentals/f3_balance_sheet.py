@@ -11,6 +11,7 @@ from stocvest.signals.position_fundamentals.common import (
     prioritize_chips,
     unavailable_pillar,
 )
+from stocvest.signals.position_fundamentals.sector_overrides import SectorOverrideFlags
 from stocvest.signals.position_fundamentals.types import (
     PILLAR_LABELS,
     PILLAR_WEIGHTS,
@@ -19,7 +20,12 @@ from stocvest.signals.position_fundamentals.types import (
 from stocvest.signals.signal_math_contract import LAYER_SCORE_NEUTRAL
 
 
-def score_f3_balance_sheet(snapshot: PositionFundamentalsSnapshot) -> PositionPillarResult:
+def score_f3_balance_sheet(
+    snapshot: PositionFundamentalsSnapshot,
+    *,
+    sector_flags: SectorOverrideFlags | None = None,
+) -> PositionPillarResult:
+    flags = sector_flags or SectorOverrideFlags()
     ratios = snapshot.ratios
     balance = snapshot.balance_sheets
     if not ratios and not balance:
@@ -55,7 +61,11 @@ def score_f3_balance_sheet(snapshot: PositionFundamentalsSnapshot) -> PositionPi
 
         de = latest_ratio.debt_equity_ratio
         if de is not None:
-            if de <= 0.5:
+            if flags.structural_high_leverage:
+                # Banks/REITs are structurally levered (deposits, mortgage debt); a high D/E
+                # is not a solvency red flag here, so it is surfaced as context, not scored.
+                chips.append(f"D/E {de:.1f} — structural for sector (not a red flag)")
+            elif de <= 0.5:
                 base = apply_score_delta(base, 8)
                 chips.append(f"D/E {de:.1f} — conservative")
             elif de >= 2.5:

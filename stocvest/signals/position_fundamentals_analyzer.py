@@ -109,7 +109,7 @@ class PositionFundamentalsAnalyzer:
         pillars: list[PositionPillarResult] = [
             score_f1_profitability(snap, sector_flags=flags),
             f2,
-            score_f3_balance_sheet(snap),
+            score_f3_balance_sheet(snap, sector_flags=flags),
             score_f4_valuation(
                 snap,
                 sector_flags=flags,

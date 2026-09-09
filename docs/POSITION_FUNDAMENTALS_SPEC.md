@@ -176,14 +176,31 @@ Each pillar emits: `pillar_id`, `score` (0–100), `verdict`, `reasoning`, `chip
 
 ---
 
-## Sector overrides (POS-D2 stub → POS-AI-5 full)
+## Sector overrides (POS-D2 stub → POS-AI-5)
 
-| Sector bucket | Adjustment |
-|---------------|------------|
-| Banks / insurance | F3: CET1/NPL proxies; F1: ROE not ROIC; F4: P/TBV |
-| REITs | F4: P/FFO; F3: REIT debt metrics |
-| Biotech / pre-profit | F4 de-weighted; runway informational |
+Table-driven in `stocvest/signals/position_fundamentals/sector_overrides.py`
+(`resolve_sector_override_flags(bucket) → SectorOverrideFlags`). Buckets are the internal
+`SectorMapper` buckets (note REITs resolve to **`real_estate`**, not `reits`). The overrides
+are deliberately conservative — metric selection, valuation de-emphasis, and suppression of
+an inappropriate *generic* red flag — and never invent new numeric thresholds.
+
+**Shipped (POS-AI-5):**
+
+| Sector bucket (`SectorMapper`) | Flag | Effect |
+|---|---|---|
+| `banks`, `insurance`, `consumer_finance`, `investment_services` | `use_roa_not_roic` | F1 quality metric uses ROA (not ROIC/ROCE) |
+| `banks` … + `real_estate`/`reits` | `structural_high_leverage` | F3 does **not** score raw D/E or fire the "Elevated leverage" red flag (surfaced as an informational chip); interest-coverage & liquidity checks still apply |
+| `real_estate`/`reits` | `de_weight_valuation` + `valuation_note` | F4 −5 de-emphasis with chip "REIT — judge valuation on P/FFO, not P/E" (GAAP P/E distorted by depreciation) |
+| `biotech`, `pharma` | `de_weight_valuation` | F4 −5 with chip "Pre-profit sector — valuation de-weighted" |
+
+**Deferred to POS-AI-5 v2 (need verified FMP inputs / coordinated pillar-set change):**
+
+| Target | Adjustment (not yet implemented) |
+|---|---|
+| Banks | F3 CET1 / NPL proxies; F4 P/TBV |
+| REITs | F4 P/FFO recompute; F3 REIT-specific debt metrics |
 | Energy / cyclicals | F1/F2 mid-cycle normalization chip |
+| All | **F7** business-quality/moat proxies, **F8** capital allocation — behind `STOCVEST_POSITION_FUNDAMENTALS_V2_ENABLED` |
 
 ---
 

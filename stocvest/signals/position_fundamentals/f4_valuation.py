@@ -108,7 +108,7 @@ def score_f4_valuation(
 
     if flags.de_weight_valuation:
         base = apply_score_delta(base, -5)
-        chips.append("Pre-profit sector — valuation de-weighted")
+        chips.append(flags.valuation_note or "Pre-profit sector — valuation de-weighted")
 
     latest_pe = None
     if ratios:
