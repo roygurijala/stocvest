@@ -219,13 +219,15 @@ resource "aws_scheduler_schedule" "scanner_ledger_capture_swing" {
 }
 
 # ADR-004 POS-D9 — weekly Position validation ledger capture (Friday post-cash-close).
-# Shipped DISABLED: applying this resource does not start the soak. Flip state to
-# "ENABLED" only when kicking off the VAL-POS shadow soak (alerts stay off until sign-off).
+# Gated by var.position_ledger_capture_enabled (default true = VAL-POS shadow soak starts on
+# the next apply). Set the var to false to pause the soak without destroying the resource.
+# NOTE: this only writes shadow/qualified ledger rows — position ALERTS/EMAILS stay OFF until
+# the VAL-POS soak sign-off (POS-D10) regardless of this schedule.
 resource "aws_scheduler_schedule" "scanner_ledger_capture_position" {
   name       = "stocvest-development-scanner-ledger-capture-position"
   group_name = aws_scheduler_schedule_group.scanner.name
 
-  state = "DISABLED"
+  state = var.position_ledger_capture_enabled ? "ENABLED" : "DISABLED"
 
   flexible_time_window {
     mode = "OFF"
