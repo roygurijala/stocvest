@@ -192,6 +192,17 @@ def test_sanitize_assistant_user_reply_strips_internal_tokens() -> None:
     assert "monitor" in cleaned or "means" in cleaned
 
 
+def test_sanitize_assistant_user_reply_strips_position_field_names() -> None:
+    """POS-AI-3 — position_* field names must never leak into user-visible replies."""
+    raw = "Its position_weakest_pillar is F4 and position_pillar_2 shows valuation; position_gem_tier=gem."
+    cleaned = sanitize_assistant_user_reply(raw)
+    assert "position_weakest_pillar" not in cleaned
+    assert "position_pillar_2" not in cleaned
+    assert "position_gem_tier" not in cleaned
+    # The human sentence around the tokens survives (not blanked wholesale).
+    assert "F4" in cleaned
+
+
 def test_sanitize_assistant_user_reply_replaces_compliance_jargon() -> None:
     raw = (
         "Risk/reward does not meet internal thresholds for structured scenario building. "
@@ -1403,6 +1414,49 @@ def test_serialize_page_context_emits_position_desk_fields() -> None:
     assert "position_gem_tier=gem" in out
     # Plain-English mirror for the LLM.
     assert "Active desk: Position (long-horizon quality)" in out
+
+
+def test_serialize_page_context_emits_position_pillar_aware_fields() -> None:
+    """POS-AI-3 — pillar grid, weakest pillar, and condensed thesis reach the model
+    (structured tail + plain-English mirror), bounded and whitelisted."""
+    ctx = {
+        "page": "dashboard/trading-room",
+        "trading_mode": "position",
+        "symbol": "MSFT",
+        "position_verdict": "neutral",
+        "position_weakest_pillar": "F4 · Valuation",
+        "position_pillars": [
+            {"id": "f1", "label": "Profitability & quality", "score": 82, "verdict": "bullish"},
+            {"id": "F4", "label": "Valuation", "score": 40, "verdict": "neutral"},
+            {"id": "BOGUS", "label": "Nope", "score": 99, "verdict": "bullish"},  # dropped
+        ],
+        "position_thesis_summary": "Bull: strong ROIC; low leverage | Bear: rich multiple | Open: margin durability?",
+    }
+    out = serialize_page_context(ctx)
+    # Structured tail — pillar ids normalized upper, unknown id dropped, weakest surfaced.
+    assert "position_weakest_pillar=F4 · Valuation" in out
+    assert "position_pillar_1=id=F1|verdict=bullish|label=Profitability & quality|score=82" in out
+    assert "position_pillar_2=id=F4|verdict=neutral|label=Valuation|score=40" in out
+    assert "BOGUS" not in out
+    assert "position_thesis_summary=Bull: strong ROIC; low leverage | Bear: rich multiple | Open: margin durability?" in out
+    # Plain-English mirror.
+    assert "Weakest pillar on screen: F4 · Valuation" in out
+    assert "Fundamentals pillars: F1 Profitability & quality = bullish; F4 Valuation = neutral" in out
+    assert "Investment thesis on screen: Bull: strong ROIC" in out
+
+
+def test_serialize_page_context_rejects_invalid_position_pillar_rows() -> None:
+    """Non-dict rows and invalid verdicts degrade gracefully (verdict → unavailable)."""
+    ctx = {
+        "trading_mode": "position",
+        "position_pillars": [
+            "not-a-dict",
+            {"id": "F3", "label": "Balance sheet", "verdict": "strong_buy"},  # invalid verdict
+        ],
+    }
+    out = serialize_page_context(ctx)
+    assert "position_pillar_1=id=F3|verdict=unavailable|label=Balance sheet" in out
+    assert "strong_buy" not in out
 
 
 def test_prompt_carries_gem_discovery_and_lookup_block_rules() -> None:

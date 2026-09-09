@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildPositionThesisSummary,
   parsePositionFundamentals,
   parsePositionThesisPacket
 } from "@/lib/dashboard/trading-room/position-fundamentals-present";
@@ -86,5 +87,42 @@ describe("parsePositionThesisPacket", () => {
         position_thesis_packet: { symbol: "X", verdict: "neutral", bull_case: [], bear_case: [], open_questions: [], pillar_snapshot_hash: "h" }
       })
     ).toBeNull();
+  });
+});
+
+describe("buildPositionThesisSummary (POS-AI-3)", () => {
+  it("condenses bull/bear/open into one bounded line (top 2/2/1)", () => {
+    const packet = parsePositionThesisPacket({
+      position_thesis_packet: {
+        symbol: "AAPL",
+        verdict: "bullish",
+        bull_case: [
+          { text: "Strong ROIC", source: "F1", confidence: "high" },
+          { text: "Low leverage", source: "F3", confidence: "high" },
+          { text: "Third ignored", source: "F2", confidence: "low" }
+        ],
+        bear_case: [{ text: "Rich multiple", source: "F4", confidence: "medium" }],
+        open_questions: [{ text: "Margin durability?", source: "F1", confidence: "low" }],
+        pillar_snapshot_hash: "abc"
+      }
+    });
+    expect(buildPositionThesisSummary(packet)).toBe(
+      "Bull: Strong ROIC; Low leverage | Bear: Rich multiple | Open: Margin durability?"
+    );
+  });
+
+  it("omits empty sections and returns empty string for null", () => {
+    const packet = parsePositionThesisPacket({
+      position_thesis_packet: {
+        symbol: "MSFT",
+        verdict: "neutral",
+        bull_case: [{ text: "Only a bull point", source: "F1", confidence: "high" }],
+        bear_case: [],
+        open_questions: [],
+        pillar_snapshot_hash: "h"
+      }
+    });
+    expect(buildPositionThesisSummary(packet)).toBe("Bull: Only a bull point");
+    expect(buildPositionThesisSummary(null)).toBe("");
   });
 });

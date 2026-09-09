@@ -137,3 +137,26 @@ export function pillarVerdictTone(verdict: string): "bullish" | "bearish" | "neu
   if (v === "neutral") return "neutral";
   return "muted";
 }
+
+/**
+ * ADR-004 POS-AI-3 — condense the glass-box thesis packet into one bounded line for the
+ * assistant page context (Bull / Bear / Open). Deterministic and source-faithful — it only
+ * echoes packet bullet text, so the assistant can articulate the thesis without inventing.
+ */
+export function buildPositionThesisSummary(packet: PositionThesisPacket | null | undefined): string {
+  if (!packet) return "";
+  const join = (bullets: ThesisBullet[], n: number) =>
+    bullets
+      .slice(0, n)
+      .map((b) => b.text.trim())
+      .filter(Boolean)
+      .join("; ");
+  const parts: string[] = [];
+  const bull = join(packet.bullCase, 2);
+  if (bull) parts.push(`Bull: ${bull}`);
+  const bear = join(packet.bearCase, 2);
+  if (bear) parts.push(`Bear: ${bear}`);
+  const open = join(packet.openQuestions, 1);
+  if (open) parts.push(`Open: ${open}`);
+  return parts.join(" | ");
+}

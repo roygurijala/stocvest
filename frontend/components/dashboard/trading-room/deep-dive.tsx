@@ -22,7 +22,11 @@ import { borderRadius, roleAccents, spacing, typography, animationDurations } fr
 import { DeepDiveEvidenceTabs } from "@/components/dashboard/trading-room/deep-dive-evidence-tabs";
 import { DeepDiveLaneToggle } from "@/components/dashboard/trading-room/deep-dive-lane-toggle";
 import { PositionSetupRead } from "@/components/dashboard/trading-room/position-setup-read";
-import { parsePositionFundamentals, parsePositionThesisPacket } from "@/lib/dashboard/trading-room/position-fundamentals-present";
+import {
+  buildPositionThesisSummary,
+  parsePositionFundamentals,
+  parsePositionThesisPacket
+} from "@/lib/dashboard/trading-room/position-fundamentals-present";
 import type { DeepDiveLane, FeedLane } from "@/lib/dashboard/trading-room/feed-model";
 import { parseDashboardTradingRoomDeepLink, resolveDeepDiveLaneForCard, stashDeepDiveLanePreference } from "@/lib/nav/dashboard-trading-room-deeplink";
 import {
@@ -948,28 +952,39 @@ export function DeepDive({
         gapIntelSnapshot: null,
         signalEvidence: null
       });
-      // ADR-004 POS-D10 — enrich the Position tab context with the glass-box fundamentals
-      // verdict + one-line summary so the assistant narrates the long-horizon read (never a
-      // swing/day verdict). Sourced from the same composite body the grid renders.
+      // ADR-004 POS-D10 / POS-AI-3 — enrich the Position tab context with the glass-box
+      // fundamentals read: verdict + one-line summary, plus the pillar grid, weakest pillar,
+      // and a condensed thesis so the assistant can answer pillar-specific questions without
+      // inventing scores. Sourced from the same composite body the grid + thesis card render;
+      // never a swing/day verdict.
       if (!ctx || !isPositionLane) return ctx;
       const body = (hasRenderableComposite ? composite : null) as Record<string, unknown> | null;
-      const fund =
-        body && typeof body.position_fundamentals === "object" && body.position_fundamentals
-          ? (body.position_fundamentals as Record<string, unknown>)
-          : null;
-      const rawVerdict =
-        (typeof fund?.verdict === "string" && fund.verdict) ||
-        (typeof body?.signal_summary === "string" && body.signal_summary) ||
-        "";
-      const verdict = rawVerdict.trim().toLowerCase();
-      const reasoning = typeof fund?.reasoning === "string" ? fund.reasoning.trim() : "";
-      return {
-        ...ctx,
-        ...(verdict === "bullish" || verdict === "neutral" || verdict === "bearish"
-          ? { position_verdict: verdict }
-          : {}),
-        ...(reasoning ? { position_fundamentals_summary: reasoning } : {})
-      };
+      if (!body) return ctx;
+      const fund = parsePositionFundamentals(body);
+      const packet = parsePositionThesisPacket(body);
+      const enriched: AssistantPageContext = { ...ctx };
+      const verdict = (fund?.verdict ?? "").trim().toLowerCase();
+      if (verdict === "bullish" || verdict === "neutral" || verdict === "bearish") {
+        enriched.position_verdict = verdict;
+      }
+      if (fund?.reasoning) enriched.position_fundamentals_summary = fund.reasoning;
+      if (fund && fund.pillars.length > 0) {
+        enriched.position_pillars = fund.pillars.map((p) => ({
+          id: p.pillarId,
+          label: p.label,
+          score: p.score,
+          verdict: p.verdict
+        }));
+        if (fund.weakestPillarId) {
+          const weak = fund.pillars.find((p) => p.pillarId === fund.weakestPillarId);
+          enriched.position_weakest_pillar = weak
+            ? `${weak.pillarId} · ${weak.label}`
+            : fund.weakestPillarId;
+        }
+      }
+      const thesisSummary = buildPositionThesisSummary(packet);
+      if (thesisSummary) enriched.position_thesis_summary = thesisSummary;
+      return enriched;
     },
     [
       isPositionLane,
