@@ -114,6 +114,7 @@ export function WatchlistHeatGrid({
               </span>
               {quality ? (
                 <span
+                  role="img"
                   title={quality.tooltip}
                   aria-label={quality.tooltip}
                   data-testid="watchlist-heat-quality-dot"

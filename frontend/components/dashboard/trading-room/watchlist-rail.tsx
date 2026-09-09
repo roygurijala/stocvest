@@ -143,6 +143,7 @@ const STATE_RANK: Record<FeedState, number> = { actionable: 0, near: 1, potentia
 function QualityDot({ badge, colors }: { badge: WatchlistQualityBadge; colors: Colors }) {
   return (
     <span
+      role="img"
       title={badge.tooltip}
       aria-label={badge.tooltip}
       data-testid="watchlist-quality-dot"
