@@ -61,6 +61,7 @@ import { useDashboardTape } from "@/lib/hooks/use-dashboard-tape";
 import { useWatchlistAtClose } from "@/lib/hooks/use-watchlist-at-close";
 import { useWeeklySetupOutcomes } from "@/lib/hooks/use-weekly-setup-outcomes";
 import { DeepDive } from "@/components/dashboard/trading-room/deep-dive";
+import { PositionGemRail } from "@/components/dashboard/trading-room/position-gem-rail";
 import { QuietFeed } from "@/components/dashboard/trading-room/quiet-feed";
 import { TradingRoomMountRefresh } from "@/components/dashboard/trading-room/trading-room-mount-refresh";
 import { TradingRoomPeriodicRefresh } from "@/components/dashboard/trading-room/trading-room-periodic-refresh";
@@ -1283,6 +1284,8 @@ function TradingRoomBody({
       >
         {wrapPanel(
           <>
+            {/* ADR-004 POS-D8 — optional gem strip (dark by default), never a feed card. */}
+            <PositionGemRail />
             {deskSetupCards.length > 0 ? (
               <FilterBar
                 filters={filters}

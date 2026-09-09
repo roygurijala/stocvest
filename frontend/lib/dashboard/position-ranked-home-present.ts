@@ -278,6 +278,43 @@ export function buildWatchlistQualityBadge(
   };
 }
 
+// --------------------------------------------------------------- POS-D8 Trading Room gem rail
+
+/** A single chip in the optional Trading Room "Gem candidates" strip (gem/strong only). */
+export type PositionGemRailItem = {
+  symbol: string;
+  /** Deep-link to the symbol's Position tab (Journey B). */
+  href: string;
+  tier: "gem" | "strong";
+  tierShort: string;
+  weakestLabel: string | null;
+};
+
+/**
+ * ADR-004 POS-D8 — build the compact Trading Room gem strip from the position candidates
+ * screen. Gems first (rank order preserved from the source), then Strong; `monitor` and
+ * `insufficient` are excluded so the strip only ever teases genuine quality names. Pure —
+ * the component just renders these + a "view all" link to `/dashboard/invest`.
+ */
+export function buildPositionGemRailItems(
+  candidates: readonly PositionGemCandidate[] | null | undefined,
+  limit = 6
+): PositionGemRailItem[] {
+  if (!candidates || limit <= 0) return [];
+  const gems = candidates.filter((c) => c.tier === "gem");
+  const strong = candidates.filter((c) => c.tier === "strong");
+  return [...gems, ...strong].slice(0, limit).map((c) => ({
+    symbol: c.symbol,
+    href: dashboardTradingRoomHref(c.symbol, "position", { ref: "gem-rail" }),
+    tier: c.tier as "gem" | "strong",
+    tierShort: TIER_SHORT[c.tier as WatchlistQualityTier],
+    weakestLabel:
+      c.weakestPillarId && c.weakestPillarLabel
+        ? `${c.weakestPillarId} · ${c.weakestPillarLabel}`
+        : c.weakestPillarLabel || null
+  }));
+}
+
 /** Symbol → quality badge map for the watchlist rail (skips `insufficient`). */
 export function buildWatchlistQualityMap(
   candidates: readonly PositionGemCandidate[] | null | undefined

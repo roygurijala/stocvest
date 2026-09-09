@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyPositionGemFilter,
   buildPositionGemDisplayRows,
+  buildPositionGemRailItems,
   buildWatchlistQualityBadge,
   buildWatchlistQualityMap,
   DEFAULT_POSITION_GEM_FILTER,
@@ -171,5 +172,43 @@ describe("position watchlist quality badge (POS-D14)", () => {
     expect(watchlistQualityDotColor("gem", colors)).toBe("#fbbf24");
     expect(watchlistQualityDotColor("strong", colors)).toBe("#0a0");
     expect(watchlistQualityDotColor("monitor", colors)).toBe("#888");
+  });
+
+  // ADR-004 POS-D8 — Trading Room gem rail
+  it("builds the gem rail: gems first, then strong, excluding monitor/insufficient", () => {
+    const cands = parsePositionCandidates({
+      candidates: [
+        apiRow({ symbol: "KO", tier: "strong" }),
+        apiRow({ symbol: "MSFT", tier: "gem" }),
+        apiRow({ symbol: "XYZ", tier: "monitor" }),
+        apiRow({ symbol: "BAD", tier: "insufficient" }),
+        apiRow({ symbol: "AAPL", tier: "gem" })
+      ]
+    })!.candidates;
+    const items = buildPositionGemRailItems(cands);
+    // Gems (in source order) before strong; monitor + insufficient dropped.
+    expect(items.map((i) => i.symbol)).toEqual(["MSFT", "AAPL", "KO"]);
+    expect(items.map((i) => i.tier)).toEqual(["gem", "gem", "strong"]);
+    expect(items[0].tierShort).toBe("Gem");
+    expect(items[2].tierShort).toBe("Strong");
+    // Deep-links to the Position tab (Journey B) with the gem-rail ref.
+    expect(items[0].href).toContain("symbol=MSFT");
+    expect(items[0].href).toContain("lane=position");
+    expect(items[0].href).toContain("ref=gem-rail");
+    expect(items[0].weakestLabel).toBe("F4 · Valuation");
+  });
+
+  it("gem rail respects the limit and degrades to empty on null/zero", () => {
+    const cands = parsePositionCandidates({
+      candidates: [
+        apiRow({ symbol: "A", tier: "gem" }),
+        apiRow({ symbol: "B", tier: "gem" }),
+        apiRow({ symbol: "C", tier: "strong" })
+      ]
+    })!.candidates;
+    expect(buildPositionGemRailItems(cands, 2).map((i) => i.symbol)).toEqual(["A", "B"]);
+    expect(buildPositionGemRailItems(cands, 0)).toEqual([]);
+    expect(buildPositionGemRailItems(null)).toEqual([]);
+    expect(buildPositionGemRailItems(undefined)).toEqual([]);
   });
 });
