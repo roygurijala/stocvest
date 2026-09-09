@@ -177,6 +177,65 @@ def is_watchlist_intelligence_query(text: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Position "gem" intents (ADR-004 POS-D10) — long-horizon investment desk
+# ─────────────────────────────────────────────────────────────────────────────
+# Journey A (discovery / list): "what are today's gems?", "find strong long-term
+# stocks". Journey B (single name): "is MSFT a gem?", "is it a good long-term hold?".
+# Both read the POS-D15 position candidates cache — never the swing/day scanner — so
+# the handler routes them independently of the day/swing desk. Lookup (Journey B)
+# takes precedence over discovery only when a specific symbol is detected.
+
+_GEM_DISCOVERY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(today'?s|the|any|best|top|current|some)\s+gems?\b", re.IGNORECASE),
+    re.compile(r"\bgem\s+(candidates?|stocks?|list|names?|picks?)\b", re.IGNORECASE),
+    re.compile(r"\b(find|show|give)\s+(me\s+)?.{0,20}\bgems?\b", re.IGNORECASE),
+    re.compile(r"\bwhat\s+are\s+.{0,25}\bgems?\b", re.IGNORECASE),
+    re.compile(
+        r"\b(find|show|give|any|best|top|good)\b.{0,25}\blong[\s-]?term\b.{0,15}"
+        r"\b(stocks?|plays?|holds?|opportunit(y|ies)|investments?|ideas?|names?|picks?|candidates?)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\blong[\s-]?term\s+(opportunit(y|ies)|gems?|holds?|investments?|candidates?|ideas?|picks?)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(stocks?|names?|companies)\s+to\s+(invest\s+in|buy\s+and\s+hold|hold\s+long)\b", re.IGNORECASE),
+    re.compile(r"\bposition\s+(desk\s+)?(candidates?|gems?)\b", re.IGNORECASE),
+    re.compile(r"\binvestment\s+(candidates?|gems?|ideas?|opportunit(y|ies))\b", re.IGNORECASE),
+)
+
+_GEM_LOOKUP_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bis\s+\S+\s+a\s+gem\b", re.IGNORECASE),
+    re.compile(r"\b(is|are)\s+(it|this|that|they)\s+a\s+gem\b", re.IGNORECASE),
+    re.compile(r"\ba\s+gem\b", re.IGNORECASE),
+    re.compile(r"\b(good|solid|quality|worth|strong)\s+long[\s-]?term\s+(hold|buy|pick|investment|bet)\b", re.IGNORECASE),
+    re.compile(r"\blong[\s-]?term\s+(outlook|prospects?|potential|quality)\b", re.IGNORECASE),
+    re.compile(r"\bscores?\b.{0,15}\bfor\s+(the\s+)?long[\s-]?term\b", re.IGNORECASE),
+    re.compile(r"\bworth\s+(investing\s+in|holding|buying)\s+(for\s+)?(the\s+)?long[\s-]?term\b", re.IGNORECASE),
+    re.compile(r"\bgood\s+(quality|fundamentals?)\s+(stock|company|name)\b", re.IGNORECASE),
+)
+
+
+def is_gem_discovery_query(text: str) -> bool:
+    """Return True for a long-horizon gem *discovery* (list) question (Journey A)."""
+    if not text or not text.strip():
+        return False
+    return any(p.search(text) for p in _GEM_DISCOVERY_PATTERNS)
+
+
+def is_gem_lookup_query(text: str) -> bool:
+    """Return True for a single-name long-horizon *qualification* question (Journey B)."""
+    if not text or not text.strip():
+        return False
+    return any(p.search(text) for p in _GEM_LOOKUP_PATTERNS)
+
+
+def is_position_intent_query(text: str) -> bool:
+    """Any position/gem intent — discovery or single-name lookup."""
+    return is_gem_discovery_query(text) or is_gem_lookup_query(text)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Explicit trading-desk language (mode resolution + light personalization)
 # ─────────────────────────────────────────────────────────────────────────────
 

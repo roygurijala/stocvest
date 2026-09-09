@@ -30,6 +30,14 @@ from stocvest.api.services.assistant_discovery import (
     fetch_discovery_context,
     serialize_discovery_context,
 )
+from stocvest.api.services.assistant_position_discovery import (
+    fetch_gem_lookup_context,
+    fetch_position_gem_context,
+    gem_lookup_payload,
+    position_gem_payload,
+    serialize_gem_lookup_context,
+    serialize_position_gem_context,
+)
 from stocvest.api.services.assistant_market_context import (
     fetch_market_pulse_context,
     serialize_market_pulse_context,
@@ -66,6 +74,8 @@ from stocvest.utils.intent_detector import (
     is_comparison_query,
     is_discovery_query,
     is_forecast_query,
+    is_gem_discovery_query,
+    is_gem_lookup_query,
     is_market_overview_query,
     is_mode_sensitive_query,
     is_price_chart_query,
@@ -259,6 +269,14 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         elif _pm == "position":
             is_position_scope = True
 
+    # ADR-004 POS-D10 increment 2 — long-horizon "gem" intents read the POS-D15
+    # candidates cache (never the swing/day scanner). Lookup (single name) takes
+    # precedence over discovery (list) when a specific symbol is detected below.
+    wants_gem_lookup = profile.has_ai_explanations and is_gem_lookup_query(last_user_text_for_intent)
+    wants_gem_discovery = (
+        profile.has_ai_explanations and is_gem_discovery_query(last_user_text_for_intent)
+    )
+
     explicit_desk = (
         detect_explicit_desk(last_user_text_for_intent) if profile.has_ai_explanations else None
     )
@@ -289,6 +307,8 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     if (
         profile.has_ai_explanations
         and not is_position_scope
+        and not wants_gem_discovery
+        and not wants_gem_lookup
         and is_discovery_query(last_user_text_for_intent)
     ):
         try:
@@ -428,10 +448,10 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 # per symbol+mode) so the assistant can lead with what STOCVEST
                 # thinks — not just an external news synthesis. Best-effort: a
                 # missing/failed read simply leaves the field None.
-                # Skip the swing/day composite read under Position scope — a day/swing
-                # verdict would contradict the long-horizon fundamentals the user sees.
-                # (POS-D10 increment 2 adds a position composite/gem lookup here.)
-                if symbol_context is not None and not is_position_scope:
+                # Skip the swing/day composite read under Position scope or for a gem
+                # lookup — a day/swing verdict would contradict the long-horizon read.
+                # (The gem lookup attaches a POSITION GEM LOOKUP block instead, below.)
+                if symbol_context is not None and not is_position_scope and not wants_gem_lookup:
                     try:
                         symbol_context.stocvest_read = fetch_stocvest_composite_read(
                             detected_sym, resolved_desk
@@ -473,6 +493,31 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     except Exception:  # noqa: BLE001
         citations_out = None
 
+    # ── Position gem intents (ADR-004 POS-D10 increment 2) ───────────────────
+    # Journey B (single name, "is MSFT a gem?") wins over Journey A (list) when a
+    # symbol is in scope; both read the POS-D15 candidates cache, never the scanner.
+    position_gem_block = ""
+    gem_candidates_out: dict | None = None
+    gem_lookup_out: dict | None = None
+    if wants_gem_lookup and detected_sym:
+        try:
+            lookup = fetch_gem_lookup_context(detected_sym)
+            block = serialize_gem_lookup_context(lookup)
+            if block:
+                position_gem_block = block
+                gem_lookup_out = gem_lookup_payload(lookup)
+        except Exception:  # noqa: BLE001 — gem lookup must never break the reply
+            position_gem_block = ""
+    elif wants_gem_discovery:
+        try:
+            gems = fetch_position_gem_context()
+            block = serialize_position_gem_context(gems)
+            if block:
+                position_gem_block = block
+                gem_candidates_out = position_gem_payload(gems)
+        except Exception:  # noqa: BLE001 — gem discovery must never break the reply
+            position_gem_block = ""
+
     # ── Web search fallback (out-of-envelope breadth) ────────────────────────
     # When the question isn't about a specific symbol and none of the structured
     # context paths fired (discovery / market overview / watchlist), and it looks
@@ -486,6 +531,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         and get_settings().stocvest_assistant_web_search_enabled
         and detected_sym is None
         and not discovery_block
+        and not position_gem_block
         and not market_block
         and not watchlist_block
         and is_web_search_query(last_user_text_for_intent)
@@ -562,6 +608,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 preference_context=preference_block,
                 web_context=web_block,
                 multi_symbol_context=multi_symbol_block,
+                position_gem_context=position_gem_block,
             )
         )
     except (TypeError, ValueError) as exc:
@@ -586,6 +633,8 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             "navigate_to": navigate_to,
             "chart": chart_payload,
             "discovery": discovery_payload_out,
+            "gem_candidates": gem_candidates_out,
+            "gem_lookup": gem_lookup_out,
             "citations": citations_out,
             "clarify": clarify_out,
             "web_sources": web_sources_out,

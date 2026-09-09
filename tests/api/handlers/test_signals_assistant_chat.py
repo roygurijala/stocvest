@@ -601,6 +601,113 @@ def test_assistant_chat_position_scope_suppresses_day_discovery(monkeypatch: pyt
     assert body.get("discovery") is None
 
 
+def test_assistant_chat_gem_discovery_injects_position_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR-004 POS-D10 increment 2 — 'what are today's gems?' attaches the POSITION
+    GEM CANDIDATES block (from the candidates cache) and a gem_candidates payload."""
+    _patch_paid_store(monkeypatch)
+    from stocvest.api.services.assistant_position_discovery import GemRow, PositionGemResult
+
+    gems = PositionGemResult(
+        rows=[
+            GemRow(
+                symbol="MSFT",
+                tier="gem",
+                verdict="bullish",
+                fundamentals_verdict="bullish",
+                weakest_pillar_label="Valuation",
+                why="Qualifies on all gates.",
+            )
+        ],
+        source="scan_cache",
+        generated_at="2026-09-05T20:10:00+00:00",
+        universe_size=25,
+        has_data=True,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_position_gem_context", lambda **_k: gems
+    )
+
+    captured: dict = {}
+
+    async def _cap_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        captured["gem_ctx"] = kwargs.get("position_gem_context")
+        return AssistantChatResult(text="ok.", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", _cap_reply)
+
+    response = assistant_chat_handler(
+        _event(body={"messages": [{"role": "user", "content": "what are today's gems?"}]}),
+        {},
+    )
+    assert response["statusCode"] == 200
+    assert "POSITION GEM CANDIDATES" in (captured.get("gem_ctx") or "")
+    assert "MSFT: tier=gem" in (captured.get("gem_ctx") or "")
+    body = json.loads(response["body"])
+    assert body["gem_candidates"]["rows"][0]["symbol"] == "MSFT"
+    # A gem query must NOT also trigger the swing/day scanner discovery.
+    assert body.get("discovery") is None
+
+
+def test_assistant_chat_gem_lookup_injects_lookup_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    """'is MSFT a gem?' attaches a POSITION GEM LOOKUP block + gem_lookup payload,
+    and skips the swing/day composite read for that symbol."""
+    _patch_paid_store(monkeypatch)
+    from stocvest.api.services.assistant_position_discovery import GemLookupResult
+
+    look = GemLookupResult(
+        symbol="MSFT",
+        found=True,
+        tier="gem",
+        verdict="bullish",
+        fundamentals_verdict="bullish",
+        weakest_pillar_label="Valuation",
+        why="Qualifies on all gates.",
+        pillars=[{"pillar_id": "F1", "label": "Profitability", "score": 82, "verdict": "bullish"}],
+        generated_at="2026-09-05T20:10:00+00:00",
+        source="scan_cache",
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_gem_lookup_context", lambda sym: look
+    )
+
+    async def _no_symbol_ctx(sym):  # type: ignore[no-untyped-def]
+        return None
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_assistant_symbol_context", _no_symbol_ctx
+    )
+    # Fail loudly if the swing/day composite read is attempted under a gem lookup.
+    def _boom_read(symbol, mode):  # type: ignore[no-untyped-def]
+        raise AssertionError("swing/day composite read must be skipped for a gem lookup")
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals_assistant.fetch_stocvest_composite_read", _boom_read
+    )
+
+    captured: dict = {}
+
+    async def _cap_reply(self, *, messages, page_context, user_profile, **kwargs):  # type: ignore[no-untyped-def]
+        captured["gem_ctx"] = kwargs.get("position_gem_context")
+        return AssistantChatResult(text="ok.", source="ai", mode="general", upgrade_available=False)
+
+    monkeypatch.setattr("stocvest.signals.assistant_chat.AssistantChatService.reply", _cap_reply)
+
+    response = assistant_chat_handler(
+        _event(
+            body={
+                "messages": [{"role": "user", "content": "is MSFT a gem?"}],
+                "page_context": {"symbol": "MSFT"},
+            }
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    assert "POSITION GEM LOOKUP (MSFT)" in (captured.get("gem_ctx") or "")
+    body = json.loads(response["body"])
+    assert body["gem_lookup"]["symbol"] == "MSFT"
+    assert body["gem_lookup"]["on_gem_list"] is True
+
+
 def test_assistant_chat_includes_clarify_for_ambiguous_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_paid_store(monkeypatch)
     from stocvest.api.services.assistant_discovery import DiscoveryResult
