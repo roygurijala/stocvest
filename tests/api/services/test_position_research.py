@@ -101,6 +101,15 @@ def _no_xbrl_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pr, "fetch_company_facts", _none_facts)
 
 
+@pytest.fixture(autouse=True)
+def _no_annuals_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Keep the FMP annuals fetch (SEC↔provider cross-check) network-free by default.
+    async def _empty(*a: Any, **k: Any) -> list:
+        return []
+
+    monkeypatch.setattr(pr, "_fetch_provider_annuals", _empty)
+
+
 @pytest.mark.asyncio
 async def test_disabled_flag_short_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pr, "get_settings", lambda: _settings(enabled=False))
@@ -270,6 +279,71 @@ async def test_ok_bundle_includes_sec_financials(monkeypatch: pytest.MonkeyPatch
     assert d["financials"]["entity_name"] == "Apple Inc."
     assert d["financials"]["facts"][0]["key"] == "revenue"
     assert "CIK=0000320193" in d["financials"]["source_url"]
+
+
+@pytest.mark.asyncio
+async def test_ok_bundle_includes_sec_provider_crosscheck(monkeypatch: pytest.MonkeyPatch) -> None:
+    from datetime import date
+
+    from stocvest.data.fundamentals_models import IncomeStatement
+
+    monkeypatch.setattr(pr, "get_settings", lambda: _settings())
+    monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _none())
+    monkeypatch.setattr(pr, "fetch_10k_item_1a", lambda *a, **k: _none())
+
+    async def _facts(*a: Any, **k: Any) -> CompanyFacts:
+        return _company_facts()  # SEC revenue FY2024 = 383B
+
+    async def _annuals(symbol: str) -> list[IncomeStatement]:
+        return [
+            IncomeStatement(
+                symbol="AAPL",
+                as_of_date=date(2024, 9, 28),
+                period="FY",
+                calendar_year=2024,
+                revenue=300_000_000_000.0,  # differs materially from SEC 383B
+            )
+        ]
+
+    monkeypatch.setattr(pr, "fetch_company_facts", _facts)
+    monkeypatch.setattr(pr, "_fetch_provider_annuals", _annuals)
+
+    out = await pr.build_position_research_bundle(symbol="AAPL", user_profile=_paid())
+    d = out.to_api_dict()
+    cc = d["financials_crosscheck"]
+    assert cc is not None
+    assert cc["scored"] is False
+    assert cc["provider"] == "FMP"
+    assert cc["disagreements"] == 1
+    row = next(r for r in cc["rows"] if r["key"] == "revenue")
+    assert row["fiscal_year"] == 2024
+    assert row["agrees"] is False
+    assert row["sec_value"] == 383_000_000_000.0 and row["provider_value"] == 300_000_000_000.0
+
+
+@pytest.mark.asyncio
+async def test_crosscheck_absent_without_sec_financials(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No SEC facts (autouse) → no cross-check even if provider annuals exist.
+    from datetime import date
+
+    from stocvest.data.fundamentals_models import IncomeStatement
+
+    monkeypatch.setattr(pr, "get_settings", lambda: _settings())
+    monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _developments_async())
+    monkeypatch.setattr(pr, "fetch_10k_item_1a", lambda *a, **k: _none())
+
+    async def _annuals(symbol: str) -> list[IncomeStatement]:
+        return [IncomeStatement(symbol="AAPL", as_of_date=date(2024, 9, 28), period="FY", calendar_year=2024, revenue=1.0)]
+
+    monkeypatch.setattr(pr, "_fetch_provider_annuals", _annuals)
+
+    out = await pr.build_position_research_bundle(symbol="AAPL", user_profile=_paid())
+    assert out.status == "ok"
+    assert out.to_api_dict()["financials_crosscheck"] is None
+
+
+async def _developments_async() -> pr.RecentDevelopments:
+    return _developments()
 
 
 @pytest.mark.asyncio

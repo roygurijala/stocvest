@@ -55,11 +55,32 @@ type Financials = {
   scored: boolean;
 };
 
+type CrosscheckRow = {
+  key: string;
+  label: string;
+  unit: string;
+  fiscal_year: number | null;
+  sec_value: number | null;
+  provider_value: number | null;
+  rel_diff: number | null;
+  agrees: boolean | null;
+  note: string;
+};
+
+type FinancialsCrosscheck = {
+  provider: string;
+  rows: CrosscheckRow[];
+  disagreements: number;
+  comparable: number;
+  scored: boolean;
+};
+
 type ResearchResponse = {
   status: "ok" | "disabled" | "upgrade_required" | "over_budget" | "empty";
   recent_developments: RecentDevelopments | null;
   risk_factors: RiskFactors | null;
   financials: Financials | null;
+  financials_crosscheck?: FinancialsCrosscheck | null;
   upgrade_available?: boolean;
   disclaimer?: string;
 };
@@ -359,6 +380,34 @@ export function PositionResearchPanel({ symbol, companyName, colors, upgradeHref
                   SEC filings →
                 </a>
               ) : null}
+              {(() => {
+                const cc = state.data.financials_crosscheck;
+                const rows = (cc?.rows ?? []).filter((r) => r.agrees !== null);
+                if (!cc || rows.length === 0) return null;
+                return (
+                  <div data-testid="position-research-crosscheck" style={{ marginTop: spacing[3], paddingTop: spacing[2], borderTop: `1px solid ${colors.border}` }}>
+                    <p style={{ margin: `0 0 ${spacing[1]} 0`, fontSize: typography.scale.xs, fontWeight: 700, color: colors.textMuted }}>
+                      {cc.disagreements === 0
+                        ? `SEC vs ${cc.provider} data — all headline lines match`
+                        : `SEC vs ${cc.provider} data — ${cc.disagreements} line(s) differ`}
+                    </p>
+                    {rows.map((r) => (
+                      <div
+                        key={r.key}
+                        data-testid={`position-research-crosscheck-${r.key}`}
+                        style={{ display: "flex", justifyContent: "space-between", gap: spacing[2], fontSize: typography.scale.xs, color: colors.textMuted, padding: `1px 0` }}
+                      >
+                        <span>{r.label}{r.fiscal_year ? ` FY${r.fiscal_year}` : ""}</span>
+                        <span style={{ color: r.agrees ? colors.textMuted : colors.caution, fontWeight: r.agrees ? 400 : 700, fontVariantNumeric: "tabular-nums" }}>
+                          {r.agrees
+                            ? "matches"
+                            : `differs ${r.rel_diff != null ? `${(r.rel_diff * 100).toFixed(1)}%` : ""}`.trim()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           ) : null}
 

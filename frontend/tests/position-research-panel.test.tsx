@@ -71,4 +71,55 @@ describe("PositionResearchPanel — SEC financials", () => {
 
     await waitFor(() => expect(screen.queryByTestId("position-research-financials")).toBeNull());
   });
+
+  it("renders the SEC↔provider cross-check with a differing line", async () => {
+    const payload = {
+      ...okResponse(),
+      financials_crosscheck: {
+        provider: "FMP",
+        disagreements: 1,
+        comparable: 2,
+        scored: false,
+        rows: [
+          { key: "revenue", label: "Revenue", unit: "USD", fiscal_year: 2024, sec_value: 383e9, provider_value: 300e9, rel_diff: 0.2167, agrees: false, note: "differs 21.7% (SEC vs FMP)" },
+          { key: "diluted_eps", label: "Diluted EPS", unit: "USD/shares", fiscal_year: 2024, sec_value: 6.13, provider_value: 6.1, rel_diff: 0.0049, agrees: true, note: "within tolerance" },
+          { key: "net_income", label: "Net income", unit: "USD", fiscal_year: 2024, sec_value: 95e9, provider_value: null, rel_diff: null, agrees: null, note: "FMP FY2024 missing this line" }
+        ]
+      }
+    };
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => payload }) as unknown as typeof fetch;
+
+    render(<PositionResearchPanel symbol="AAPL" colors={colorTokens.dark} />);
+    fireEvent.click(screen.getByTestId("position-research-load"));
+
+    await waitFor(() => expect(screen.getByTestId("position-research-crosscheck")).toBeTruthy());
+    // comparable rows render; the not-comparable (net_income) row is filtered out.
+    expect(screen.getByTestId("position-research-crosscheck-revenue")).toBeTruthy();
+    expect(screen.getByTestId("position-research-crosscheck-diluted_eps")).toBeTruthy();
+    expect(screen.queryByTestId("position-research-crosscheck-net_income")).toBeNull();
+    expect(screen.getByText(/1 line\(s\) differ/i)).toBeTruthy();
+    expect(screen.getByText(/differs 21\.7%/i)).toBeTruthy();
+  });
+
+  it("omits the cross-check block when none is comparable", async () => {
+    const payload = {
+      ...okResponse(),
+      financials_crosscheck: {
+        provider: "FMP",
+        disagreements: 0,
+        comparable: 0,
+        scored: false,
+        rows: [
+          { key: "revenue", label: "Revenue", unit: "USD", fiscal_year: 2024, sec_value: 383e9, provider_value: null, rel_diff: null, agrees: null, note: "No FMP FY2024 value to compare" }
+        ]
+      }
+    };
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => payload }) as unknown as typeof fetch;
+
+    render(<PositionResearchPanel symbol="AAPL" colors={colorTokens.dark} />);
+    fireEvent.click(screen.getByTestId("position-research-load"));
+
+    await waitFor(() => expect(screen.getByTestId("position-research-financials")).toBeTruthy());
+    expect(screen.queryByTestId("position-research-crosscheck")).toBeNull();
+  });
 });

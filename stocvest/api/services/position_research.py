@@ -30,6 +30,12 @@ from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from stocvest.data.edgar_10k import TenKRiskExcerpt, fetch_10k_item_1a
+from stocvest.data.fundamentals_crosscheck import (
+    FundamentalsCrossCheck,
+    build_fundamentals_crosscheck,
+)
+from stocvest.data.fundamentals_models import IncomeStatement
+from stocvest.data.fundamentals_provider import get_fundamentals_provider
 from stocvest.data.models import UserProfile
 from stocvest.data.sec_xbrl import CompanyFacts, fetch_company_facts
 from stocvest.data.perplexity_client import perplexity_cache_key, perplexity_sonar_json
@@ -75,6 +81,7 @@ class PositionResearchBundle:
     recent_developments: RecentDevelopments | None = None
     risk_factors: TenKRiskExcerpt | None = None
     financials: CompanyFacts | None = None
+    financials_crosscheck: FundamentalsCrossCheck | None = None
     upgrade_available: bool = False
     disclaimer: str = RESEARCH_DISCLAIMER
 
@@ -91,6 +98,11 @@ class PositionResearchBundle:
             "financials": (
                 self.financials.to_api_dict()
                 if self.financials and self.financials.has_data
+                else None
+            ),
+            "financials_crosscheck": (
+                self.financials_crosscheck.to_api_dict()
+                if self.financials_crosscheck and self.financials_crosscheck.has_data
                 else None
             ),
             "upgrade_available": self.upgrade_available,
@@ -208,6 +220,16 @@ Use [] when none apply. Max 5 key_points and 6 sources."""
     )
 
 
+async def _fetch_provider_annuals(symbol: str) -> list[IncomeStatement]:
+    """Best-effort FMP annual income statements for the SEC↔provider cross-check (POS-AI-10 v2)."""
+    try:
+        prov = get_fundamentals_provider()
+        return await prov.get_income_statements(symbol, period="annual", limit=6)
+    except Exception as exc:  # noqa: BLE001 — cross-check is informational, never blocks
+        _LOG.warning("position_research annuals fetch failed for %s: %s", symbol, type(exc).__name__)
+        return []
+
+
 async def build_position_research_bundle(
     *,
     symbol: str,
@@ -234,10 +256,11 @@ async def build_position_research_bundle(
     if not _within_daily_budget(user_profile.user_id, cap):
         return PositionResearchBundle(symbol=sym, status="over_budget")
 
-    recent, excerpt, financials = await asyncio.gather(
+    recent, excerpt, financials, annuals = await asyncio.gather(
         _fetch_recent_developments(sym, company_name),
         fetch_10k_item_1a(sym),
         fetch_company_facts(sym),
+        _fetch_provider_annuals(sym),
     )
 
     has_recent = recent is not None and recent.has_data
@@ -245,10 +268,19 @@ async def build_position_research_bundle(
     if not has_recent and excerpt is None and not has_financials:
         return PositionResearchBundle(symbol=sym, status="empty")
 
+    # POS-AI-10 v2: informational SEC↔provider data-quality flag (only when SEC facts exist).
+    crosscheck: FundamentalsCrossCheck | None = None
+    if has_financials:
+        try:
+            crosscheck = build_fundamentals_crosscheck(financials, annuals)
+        except Exception as exc:  # noqa: BLE001 — informational, never blocks the bundle
+            _LOG.warning("position_research crosscheck failed for %s: %s", sym, type(exc).__name__)
+
     return PositionResearchBundle(
         symbol=sym,
         status="ok",
         recent_developments=recent if has_recent else None,
         risk_factors=excerpt,
         financials=financials if has_financials else None,
+        financials_crosscheck=crosscheck,
     )
