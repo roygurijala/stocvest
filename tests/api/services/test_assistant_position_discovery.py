@@ -54,8 +54,8 @@ def _snapshot(candidates: list[GemCandidate]) -> PositionScanSnapshot:
     )
 
 
-def _patch_snapshot(monkeypatch: pytest.MonkeyPatch, snapshot: PositionScanSnapshot) -> None:
-    monkeypatch.setattr(gem_mod, "get_position_scan_snapshot_sync", lambda: (snapshot, True))
+def _patch_snapshot(monkeypatch: pytest.MonkeyPatch, snapshot: PositionScanSnapshot | None) -> None:
+    monkeypatch.setattr(gem_mod, "get_cached_position_scan_snapshot", lambda: snapshot)
 
 
 # ── Journey A — discovery ─────────────────────────────────────────────────────
@@ -101,11 +101,23 @@ def test_discovery_empty_when_no_gem_or_strong(monkeypatch: pytest.MonkeyPatch) 
     assert position_gem_payload(result) is None
 
 
+def test_discovery_not_loaded_when_cache_cold(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cold cache degrades gracefully — no fresh scan is triggered in a chat turn."""
+    _patch_snapshot(monkeypatch, None)
+    result = fetch_position_gem_context()
+    assert result.has_data is False
+    assert result.source == "not_loaded"
+    block = serialize_position_gem_context(result)
+    assert "source=not_loaded" in block
+    assert "/dashboard/invest" in block
+    assert position_gem_payload(result) is None
+
+
 def test_discovery_swallows_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _boom() -> tuple:  # type: ignore[type-arg]
+    def _boom():  # type: ignore[no-untyped-def]
         raise RuntimeError("scan down")
 
-    monkeypatch.setattr(gem_mod, "get_position_scan_snapshot_sync", _boom)
+    monkeypatch.setattr(gem_mod, "get_cached_position_scan_snapshot", _boom)
     result = fetch_position_gem_context()
     assert result.has_data is False
     assert result.source == "error"
@@ -150,6 +162,17 @@ def test_lookup_not_on_universe_offers_position_tab(monkeypatch: pytest.MonkeyPa
     assert payload is not None
     assert payload["on_gem_list"] is False
     assert payload["tier"] is None
+
+
+def test_lookup_not_loaded_when_cache_cold(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_snapshot(monkeypatch, None)
+    result = fetch_gem_lookup_context("MSFT")
+    assert result.found is False
+    assert result.source == "not_loaded"
+    block = serialize_gem_lookup_context(result)
+    assert "source=not_loaded" in block
+    # Never guesses a tier while the scan is cold.
+    assert "tier=" not in block
 
 
 def test_lookup_blank_symbol_is_error(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from stocvest.api.services.position_scan import GemCandidate, get_position_scan_snapshot_sync
+from stocvest.api.services.position_scan import GemCandidate, get_cached_position_scan_snapshot
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -45,7 +45,7 @@ class GemRow:
 @dataclass
 class PositionGemResult:
     rows: list[GemRow] = field(default_factory=list)
-    source: str = "scan_cache"  # scan_cache | empty | error
+    source: str = "scan_cache"  # scan_cache | empty | not_loaded | error
     generated_at: str | None = None
     universe_size: int = 0
     has_data: bool = False
@@ -66,7 +66,10 @@ def fetch_position_gem_context(*, limit: int = _MAX_GEMS) -> PositionGemResult:
     """Top gem (then strong) candidates from the cached weekly position scan."""
     result = PositionGemResult()
     try:
-        snapshot, _cached = get_position_scan_snapshot_sync()
+        snapshot = get_cached_position_scan_snapshot()
+        if snapshot is None:
+            result.source = "not_loaded"
+            return result
         result.generated_at = snapshot.generated_at.replace(microsecond=0).isoformat()
         result.universe_size = snapshot.universe_size
         rows = list(snapshot.filtered(tier="gem", limit=limit))
@@ -85,6 +88,13 @@ def fetch_position_gem_context(*, limit: int = _MAX_GEMS) -> PositionGemResult:
 
 def serialize_position_gem_context(result: PositionGemResult) -> str:
     """Render the gem list as a compact context block for Claude."""
+    if result.source == "not_loaded":
+        return (
+            "=== POSITION GEM CANDIDATES ===\n"
+            "source=not_loaded\n"
+            f"note=The weekly gem scan is not loaded in this session yet. Tell the user to open "
+            f"{_INVEST_HREF} to run the screen, then ask again — do NOT invent candidates.\n"
+        )
     if result.source == "empty":
         return (
             "=== POSITION GEM CANDIDATES ===\n"
@@ -145,7 +155,7 @@ class GemLookupResult:
     why: str | None = None
     pillars: list[dict[str, Any]] = field(default_factory=list)
     generated_at: str | None = None
-    source: str = "scan_cache"  # scan_cache | not_on_universe | error
+    source: str = "scan_cache"  # scan_cache | not_on_universe | not_loaded | error
 
 
 def fetch_gem_lookup_context(symbol: str) -> GemLookupResult:
@@ -156,7 +166,10 @@ def fetch_gem_lookup_context(symbol: str) -> GemLookupResult:
         res.source = "error"
         return res
     try:
-        snapshot, _cached = get_position_scan_snapshot_sync()
+        snapshot = get_cached_position_scan_snapshot()
+        if snapshot is None:
+            res.source = "not_loaded"
+            return res
         res.generated_at = snapshot.generated_at.replace(microsecond=0).isoformat()
         for c in snapshot.candidates:
             if c.symbol == sym:
@@ -181,6 +194,14 @@ def serialize_gem_lookup_context(result: GemLookupResult) -> str:
     sym = result.symbol
     if result.source == "error" or not sym:
         return ""
+    if result.source == "not_loaded":
+        return (
+            f"=== POSITION GEM LOOKUP ({sym}) ===\n"
+            "source=not_loaded\n"
+            f"note=The weekly gem scan is not loaded in this session yet, so {sym} has no cached "
+            f"tier. Tell the user to open {_INVEST_HREF} (or the Position tab for {sym}) for a full "
+            "read — do NOT guess a tier.\n"
+        )
     if not result.found:
         return (
             f"=== POSITION GEM LOOKUP ({sym}) ===\n"
@@ -218,6 +239,7 @@ def gem_lookup_payload(result: GemLookupResult) -> dict[str, Any] | None:
     return {
         "symbol": result.symbol,
         "on_gem_list": result.found,
+        "source": result.source,
         "tier": result.tier,
         "fundamentals_verdict": result.fundamentals_verdict,
         "weakest_pillar_label": result.weakest_pillar_label,

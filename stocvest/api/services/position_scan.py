@@ -248,6 +248,21 @@ def run_position_scan(
     return asyncio.run(run_position_scan_async(universe=universe, compose=compose))
 
 
+def get_cached_position_scan_snapshot() -> PositionScanSnapshot | None:
+    """Return the in-process snapshot if one exists, WITHOUT ever computing.
+
+    Conversational callers (the assistant's gem discovery / lookup) use this so a
+    cold or stale cache degrades gracefully — pointing the user to ``/dashboard/invest``
+    — instead of blocking a chat turn on a full universe composite scan. The snapshot
+    is returned regardless of the soft 6h TTL because the underlying data is weekly, so
+    a few-hours-stale list is still a good chat answer. Returns None only when nothing
+    has been scanned yet in this process (the invest page / candidates API populate it;
+    full POS-D15 persists it to Dynamo/S3 so it is effectively always warm).
+    """
+    cached = _snapshot_cache
+    return cached[1] if cached is not None else None
+
+
 def get_position_scan_snapshot_sync(*, force: bool = False) -> tuple[PositionScanSnapshot, bool]:
     """Return (snapshot, cached). Recomputes (fresh asyncio loop) when stale or forced.
 
