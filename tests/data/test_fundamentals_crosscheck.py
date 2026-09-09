@@ -147,3 +147,39 @@ def test_both_zero_agrees() -> None:
     assert cc is not None
     assert cc.rows[0].agrees is True
     assert cc.rows[0].rel_diff == 0.0
+
+
+def test_near_zero_net_income_not_flagged_when_absolute_gap_immaterial() -> None:
+    # SEC +$2M vs provider -$1M → 150% relative but only $3M absolute (< $10M floor) → agree.
+    cc = build_fundamentals_crosscheck(
+        _facts(_fact("net_income", "Net income", 2_000_000.0)),
+        [_stmt(2024, net_income=-1_000_000.0)],
+    )
+    assert cc is not None
+    row = cc.rows[0]
+    assert row.agrees is True
+    assert row.rel_diff is not None and row.rel_diff > 0.05  # relative gap was large...
+    assert "immaterial" in row.note  # ...but suppressed as immaterial
+    assert cc.disagreements == 0
+
+
+def test_large_absolute_gap_still_flags_above_floor() -> None:
+    # $50M vs $30M → $20M absolute (> floor) AND >5% relative → real disagreement.
+    cc = build_fundamentals_crosscheck(
+        _facts(_fact("net_income", "Net income", 50_000_000.0)),
+        [_stmt(2024, net_income=30_000_000.0)],
+    )
+    assert cc is not None
+    assert cc.rows[0].agrees is False
+    assert cc.disagreements == 1
+
+
+def test_eps_immaterial_absolute_gap_agrees() -> None:
+    # $0.01 vs $0.00 → 100% relative but $0.01 absolute (< $0.02 EPS floor) → agree.
+    cc = build_fundamentals_crosscheck(
+        _facts(_fact("diluted_eps", "Diluted EPS", 0.01, unit="USD/shares")),
+        [_stmt(2024, eps_diluted=0.0)],
+    )
+    assert cc is not None
+    assert cc.rows[0].agrees is True
+    assert "immaterial" in cc.rows[0].note

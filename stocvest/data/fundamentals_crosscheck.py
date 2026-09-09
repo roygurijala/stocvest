@@ -25,6 +25,15 @@ from stocvest.data.sec_xbrl import CompanyFacts, XbrlFact
 # Display sensitivity only — small rounding/restatement gaps below this are treated as agreement.
 DEFAULT_TOLERANCE = 0.05
 
+# Minimum ABSOLUTE difference (per unit) below which a large relative gap is treated as
+# immaterial. This stops near-zero lines (e.g. a break-even net income where SEC=+$2M and the
+# provider=-$1M) from reading as a huge % "disagreement". Display sensitivity only.
+_ABS_FLOOR: dict[str, float] = {"USD": 1e7, "USD/shares": 0.02}
+
+
+def _abs_floor(unit: str) -> float:
+    return _ABS_FLOOR.get(unit, 0.0)
+
 # Concepts we can compare unambiguously. Maps the XBRL fact key -> FMP IncomeStatement attr.
 _COMPARABLE: tuple[tuple[str, str, str], ...] = (
     ("revenue", "revenue", "Revenue"),
@@ -160,8 +169,17 @@ def build_fundamentals_crosscheck(
             continue
 
         rd = _rel_diff(float(fact.value), float(provider_value))
-        agrees = rd <= tolerance
-        note = "within tolerance" if agrees else f"differs {rd * 100:.1f}% (SEC vs {provider})"
+        abs_diff = abs(float(fact.value) - float(provider_value))
+        if rd <= tolerance:
+            agrees = True
+            note = "within tolerance"
+        elif abs_diff < _abs_floor(fact.unit):
+            # Relative gap is large but the absolute gap is immaterial (near-zero line).
+            agrees = True
+            note = f"immaterial (Δ below {fact.unit} floor)"
+        else:
+            agrees = False
+            note = f"differs {rd * 100:.1f}% (SEC vs {provider})"
         rows.append(
             CrossCheckRow(
                 xbrl_key,

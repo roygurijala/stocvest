@@ -364,7 +364,7 @@ Each phase ships with **tests**, **BACKLOG row update**, and user **“go ahead�
 | **AI-4** | **POS-AI-4** | **Research tab** — EDGAR 10-K excerpts + Perplexity industry context; citation UI; no score mutation | Pending |
 | **AI-5** | **POS-AI-5** | **Sector pillar overrides** — banks/REIT/biotech analyzers + AI sector context lines | Pending |
 | **AI-6** | **POS-AI-6** | **Investment compare** — 2–4 symbol pillar matrix (deterministic) + AI diff summary (no winner pick) | Pending |
-| **AI-7** | **POS-AI-7** | **Portfolio-aware context** — broker holdings thematic overlap (informational); thesis drift when pillar degrades | Pending |
+| **AI-7** | **POS-AI-7** | **Portfolio-aware context** — broker holdings thematic overlap (informational); thesis drift when pillar degrades | Thesis-drift half DONE (2026-09-09); broker-overlap half pending holdings dependency |
 
 **Recommended PR slicing:** POS-D1+D2 → POS-D3+D4+D11 → POS-D5+D6 → POS-D7 (lookup) + POS-D15 (scan API stub) → POS-D13 (invest home) → POS-AI-1+2 → POS-D9 → full POS-D15 batch scale.
 
@@ -641,6 +641,19 @@ layers produce the score.** Nothing below turns the number into a black box.
   (were previously injecting daily tape noise into a multi-year verdict at 5% weight). Day/swing
   math is byte-identical (default `mode="day"`).
 
+### Shipped since this audit (2026-09-09, PR #246)
+- **VAL-POS soak is one `apply` away** — the weekly Friday Position ledger schedule is gated by
+  Terraform `var.position_ledger_capture_enabled` (default true); see `docs/runbooks/VAL-POS-soak.md`.
+  Alerts/emails stay OFF until soak sign-off regardless.
+- **POS-AI-7 thesis drift (informational half)** — additive `SignalRecord.pillar_snapshot_json`
+  captures the F1–F5 baseline at entry; the weekly sweep compares each open position's fresh
+  composite (`position_thesis_drift.compute_pillar_drift`) and reports degraded pillars in the job
+  output. Never closes/alerts. Broker-portfolio overlap (the other half) still pending its holdings
+  dependency.
+- **POS-AI-10 v2 SEC↔FMP cross-check** — `fundamentals_crosscheck.py` flags where the provider
+  disagrees with the SEC XBRL figure for the same fiscal year (revenue / net income / diluted EPS),
+  `scored:false`, never overrides. RAG over full filings/transcripts still pending.
+
 ### Known soak-tuning item (do NOT invent constants pre-data)
 - **News layer runs `mode="swing"`** inside `NewsAnalyzer` (position uses extended lookback +
   low 0.08 weight, but the recency/decay + analyst weighting are swing-tuned). A position recency
@@ -652,6 +665,6 @@ layers produce the score.** Nothing below turns the number into a black box.
 |----|------|-------------|-----------|
 | **POS-AI-8** | **Calibrated empirical probability** — surface `P(outperform over N months)` per tier from the ledger (hit-rate by score-bucket × regime, Wilson CIs) | Beats black-box "AI rating" apps with an *auditable* probability; the strongest "prediction" differentiator | Empirical from our own resolved signals only; shown with sample size + CI; never a model guess |
 | **POS-AI-9** | Position-tuned News recency + turn ON Claude sentiment/impact for Position; embedding-based event dedup | Stops one story = five signals; sharper structural news read | Validate on ledger before flags flip; sentiment stays inside the deterministic News layer math |
-| **POS-AI-10** | Deepen Research: RAG over full 10-K/10-Q + earnings-call transcripts; cross-check FMP fundamentals vs SEC **XBRL companyfacts** | Higher-fidelity, free primary-source fundamentals; richer (still `scored:false`) research | External content stays `scored:false`; XBRL only *flags* FMP disagreements, never silently overrides |
+| **POS-AI-10** | Deepen Research: RAG over full 10-K/10-Q + earnings-call transcripts; cross-check FMP fundamentals vs SEC **XBRL companyfacts** _(XBRL financials block + SEC↔FMP cross-check **DONE 2026-09-09**; RAG pending)_ | Higher-fidelity, free primary-source fundamentals; richer (still `scored:false`) research | External content stays `scored:false`; XBRL only *flags* FMP disagreements, never silently overrides |
 | **POS-AI-11** | Position-specific **walk-forward weight optimizer** once the ledger has depth | Learn the 7 weights from outcomes instead of hand-set defaults | Reuse D10 admin-proposal pipeline; human-approved, versioned |
 | **POS-AI-12** | Stronger model tier (Sonnet/Opus) for the **Investment Read** only | Low call volume, high value → depth without day/swing budget blowup | Paid-gated; deterministic fallback + copy guard unchanged |
