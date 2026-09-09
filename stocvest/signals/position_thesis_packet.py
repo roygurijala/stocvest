@@ -19,9 +19,6 @@ from typing import Any, Literal
 
 Confidence = Literal["high", "medium", "low"]
 
-# Pillar verdict thresholds mirror position_fundamentals/common.py (bullish >=62, bearish <=38).
-_PILLAR_BULLISH = 62
-_PILLAR_BEARISH = 38
 _PILLAR_IDS = ("F1", "F2", "F3", "F4", "F5")
 # Supporting layers narrated in the thesis, in stable display order.
 _SUPPORT_LAYERS = ("technical", "sector", "macro", "news", "geopolitical", "internals")
@@ -202,10 +199,13 @@ def build_position_thesis_packet(body: dict[str, Any]) -> PositionThesisPacket:
                 )
             )
             continue
+        # Classify by the pillar's authoritative verdict (already threshold- and
+        # override-adjusted, e.g. F3 red-flag / F4 value-trap downgrades) so the thesis
+        # never disagrees with the fundamentals grid the user sees.
         conf = _confidence(p.data_quality, p.score)
-        if p.score >= _PILLAR_BULLISH:
+        if p.verdict == "bullish":
             bull.append(ThesisBullet(text=_pillar_line(p, "strong"), source=pid, confidence=conf))
-        elif p.score <= _PILLAR_BEARISH:
+        elif p.verdict == "bearish":
             bear.append(ThesisBullet(text=_pillar_line(p, "weak"), source=pid, confidence=conf))
         if p.data_quality in ("low", "unavailable"):
             questions.append(

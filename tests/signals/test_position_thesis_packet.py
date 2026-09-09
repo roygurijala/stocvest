@@ -99,6 +99,25 @@ def test_value_trap_open_question_when_f4_not_bullish_but_quality_is() -> None:
     assert "valuation" in texts and "entry price" in texts
 
 
+def test_classifies_by_verdict_not_raw_score() -> None:
+    # F3 downgraded to neutral (balance-sheet red flag) despite a high score: must NOT be a bull.
+    b = _body()
+    b["position_fundamentals"]["pillars"][2] = _pillar("F3", 68, "neutral")
+    packet = build_position_thesis_packet(b)
+    assert "F3" not in _sources(packet.bull_case)
+    assert "F3" not in _sources(packet.bear_case)
+
+
+def test_value_trap_downgrade_not_in_bull_and_question_fires() -> None:
+    # F4 capped/downgraded to neutral with a high-ish score while F1/F2 bullish.
+    b = _body()
+    b["position_fundamentals"]["pillars"][3] = _pillar("F4", 64, "neutral")
+    packet = build_position_thesis_packet(b)
+    assert "F4" not in _sources(packet.bull_case)
+    texts = " ".join(q.text for q in packet.open_questions).lower()
+    assert "entry price" in texts
+
+
 def test_no_value_trap_question_when_f4_bullish() -> None:
     b = _body()
     b["position_fundamentals"]["pillars"][3] = _pillar("F4", 70, "bullish")
