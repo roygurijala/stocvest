@@ -276,7 +276,7 @@ Same **layer names** as day/swing for assistant compatibility; **implementations
 | **Sector** | 3–6 month relative strength | Weekly sector ETF vs SPY |
 | **News** | 30–90d lookback, structural only | Polygon + EDGAR; Perplexity on-demand in deep dive |
 | **Geopolitical** | Structural exposure | Reuse geo analyzer with position sensitivity table |
-| **Market Internals** | Slow breadth | 20/50-day advance-decline trend if available; else degrade gracefully |
+| **Market Internals** | **Structural volatility regime** (`InternalsAnalyzer(mode="position")`) | Scores off the **VIX level only**; today's VIX move + intraday SPY/QQQ breadth/participation are excluded (reported `structural`) as tape noise over a multi-year hold. Degrades to neutral 50 when VIX is missing. **Future:** true 20/50-day advance-decline slow breadth. |
 
 **Composite weights:** new Secrets block `position_composite` (e.g. fundamentals **0.32**, technical **0.22**, macro **0.15**, sector **0.12**, news **0.08**, geo **0.06**, internals **0.05**) — tune only via TUNING_PLAYBOOK after ledger soak.
 
@@ -625,3 +625,33 @@ Track after POS-D9 + POS-D13 (not before):
 - [`frontend/components/dashboard/trading-room/deep-dive.tsx`](../../frontend/components/dashboard/trading-room/deep-dive.tsx)
 - **Planned:** [`docs/POSITION_AI_SPEC.md`](../POSITION_AI_SPEC.md) (POS-AI-1)
 - **Shipped:** [`docs/POSITION_FUNDAMENTALS_SPEC.md`](../POSITION_FUNDAMENTALS_SPEC.md) (POS-D1)
+
+---
+
+## Addendum — 2026-09-09 · Engine fidelity audit + AI-native roadmap
+
+A layer-by-layer audit against the intended long-horizon roles (vs the reused six-layer
+day/swing engine) surfaced two fidelity gaps and a set of high-leverage, **glass-box-preserving**
+AI opportunities. The invariant stands: **AI narrates/researches/gates; deterministic pillars +
+layers produce the score.** Nothing below turns the number into a black box.
+
+### Fixed now
+- **Market Internals is horizon-aware** — `InternalsAnalyzer(mode="position")` scores the
+  structural VIX regime only; intraday breadth/participation and today's VIX move are excluded
+  (were previously injecting daily tape noise into a multi-year verdict at 5% weight). Day/swing
+  math is byte-identical (default `mode="day"`).
+
+### Known soak-tuning item (do NOT invent constants pre-data)
+- **News layer runs `mode="swing"`** inside `NewsAnalyzer` (position uses extended lookback +
+  low 0.08 weight, but the recency/decay + analyst weighting are swing-tuned). A position recency
+  profile (slower half-life, structural-catalyst emphasis) should be tuned **from the position
+  ledger during the VAL-POS soak**, not hand-set. Tracked as **POS-AI-9** in BACKLOG.
+
+### AI-native roadmap (post-soak, glass-box)
+| ID | Idea | Why it wins | Guardrail |
+|----|------|-------------|-----------|
+| **POS-AI-8** | **Calibrated empirical probability** — surface `P(outperform over N months)` per tier from the ledger (hit-rate by score-bucket × regime, Wilson CIs) | Beats black-box "AI rating" apps with an *auditable* probability; the strongest "prediction" differentiator | Empirical from our own resolved signals only; shown with sample size + CI; never a model guess |
+| **POS-AI-9** | Position-tuned News recency + turn ON Claude sentiment/impact for Position; embedding-based event dedup | Stops one story = five signals; sharper structural news read | Validate on ledger before flags flip; sentiment stays inside the deterministic News layer math |
+| **POS-AI-10** | Deepen Research: RAG over full 10-K/10-Q + earnings-call transcripts; cross-check FMP fundamentals vs SEC **XBRL companyfacts** | Higher-fidelity, free primary-source fundamentals; richer (still `scored:false`) research | External content stays `scored:false`; XBRL only *flags* FMP disagreements, never silently overrides |
+| **POS-AI-11** | Position-specific **walk-forward weight optimizer** once the ledger has depth | Learn the 7 weights from outcomes instead of hand-set defaults | Reuse D10 admin-proposal pipeline; human-approved, versioned |
+| **POS-AI-12** | Stronger model tier (Sonnet/Opus) for the **Investment Read** only | Low call volume, high value → depth without day/swing budget blowup | Paid-gated; deterministic fallback + copy guard unchanged |

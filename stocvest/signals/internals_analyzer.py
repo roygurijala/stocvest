@@ -45,26 +45,77 @@ def _vix_level_score(vix_price: float, params: MacroParameters) -> float:
 
 
 class InternalsAnalyzer:
+    def _structural_result(
+        self, vix_price: float | None, vix_score: float, vix_trend: str | None
+    ) -> InternalsLayerResult:
+        """Long-horizon (Position) internals: structural VIX-regime read, no intraday tape.
+
+        Breadth and participation are intentionally excluded (a slow 20/50-day advance-decline
+        breadth is a future enhancement — see ADR-004 addendum). Degrades to neutral 50 when
+        VIX is unavailable, mirroring the day/swing missing-data behavior.
+        """
+        score_i = int(round(_clamp(vix_score, 0.0, 100.0)))
+        if score_i >= INTERNALS_BULLISH_THRESHOLD:
+            verdict = "bullish"
+        elif score_i <= INTERNALS_BEARISH_THRESHOLD:
+            verdict = "bearish"
+        else:
+            verdict = "neutral"
+        chips: list[str] = []
+        if vix_price is not None:
+            chips.append(f"VIX regime {vix_price:.1f}")
+        chips.append("Breadth structural")
+        chips.append("Participation structural")
+        reasoning = (
+            f"Internals (structural {score_i}/100) — long-horizon volatility regime from the "
+            "VIX level; intraday breadth/participation excluded for a multi-year hold."
+        )
+        return InternalsLayerResult(
+            status="available",
+            score=score_i,
+            verdict=verdict,
+            vix_price=vix_price,
+            vix_trend=vix_trend,
+            breadth_signal="structural",
+            participation="structural",
+            reasoning=reasoning,
+            chips=chips,
+        )
+
     def analyze(
         self,
         vix_snapshot: Snapshot | None,
         spy_snapshot: Snapshot | None,
         qqq_snapshot: Snapshot | None,
         params: MacroParameters,
+        *,
+        mode: str = "day",
     ) -> InternalsLayerResult:
+        # ADR-004 POS-AI: the Position (long-horizon) desk reads internals as a *structural
+        # volatility regime*, not an intraday tape read. Today's VIX move and the SPY/QQQ
+        # session breadth/participation are tactical signals that are pure noise across a
+        # multi-year hold, so for ``mode="position"`` we score off the VIX *level* only and
+        # report breadth/participation as "structural" (excluded). Day/swing are unchanged.
+        desk = str(mode or "day").strip().lower()
+        is_position = desk == "position"
+
         if vix_snapshot and vix_snapshot.last_trade_price:
             vix_price = float(vix_snapshot.last_trade_price)
             vix_score = _vix_level_score(vix_price, params)
             chg = float(vix_snapshot.change_percent) if vix_snapshot.change_percent is not None else 0.0
-            if chg < -params.vix_trend_threshold_pct:
-                vix_score = _clamp(vix_score + params.vix_falling_bonus, 0.0, 100.0)
-            elif chg > params.vix_trend_threshold_pct:
-                vix_score = _clamp(vix_score - params.vix_rising_penalty, 0.0, 100.0)
+            if not is_position:
+                if chg < -params.vix_trend_threshold_pct:
+                    vix_score = _clamp(vix_score + params.vix_falling_bonus, 0.0, 100.0)
+                elif chg > params.vix_trend_threshold_pct:
+                    vix_score = _clamp(vix_score - params.vix_rising_penalty, 0.0, 100.0)
             vix_trend = vix_direction_from_change(vix_snapshot.change_percent)
         else:
             vix_price = None
             vix_score = 50.0
             vix_trend = None
+
+        if is_position:
+            return self._structural_result(vix_price, vix_score, vix_trend)
 
         spy_pct = float(spy_snapshot.change_percent) if spy_snapshot and spy_snapshot.change_percent is not None else None
         if spy_pct is None:

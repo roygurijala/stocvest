@@ -266,7 +266,7 @@ async def build_position_composite_response(
         sector_bucket=sic_bucket_for_geo,
         ticker_ref=ticker_ref,
     )
-    internals = InternalsAnalyzer().analyze(vix_snap, spy_snap, qqq_snap, params.macro)
+    internals = InternalsAnalyzer().analyze(vix_snap, spy_snap, qqq_snap, params.macro, mode="position")
 
     layer_results = [fundamentals, tech, news, macro, sector, geo, internals]
     layer_ids = [
