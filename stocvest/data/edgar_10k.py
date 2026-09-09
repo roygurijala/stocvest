@@ -34,8 +34,10 @@ log = get_logger(__name__)
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik10}.json"
 ARCHIVES_DOC_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{doc}"
 
-# Forms that carry a full risk-factors section (annual reports + foreign-issuer variants).
-_TENK_FORMS = ("10-K", "10-K405", "10-KSB", "20-F", "40-F")
+# Domestic 10-K family only: the Item 1A extractor understands the U.S. "Item 1A · Risk
+# Factors" layout. Foreign-issuer annual reports (20-F use "Item 3.D", 40-F differs) would
+# always fetch then fail extraction, so they are excluded to avoid wasted SEC calls.
+_TENK_FORMS = ("10-K", "10-K405", "10-KSB")
 _DEFAULT_MAX_CHARS = 4000
 _MIN_USEFUL_CHARS = 200
 _HTTP_TIMEOUT = 20.0
