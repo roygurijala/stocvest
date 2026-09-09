@@ -1,12 +1,14 @@
 """Position Research bundle — ADR-004 POS-AI-4 (external context, INFORMATIONAL / not scored).
 
-Assembles the Position deep-dive "Research" tab from two **external** primary/secondary
-sources, both clearly badged "External · not scored" and NEVER fed into the pillar math:
+Assembles the Position deep-dive "Research" tab from **external** primary/secondary
+sources, all clearly badged "External · not scored" and NEVER fed into the pillar math:
 
   * Recent developments — a cited, neutral Perplexity Sonar summary of what has changed
     for the company recently (reuses the shared ``perplexity_sonar_json`` client + cache).
   * Risk factors excerpt — a truncated Item 1A pull from the company's latest SEC 10-K
     (``stocvest.data.edgar_10k``), with the source filing URL.
+  * Financials (POS-AI-10) — headline latest-fiscal-year figures straight from the SEC
+    XBRL companyfacts API (``stocvest.data.sec_xbrl``), primary-source display only.
 
 Gating (ships DARK):
   * ``STOCVEST_POSITION_RESEARCH_ENABLED`` flag, AND
@@ -29,6 +31,7 @@ from zoneinfo import ZoneInfo
 
 from stocvest.data.edgar_10k import TenKRiskExcerpt, fetch_10k_item_1a
 from stocvest.data.models import UserProfile
+from stocvest.data.sec_xbrl import CompanyFacts, fetch_company_facts
 from stocvest.data.perplexity_client import perplexity_cache_key, perplexity_sonar_json
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -71,6 +74,7 @@ class PositionResearchBundle:
     status: BundleStatus
     recent_developments: RecentDevelopments | None = None
     risk_factors: TenKRiskExcerpt | None = None
+    financials: CompanyFacts | None = None
     upgrade_available: bool = False
     disclaimer: str = RESEARCH_DISCLAIMER
 
@@ -84,6 +88,11 @@ class PositionResearchBundle:
                 else None
             ),
             "risk_factors": self.risk_factors.to_api_dict() if self.risk_factors else None,
+            "financials": (
+                self.financials.to_api_dict()
+                if self.financials and self.financials.has_data
+                else None
+            ),
             "upgrade_available": self.upgrade_available,
             "disclaimer": self.disclaimer,
         }
@@ -225,13 +234,15 @@ async def build_position_research_bundle(
     if not _within_daily_budget(user_profile.user_id, cap):
         return PositionResearchBundle(symbol=sym, status="over_budget")
 
-    recent, excerpt = await asyncio.gather(
+    recent, excerpt, financials = await asyncio.gather(
         _fetch_recent_developments(sym, company_name),
         fetch_10k_item_1a(sym),
+        fetch_company_facts(sym),
     )
 
     has_recent = recent is not None and recent.has_data
-    if not has_recent and excerpt is None:
+    has_financials = financials is not None and financials.has_data
+    if not has_recent and excerpt is None and not has_financials:
         return PositionResearchBundle(symbol=sym, status="empty")
 
     return PositionResearchBundle(
@@ -239,4 +250,5 @@ async def build_position_research_bundle(
         status="ok",
         recent_developments=recent if has_recent else None,
         risk_factors=excerpt,
+        financials=financials if has_financials else None,
     )

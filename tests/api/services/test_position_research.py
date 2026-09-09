@@ -10,6 +10,7 @@ import pytest
 from stocvest.api.services import position_research as pr
 from stocvest.data.edgar_10k import TenKRiskExcerpt
 from stocvest.data.models import UserProfile
+from stocvest.data.sec_xbrl import CompanyFacts, XbrlFact
 
 pytestmark = pytest.mark.unit
 
@@ -64,10 +65,40 @@ class _FakeRedis:
         self.expires[key] = ttl
 
 
+def _company_facts() -> CompanyFacts:
+    return CompanyFacts(
+        symbol="AAPL",
+        entity_name="Apple Inc.",
+        facts=[
+            XbrlFact(
+                key="revenue",
+                label="Revenue",
+                value=383_000_000_000.0,
+                unit="USD",
+                fiscal_year=2024,
+                period_end="2024-09-28",
+                form="10-K",
+                filed="2024-11-01",
+            )
+        ],
+        source_url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000320193&type=10-K",
+    )
+
+
 @pytest.fixture(autouse=True)
 def _no_redis(monkeypatch: pytest.MonkeyPatch) -> None:
     # Default: no Redis (budget is a no-op). Individual tests override.
     monkeypatch.setattr(pr, "get_sync_redis", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def _no_xbrl_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Keep the SEC XBRL fetch network-free by default (unit tests). Financials-specific
+    # tests override this. Without it, the third gather() call would hit the real API.
+    async def _none_facts(*a: Any, **k: Any) -> None:
+        return None
+
+    monkeypatch.setattr(pr, "fetch_company_facts", _none_facts)
 
 
 @pytest.mark.asyncio
@@ -217,3 +248,37 @@ async def test_recent_developments_none_on_empty(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(pr, "perplexity_sonar_json", _sonar)
     assert await pr._fetch_recent_developments("AAPL", None) is None
+
+
+@pytest.mark.asyncio
+async def test_ok_bundle_includes_sec_financials(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pr, "get_settings", lambda: _settings())
+    monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _none())
+    monkeypatch.setattr(pr, "fetch_10k_item_1a", lambda *a, **k: _none())
+
+    async def _facts(*a: Any, **k: Any) -> CompanyFacts:
+        return _company_facts()
+
+    monkeypatch.setattr(pr, "fetch_company_facts", _facts)
+
+    out = await pr.build_position_research_bundle(symbol="AAPL", user_profile=_paid())
+    assert out.status == "ok"  # financials alone is enough to be non-empty
+    d = out.to_api_dict()
+    assert d["recent_developments"] is None
+    assert d["risk_factors"] is None
+    assert d["financials"]["scored"] is False
+    assert d["financials"]["entity_name"] == "Apple Inc."
+    assert d["financials"]["facts"][0]["key"] == "revenue"
+    assert "CIK=0000320193" in d["financials"]["source_url"]
+
+
+@pytest.mark.asyncio
+async def test_empty_bundle_when_all_three_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pr, "get_settings", lambda: _settings())
+    monkeypatch.setattr(pr, "_fetch_recent_developments", lambda *a, **k: _none())
+    monkeypatch.setattr(pr, "fetch_10k_item_1a", lambda *a, **k: _none())
+    # fetch_company_facts already returns None via the autouse fixture.
+
+    out = await pr.build_position_research_bundle(symbol="AAPL", user_profile=_paid())
+    assert out.status == "empty"
+    assert out.to_api_dict()["financials"] is None

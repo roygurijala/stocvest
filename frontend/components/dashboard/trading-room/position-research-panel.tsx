@@ -5,8 +5,9 @@
  *
  * Loads on demand (never auto-fetches — protects the per-user/day budget) from the paid,
  * flag-gated `POST /v1/signals/position/research` (via the BFF). Shows a cited "recent
- * developments" summary (Perplexity) and a truncated SEC 10-K "Item 1A · Risk Factors"
- * excerpt with a link to the filing. Every external block is badged "External · not scored":
+ * developments" summary (Perplexity), a truncated SEC 10-K "Item 1A · Risk Factors" excerpt
+ * with a link to the filing, and headline latest-fiscal-year figures from the SEC XBRL
+ * companyfacts API (POS-AI-10). Every external block is badged "External · not scored":
  * this content is INFORMATIONAL ONLY and never feeds the pillar math / composite score.
  */
 
@@ -36,13 +37,44 @@ type RiskFactors = {
   scored: boolean;
 };
 
+type XbrlFactRow = {
+  key: string;
+  label: string;
+  value: number;
+  unit: string;
+  fiscal_year: number | null;
+  period_end: string;
+  form: string;
+  filed: string;
+};
+
+type Financials = {
+  entity_name: string;
+  facts: XbrlFactRow[];
+  source_url: string;
+  scored: boolean;
+};
+
 type ResearchResponse = {
   status: "ok" | "disabled" | "upgrade_required" | "over_budget" | "empty";
   recent_developments: RecentDevelopments | null;
   risk_factors: RiskFactors | null;
+  financials: Financials | null;
   upgrade_available?: boolean;
   disclaimer?: string;
 };
+
+/** Format a SEC XBRL fact for display. USD → compact $T/$B/$M; USD/shares → $x.xx (EPS). */
+export function formatXbrlValue(value: number, unit: string): string {
+  if (!Number.isFinite(value)) return "—";
+  if (unit === "USD/shares") return `$${value.toFixed(2)}`;
+  const sign = value < 0 ? "-" : "";
+  const abs = Math.abs(value);
+  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
+  return `${sign}$${Math.round(abs).toLocaleString()}`;
+}
 
 type Props = {
   symbol: string;
@@ -185,8 +217,8 @@ export function PositionResearchPanel({ symbol, companyName, colors, upgradeHref
 
       {state.phase === "idle" ? (
         <p style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.5 }}>
-          Pull external context for {symbol}: recent developments and the latest 10-K risk factors.
-          Informational only — never part of the STOCVEST signal.
+          Pull external context for {symbol}: recent developments, the latest 10-K risk factors,
+          and headline SEC financials. Informational only — never part of the STOCVEST signal.
         </p>
       ) : null}
 
@@ -291,6 +323,41 @@ export function PositionResearchPanel({ symbol, companyName, colors, upgradeHref
                   <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>excerpt truncated</span>
                 ) : null}
               </div>
+            </div>
+          ) : null}
+
+          {state.data.financials && state.data.financials.facts.length > 0 ? (
+            <div style={box} data-testid="position-research-financials">
+              <SectionHeader title="SEC financials · latest FY" colors={colors} />
+              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: spacing[2] }}>
+                <tbody>
+                  {state.data.financials.facts.map((f) => (
+                    <tr key={f.key} data-testid={`position-research-fact-${f.key}`} style={{ borderTop: `1px solid ${colors.border}` }}>
+                      <th scope="row" style={{ textAlign: "left", padding: `${spacing[1]} 0`, fontSize: typography.scale.sm, fontWeight: 500, color: colors.textMuted }}>
+                        {f.label}
+                        {f.fiscal_year ? (
+                          <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, marginLeft: spacing[1] }}>
+                            FY{f.fiscal_year}
+                          </span>
+                        ) : null}
+                      </th>
+                      <td style={{ textAlign: "right", padding: `${spacing[1]} 0`, fontSize: typography.scale.sm, fontWeight: 700, color: colors.text, fontVariantNumeric: "tabular-nums" }}>
+                        {formatXbrlValue(f.value, f.unit)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {state.data.financials.source_url ? (
+                <a
+                  href={state.data.financials.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: "inline-block", marginTop: spacing[2], fontSize: typography.scale.xs, color: colors.accent, fontWeight: 700, textDecoration: "none" }}
+                >
+                  SEC filings →
+                </a>
+              ) : null}
             </div>
           ) : null}
 
