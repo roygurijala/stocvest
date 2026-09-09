@@ -68,6 +68,14 @@ export interface AssistantPageContext {
   session_mode?: "public" | "authenticated";
   /** Active trading mode if the page exposes one. */
   trading_mode?: "swing" | "day" | "position";
+  /**
+   * ADR-004 POS-D10 — long-horizon Position desk read, emitted only when the Position tab
+   * is active. Glass-box fundamentals verdict + one-line summary + deterministic gem tier.
+   * The assistant narrates these; it never sets, upgrades, or overrides them.
+   */
+  position_verdict?: "bullish" | "neutral" | "bearish";
+  position_fundamentals_summary?: string;
+  position_gem_tier?: "gem" | "strong" | "monitor" | "insufficient";
   /** User subscription tier — forwarded from dashboard pages that know the plan. */
   subscription_plan?: "free" | "swing_pro" | "swing_day_pro";
   /** Plan-based default-watchlist symbol cap (5 / 50 / 100). */

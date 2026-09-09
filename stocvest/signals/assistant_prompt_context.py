@@ -385,6 +385,17 @@ def serialize_page_context_plain_english(ctx: dict[str, Any]) -> str:
         lines.append("Active desk: Swing (multi-day)")
     elif mode == "day":
         lines.append("Active desk: Day (intraday)")
+    elif mode == "position":
+        lines.append("Active desk: Position (long-horizon quality)")
+        pv = _coerce_str(ctx.get("position_verdict"), limit=24).lower()
+        if pv in ("bullish", "neutral", "bearish"):
+            lines.append(f"Position fundamentals read: {pv}")
+        ps = _coerce_str(ctx.get("position_fundamentals_summary"), limit=280)
+        if ps:
+            lines.append(f"Position summary: {ps}")
+        pt = _coerce_str(ctx.get("position_gem_tier"), limit=16).lower()
+        if pt in ("gem", "strong", "monitor", "insufficient"):
+            lines.append(f"Investment tier on screen: {pt}")
 
     analysis_status = _coerce_str(ctx.get("analysis_status"), limit=24).lower()
     if analysis_status == "loading":
@@ -511,8 +522,21 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
     if symbol:
         lines.append(f"symbol={symbol}")
     mode = _coerce_str(ctx.get("trading_mode"), limit=12).lower()
-    if mode in ("swing", "day"):
+    if mode in ("swing", "day", "position"):
         lines.append(f"trading_mode={mode}")
+
+    # ADR-004 POS-D10 — Position desk read (long-horizon fundamentals). Emitted only
+    # when the Position tab is in scope so the assistant can narrate the glass-box
+    # verdict/summary without ever crossing into Swing/Day decisions or inventing a rating.
+    position_verdict = _coerce_str(ctx.get("position_verdict"), limit=24).lower()
+    if position_verdict in ("bullish", "neutral", "bearish"):
+        lines.append(f"position_verdict={position_verdict}")
+    position_summary = _coerce_str(ctx.get("position_fundamentals_summary"), limit=280)
+    if position_summary:
+        lines.append(f"position_fundamentals_summary={position_summary}")
+    position_tier = _coerce_str(ctx.get("position_gem_tier"), limit=16).lower()
+    if position_tier in ("gem", "strong", "monitor", "insufficient"):
+        lines.append(f"position_gem_tier={position_tier}")
 
     decision_state = _coerce_str(ctx.get("decision_state"), limit=24).lower()
     if decision_state in ("actionable", "monitor", "blocked"):

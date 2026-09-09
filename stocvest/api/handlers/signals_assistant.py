@@ -244,10 +244,20 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # Priority: explicit screen mode > explicit desk language in the message >
     # stored preference > default (day). A newly stated preference is persisted so
     # future desk-ambiguous questions inherit it without re-asking.
+    # ADR-004 POS-D10 — Position is a third, independent desk. When the Position tab is
+    # in scope we must NOT inject swing/day discovery, watchlist, comparison, or composite
+    # reads (they would contradict the long-horizon fundamentals read the user is looking
+    # at). `page_mode` stays swing|day for the day/swing services; `is_position_scope`
+    # gates those services off. Position gem-discovery / "is X a gem?" lookup is POS-D10
+    # increment 2. The Position page-context block still flows through serialize_page_context.
     page_mode: str | None = None
+    is_position_scope = False
     if page_context and isinstance(page_context.get("trading_mode"), str):
         _pm = page_context["trading_mode"].strip().lower()
-        page_mode = _pm if _pm in ("swing", "day") else None
+        if _pm in ("swing", "day"):
+            page_mode = _pm
+        elif _pm == "position":
+            is_position_scope = True
 
     explicit_desk = (
         detect_explicit_desk(last_user_text_for_intent) if profile.has_ai_explanations else None
@@ -276,7 +286,11 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # from the cached desk results and inject them as context. No new scan.
     discovery_block = ""
     discovery_payload_out: dict | None = None
-    if profile.has_ai_explanations and is_discovery_query(last_user_text_for_intent):
+    if (
+        profile.has_ai_explanations
+        and not is_position_scope
+        and is_discovery_query(last_user_text_for_intent)
+    ):
         try:
             disc = fetch_discovery_context(resolved_desk)
             discovery_block = serialize_discovery_context(disc)
@@ -312,7 +326,11 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # "How is my watchlist doing today?" / "best opportunities from my watchlist"
     # are answered from cached maturation data (no expensive recompute).
     watchlist_block = ""
-    if profile.has_ai_explanations and is_watchlist_intelligence_query(last_user_text_for_intent):
+    if (
+        profile.has_ai_explanations
+        and not is_position_scope
+        and is_watchlist_intelligence_query(last_user_text_for_intent)
+    ):
         try:
             wl_ctx = fetch_watchlist_context(rc.user_id, resolved_desk)  # type: ignore[arg-type]
             watchlist_block = serialize_watchlist_context(wl_ctx)
@@ -334,7 +352,11 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # fetch below (detected_sym stays None ⇒ no chart/citations/navigate/web).
     multi_symbol_block = ""
     compared_symbols_out: list[dict] | None = None
-    if profile.has_ai_explanations and is_comparison_query(last_user_text_for_intent):
+    if (
+        profile.has_ai_explanations
+        and not is_position_scope
+        and is_comparison_query(last_user_text_for_intent)
+    ):
         comparison_syms = detect_symbols(last_user_text_for_intent, limit=3)
         if len(comparison_syms) >= 2:
             try:
@@ -406,7 +428,10 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 # per symbol+mode) so the assistant can lead with what STOCVEST
                 # thinks — not just an external news synthesis. Best-effort: a
                 # missing/failed read simply leaves the field None.
-                if symbol_context is not None:
+                # Skip the swing/day composite read under Position scope — a day/swing
+                # verdict would contradict the long-horizon fundamentals the user sees.
+                # (POS-D10 increment 2 adds a position composite/gem lookup here.)
+                if symbol_context is not None and not is_position_scope:
                     try:
                         symbol_context.stocvest_read = fetch_stocvest_composite_read(
                             detected_sym, resolved_desk
@@ -480,6 +505,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     clarify_out: dict | None = None
     if (
         profile.has_ai_explanations
+        and not is_position_scope
         and is_mode_sensitive_query(last_user_text_for_intent)
         and not page_mode
         and not explicit_desk

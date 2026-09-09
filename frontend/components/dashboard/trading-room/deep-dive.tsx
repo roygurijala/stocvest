@@ -924,8 +924,8 @@ export function DeepDive({
   // resolves the correct desk cache so the chatbot never claims it lacks the on-screen symbol.
   // The publisher clears this automatically when the deep dive closes (component unmount).
   const assistantContext = useMemo<AssistantPageContext | null>(
-    () =>
-      buildSignalsPageAssistantContext({
+    () => {
+      const ctx = buildSignalsPageAssistantContext({
         pageId: "dashboard/trading-room",
         tradingMode: isPositionLane ? "position" : feedLane,
         symbol: card.symbol,
@@ -947,7 +947,30 @@ export function DeepDive({
         regularSessionOpen: null,
         gapIntelSnapshot: null,
         signalEvidence: null
-      }),
+      });
+      // ADR-004 POS-D10 — enrich the Position tab context with the glass-box fundamentals
+      // verdict + one-line summary so the assistant narrates the long-horizon read (never a
+      // swing/day verdict). Sourced from the same composite body the grid renders.
+      if (!ctx || !isPositionLane) return ctx;
+      const body = (hasRenderableComposite ? composite : null) as Record<string, unknown> | null;
+      const fund =
+        body && typeof body.position_fundamentals === "object" && body.position_fundamentals
+          ? (body.position_fundamentals as Record<string, unknown>)
+          : null;
+      const rawVerdict =
+        (typeof fund?.verdict === "string" && fund.verdict) ||
+        (typeof body?.signal_summary === "string" && body.signal_summary) ||
+        "";
+      const verdict = rawVerdict.trim().toLowerCase();
+      const reasoning = typeof fund?.reasoning === "string" ? fund.reasoning.trim() : "";
+      return {
+        ...ctx,
+        ...(verdict === "bullish" || verdict === "neutral" || verdict === "bearish"
+          ? { position_verdict: verdict }
+          : {}),
+        ...(reasoning ? { position_fundamentals_summary: reasoning } : {})
+      };
+    },
     [
       isPositionLane,
       feedLane,

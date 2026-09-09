@@ -571,6 +571,36 @@ def test_assistant_chat_includes_discovery_payload(monkeypatch: pytest.MonkeyPat
     assert body["discovery"]["scanner_href"] == "/dashboard/scanner?focus=day"
 
 
+def test_assistant_chat_position_scope_suppresses_day_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR-004 POS-D10 — on the Position tab, the assistant must NOT inject swing/day
+    scanner discovery (which would contradict the long-horizon fundamentals read)."""
+    _patch_paid_store(monkeypatch)
+
+    def _boom(mode: str):  # type: ignore[no-untyped-def]
+        raise AssertionError("day/swing discovery must not run under position scope")
+
+    monkeypatch.setattr("stocvest.api.handlers.signals_assistant.fetch_discovery_context", _boom)
+
+    response = assistant_chat_handler(
+        _event(
+            body={
+                "messages": [
+                    {"role": "user", "content": "what are the momentum stocks this morning?"}
+                ],
+                "page_context": {
+                    "page": "dashboard/trading-room",
+                    "trading_mode": "position",
+                    "symbol": "MSFT",
+                },
+            }
+        ),
+        {},
+    )
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body.get("discovery") is None
+
+
 def test_assistant_chat_includes_clarify_for_ambiguous_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_paid_store(monkeypatch)
     from stocvest.api.services.assistant_discovery import DiscoveryResult

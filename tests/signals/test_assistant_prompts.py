@@ -1365,3 +1365,55 @@ def test_prompt_signals_page_has_no_cta_referral_needed() -> None:
         "Signals page: the full Evidence card is ALREADY rendered. No CTA referral needed"
         in text
     )
+
+
+# ── ADR-004 POS-D10 — Position desk assistant rules ───────────────────────────
+
+
+def test_prompt_carries_position_desk_third_engine_rules() -> None:
+    """The Position desk must be described as a third independent engine with
+    glass-box (not-a-rating) framing, a deterministic gem tier, and the same
+    cross-desk substitution ban Swing/Day already carry."""
+    text = ASSISTANT_SYSTEM_PROMPT
+    assert "POSITION DESK (LONG-HORIZON QUALITY) — THIRD INDEPENDENT ENGINE" in text
+    # Inherits Priority-1 screen scope like swing/day.
+    assert "trading_mode=position" in text
+    # Glass-box, not a rating; no action words.
+    assert "POSITION IS GLASS-BOX, NOT A RATING" in text
+    assert '"GEM" IS A DETERMINISTIC TIER, NOT A RECOMMENDATION' in text
+    # Never crown a single best gem; never say one desk is better than another.
+    assert "Pick a single \"best\" gem" in text
+    assert 'better than' in text
+
+
+def test_serialize_page_context_emits_position_desk_fields() -> None:
+    """Position tab page context surfaces the glass-box verdict + summary + tier."""
+    ctx = {
+        "page": "dashboard/trading-room",
+        "trading_mode": "position",
+        "symbol": "msft",
+        "position_verdict": "bullish",
+        "position_fundamentals_summary": "Durable margins and low leverage; valuation full.",
+        "position_gem_tier": "gem",
+    }
+    out = serialize_page_context(ctx)
+    assert "trading_mode=position" in out
+    assert "position_verdict=bullish" in out
+    assert "position_fundamentals_summary=Durable margins and low leverage; valuation full." in out
+    assert "position_gem_tier=gem" in out
+    # Plain-English mirror for the LLM.
+    assert "Active desk: Position (long-horizon quality)" in out
+
+
+def test_serialize_page_context_rejects_invalid_position_values() -> None:
+    """Bad verdict/tier values are dropped (whitelist), mode still emitted."""
+    ctx = {
+        "page": "dashboard/trading-room",
+        "trading_mode": "position",
+        "position_verdict": "strong_buy",  # not a valid verdict
+        "position_gem_tier": "unicorn",  # not a valid tier
+    }
+    out = serialize_page_context(ctx)
+    assert "trading_mode=position" in out
+    assert "position_verdict=" not in out
+    assert "position_gem_tier=" not in out
