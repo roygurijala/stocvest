@@ -7,9 +7,11 @@ from typing import Any
 
 import pytest
 
+import stocvest.api.services.position_scan as scan_mod
 from stocvest.api.services.position_scan import (
     PositionScanSnapshot,
     _bottom_quartile_threshold,
+    get_position_scan_snapshot_sync,
     rank_candidates,
     reset_position_scan_cache_for_tests,
     run_position_scan_async,
@@ -139,3 +141,31 @@ def test_snapshot_filter_and_api_dict() -> None:
 
     all_rows = snap.to_api_dict(tier="all", limit=50)
     assert all_rows["count"] == 2
+
+
+def test_snapshot_sync_caches_and_forces(monkeypatch: pytest.MonkeyPatch) -> None:
+    import datetime as _dt
+
+    reset_position_scan_cache_for_tests()
+    calls = {"n": 0}
+
+    def fake_scan(**_kwargs) -> PositionScanSnapshot:
+        calls["n"] += 1
+        return PositionScanSnapshot(
+            generated_at=_dt.datetime(2026, 9, 8, tzinfo=_dt.timezone.utc),
+            universe_size=1,
+            candidates=[],
+        )
+
+    monkeypatch.setattr(scan_mod, "run_position_scan", fake_scan)
+
+    snap1, cached1 = get_position_scan_snapshot_sync()
+    assert cached1 is False and calls["n"] == 1
+    # Second call hits the cache — no recompute, loop-agnostic (no asyncio.run reuse).
+    snap2, cached2 = get_position_scan_snapshot_sync()
+    assert cached2 is True and calls["n"] == 1 and snap2 is snap1
+    # Force triggers a fresh scan.
+    _snap3, cached3 = get_position_scan_snapshot_sync(force=True)
+    assert cached3 is False and calls["n"] == 2
+
+    reset_position_scan_cache_for_tests()

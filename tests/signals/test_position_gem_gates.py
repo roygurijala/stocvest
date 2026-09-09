@@ -173,6 +173,16 @@ def test_g2_fails_on_accruals_flag() -> None:
     assert gates["G2"] is False
 
 
+def test_g2_fails_when_f5_unavailable() -> None:
+    body = _gem_body()
+    f5 = body["position_fundamentals"]["pillars"][4]
+    f5["score"] = None
+    f5["status"] = "unavailable"
+    f5["verdict"] = "neutral"
+    gates = evaluate_gem_gates(_features(body))
+    assert gates["G2"] is False
+
+
 # --------------------------------------------------------------------------- G3
 
 
@@ -193,6 +203,16 @@ def test_g3_fails_on_solvency_red_flag() -> None:
 def test_g3_fails_on_elevated_leverage_flag() -> None:
     body = _gem_body()
     body["position_fundamentals"]["pillars"][2]["chips"] = ["Elevated leverage (D/E 3.1)"]
+    gates = evaluate_gem_gates(_features(body))
+    assert gates["G3"] is False
+
+
+def test_g3_fails_when_f3_unavailable() -> None:
+    body = _gem_body()
+    f3 = body["position_fundamentals"]["pillars"][2]
+    f3["score"] = None
+    f3["status"] = "unavailable"
+    f3["verdict"] = "neutral"
     gates = evaluate_gem_gates(_features(body))
     assert gates["G3"] is False
 

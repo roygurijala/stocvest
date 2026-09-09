@@ -170,6 +170,30 @@ export function InvestPageClient() {
             }}
           />
         </label>
+        <label style={{ display: "flex", alignItems: "center", gap: spacing[1], fontSize: typography.scale.xs, color: colors.textMuted }}>
+          Min trend
+          <input
+            aria-label="Minimum technical trend score"
+            type="number"
+            min={0}
+            max={100}
+            value={filter.minTechnical ?? ""}
+            onChange={(e) =>
+              setFilter((f) => ({
+                ...f,
+                minTechnical: e.target.value === "" ? null : Number(e.target.value)
+              }))
+            }
+            style={{
+              width: 64,
+              background: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: borderRadius.sm,
+              color: colors.text,
+              padding: spacing[1]
+            }}
+          />
+        </label>
       </div>
 
       {/* Table */}

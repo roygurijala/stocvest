@@ -116,7 +116,8 @@ def _chip_tuple(value: Any) -> tuple[str, ...]:
     return tuple(str(c) for c in value if str(c).strip())
 
 
-def _resolve_above_sma200(chips: tuple[str, ...], snap: dict[str, Any]) -> bool | None:
+def _resolve_above_sma200(chips: tuple[str, ...]) -> bool | None:
+    """True/False from the weekly (preferred) or daily-confirm SMA200 chip; None if absent."""
     for chip in chips:
         low = chip.lower()
         if "above w-sma200" in low or "above d-sma200" in low:
@@ -154,6 +155,7 @@ def extract_candidate_features(body: dict[str, Any]) -> CandidateFeatures:
     tech_snap = tech_row.get("indicator_snapshot")
     tech_snap = tech_snap if isinstance(tech_snap, dict) else {}
     tech_chips = _chip_tuple(tech_row.get("chips"))
+    above_sma200 = _resolve_above_sma200(tech_chips)
 
     sector_row = _layer_row(body, "sector")
     macro_row = _layer_row(body, "macro")
@@ -170,7 +172,7 @@ def extract_candidate_features(body: dict[str, Any]) -> CandidateFeatures:
         pillars=pillars,
         technical_score=_as_int(tech_row.get("score")),
         technical_verdict=str(tech_row.get("verdict") or "neutral").strip().lower(),
-        above_sma200=_resolve_above_sma200(tech_chips, tech_snap),
+        above_sma200=above_sma200,
         in_base=bool(tech_snap.get("in_base")),
         pct_from_52w_high=_as_float(tech_snap.get("pct_from_52w_high")),
         rs_vs_spy_6m_pct=_as_float(tech_snap.get("rs_vs_spy_6m_pct")),
@@ -221,11 +223,17 @@ def evaluate_gem_gates(
         and all(s is not None and s >= PILLAR_FLOOR for s in p.values())
     )
 
-    # G2 — Earnings quality: F5 present, not bearish, no accruals red flag.
-    g2 = bool(f5 and f5.verdict != "bearish" and not _has_flag(f5.chips, (_F5_ACCRUAL_MARKER,)))
+    # G2 — Earnings quality: F5 scored, not bearish, no accruals red flag.
+    g2 = bool(
+        f5 and f5.score is not None and f5.verdict != "bearish"
+        and not _has_flag(f5.chips, (_F5_ACCRUAL_MARKER,))
+    )
 
-    # G3 — Balance sheet: F3 bullish/neutral, no solvency red-flag chip.
-    g3 = bool(f3 and f3.verdict in ("bullish", "neutral") and not _has_flag(f3.chips, _F3_RED_FLAG_MARKERS))
+    # G3 — Balance sheet: F3 scored, bullish/neutral, no solvency red-flag chip.
+    g3 = bool(
+        f3 and f3.score is not None and f3.verdict in ("bullish", "neutral")
+        and not _has_flag(f3.chips, _F3_RED_FLAG_MARKERS)
+    )
 
     # G4 — Valuation sanity: F4 not bearish unless F1+F2 both bullish (quality compounder).
     if f4 is None:

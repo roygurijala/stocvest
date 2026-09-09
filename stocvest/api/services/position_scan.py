@@ -13,6 +13,7 @@ gate/rank/sort logic is unit-testable without network.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -48,8 +49,11 @@ _SCAN_TTL_SECONDS = 6 * 3600
 _ComposeFn = Callable[[str], Awaitable[dict[str, Any]]]
 
 # Module-level snapshot cache (in-process; weekly batch persists to Dynamo/S3 later).
+# A threading.Lock (not asyncio.Lock) guards it: the sync entry point runs each
+# scan in its own asyncio.run loop, and an asyncio.Lock would bind to the first
+# loop and raise "bound to a different event loop" on the next warm invocation.
 _snapshot_cache: tuple[float, "PositionScanSnapshot"] | None = None
-_cache_lock = asyncio.Lock()
+_cache_lock = threading.Lock()
 
 
 def reset_position_scan_cache_for_tests() -> None:
@@ -244,20 +248,22 @@ def run_position_scan(
     return asyncio.run(run_position_scan_async(universe=universe, compose=compose))
 
 
-async def get_position_scan_snapshot(*, force: bool = False) -> tuple[PositionScanSnapshot, bool]:
-    """Return (snapshot, cached). Recomputes when stale or forced."""
+def get_position_scan_snapshot_sync(*, force: bool = False) -> tuple[PositionScanSnapshot, bool]:
+    """Return (snapshot, cached). Recomputes (fresh asyncio loop) when stale or forced.
+
+    Loop-agnostic: cache coherence is guarded by a threading.Lock so repeated warm
+    invocations never trip asyncio's per-loop binding.
+    """
     global _snapshot_cache
     now = time.time()
-    if not force and _snapshot_cache is not None and _snapshot_cache[0] > now:
-        return _snapshot_cache[1], True
-    async with _cache_lock:
+    cached = _snapshot_cache
+    if not force and cached is not None and cached[0] > now:
+        return cached[1], True
+    with _cache_lock:
         now = time.time()
-        if not force and _snapshot_cache is not None and _snapshot_cache[0] > now:
-            return _snapshot_cache[1], True
-        snapshot = await run_position_scan_async()
+        cached = _snapshot_cache
+        if not force and cached is not None and cached[0] > now:
+            return cached[1], True
+        snapshot = run_position_scan()
         _snapshot_cache = (now + _SCAN_TTL_SECONDS, snapshot)
         return snapshot, False
-
-
-def get_position_scan_snapshot_sync(*, force: bool = False) -> tuple[PositionScanSnapshot, bool]:
-    return asyncio.run(get_position_scan_snapshot(force=force))
