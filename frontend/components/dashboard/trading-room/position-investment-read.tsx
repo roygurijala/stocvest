@@ -33,6 +33,14 @@ type ReadState =
 
 /** Client-side mirror of the deterministic read — shown instantly before any AI call. */
 function localDeterministicRead(symbol: string, packet: PositionThesisPacket): string {
+  if (!packet.fundamentalsCovered) {
+    const parts = [
+      `On the Long Term desk (long-horizon quality), ${symbol} does not have enough fundamentals coverage yet to form a read.`
+    ];
+    if (packet.openQuestions[0]) parts.push(`Open question: ${packet.openQuestions[0].text}`);
+    parts.push("Signal data only.");
+    return parts.join(" ");
+  }
   const parts = [`On the Long Term desk (long-horizon quality), ${symbol} reads ${packet.verdict} on fundamentals.`];
   if (packet.bullCase[0]) parts.push(`Bull: ${packet.bullCase[0].text}`);
   if (packet.bearCase[0]) parts.push(`Watch: ${packet.bearCase[0].text}`);
@@ -123,7 +131,8 @@ export function PositionInvestmentRead({ symbol, packet, colors, upgradeHref = "
             bull_case: packet.bullCase,
             bear_case: packet.bearCase,
             open_questions: packet.openQuestions,
-            pillar_snapshot_hash: packet.pillarSnapshotHash
+            pillar_snapshot_hash: packet.pillarSnapshotHash,
+            fundamentals_covered: packet.fundamentalsCovered
           }
         })
       });

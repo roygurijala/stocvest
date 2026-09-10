@@ -68,6 +68,31 @@ def test_unauthenticated_rejected() -> None:
     assert res["statusCode"] == 401
 
 
+def test_free_user_no_coverage_does_not_claim_fundamentals_verdict(monkeypatch: pytest.MonkeyPatch) -> None:
+    # POS copy-bug fix: with fundamentals_covered=False the deterministic read must NOT say
+    # "reads bullish on fundamentals" even if a bullish routing verdict is passed.
+    reset_ai_explanation_caches_for_tests()
+    _patch_profile(monkeypatch, UserProfile(user_id="u", subscription_plan="free"))
+    packet = {
+        "bull_case": [],
+        "bear_case": [],
+        "open_questions": [
+            {"text": "Insufficient fundamentals coverage to build a thesis — verify data availability.", "source": "layer:fundamentals", "confidence": "low"}
+        ],
+        "pillar_snapshot_hash": "nohash",
+        "fundamentals_covered": False,
+    }
+    res = ai_explanations_handler(
+        _event(body={"type": "position_setup_read", "symbol": "zzz", "verdict": "bullish", "packet": packet}),
+        {},
+    )
+    assert res["statusCode"] == 200
+    text = json.loads(res["body"])["text"].lower()
+    assert "reads bullish on fundamentals" not in text
+    assert "does not have enough fundamentals coverage" in text
+    assert text.endswith("signal data only.")
+
+
 @pytest.mark.asyncio
 async def test_service_free_never_calls_claude(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_ai_explanation_caches_for_tests()

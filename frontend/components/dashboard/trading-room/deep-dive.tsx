@@ -984,12 +984,18 @@ export function DeepDive({
       }
       if (fund?.reasoning) enriched.position_fundamentals_summary = fund.reasoning;
       if (fund && fund.pillars.length > 0) {
-        enriched.position_pillars = fund.pillars.map((p) => ({
-          id: p.pillarId,
-          label: p.label,
-          score: p.score,
-          verdict: p.verdict
-        }));
+        enriched.position_pillars = fund.pillars.map((p) => {
+          const chips = (p.chips ?? []).map((c) => String(c).trim()).filter(Boolean).slice(0, 4);
+          const reasoning = String(p.reasoning ?? "").trim();
+          return {
+            id: p.pillarId,
+            label: p.label,
+            score: p.score,
+            verdict: p.verdict,
+            ...(reasoning ? { reasoning } : {}),
+            ...(chips.length ? { chips } : {})
+          };
+        });
         if (fund.weakestPillarId) {
           const weak = fund.pillars.find((p) => p.pillarId === fund.weakestPillarId);
           enriched.position_weakest_pillar = weak

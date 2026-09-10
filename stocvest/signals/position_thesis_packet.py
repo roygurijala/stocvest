@@ -51,6 +51,10 @@ class PositionThesisPacket:
     bear_case: list[ThesisBullet] = field(default_factory=list)
     open_questions: list[ThesisBullet] = field(default_factory=list)
     pillar_snapshot_hash: str = ""
+    # False when there are no scored F1-F5 pillars (insufficient fundamentals coverage).
+    # Consumers must NOT claim a fundamentals verdict ("reads bullish on fundamentals")
+    # in that case — the verdict is carried for routing only, not as a fundamentals read.
+    fundamentals_covered: bool = True
 
     def to_api_dict(self) -> dict[str, Any]:
         return {
@@ -60,6 +64,7 @@ class PositionThesisPacket:
             "bear_case": [b.to_api_dict() for b in self.bear_case],
             "open_questions": [b.to_api_dict() for b in self.open_questions],
             "pillar_snapshot_hash": self.pillar_snapshot_hash,
+            "fundamentals_covered": self.fundamentals_covered,
         }
 
 
@@ -165,6 +170,7 @@ def build_position_thesis_packet(body: dict[str, Any]) -> PositionThesisPacket:
                 )
             ],
             pillar_snapshot_hash=snapshot_hash,
+            fundamentals_covered=False,
         )
 
     bull: list[ThesisBullet] = []
@@ -298,6 +304,15 @@ def _dedupe(bullets: list[ThesisBullet]) -> list[ThesisBullet]:
 def deterministic_investment_read(packet: PositionThesisPacket) -> str:
     """Free-tier / fallback brief woven from the packet — no LLM, non-advisory."""
     sym = packet.symbol or "This name"
+    if not packet.fundamentals_covered:
+        parts = [
+            f"On the Long Term desk (long-horizon quality), {sym} does not have enough "
+            "fundamentals coverage yet to form a read."
+        ]
+        if packet.open_questions:
+            parts.append(f"Open question: {packet.open_questions[0].text}")
+        parts.append("Signal data only.")
+        return " ".join(parts)
     lead = f"On the Long Term desk (long-horizon quality), {sym} reads {packet.verdict} on fundamentals."
     parts = [lead]
     if packet.bull_case:

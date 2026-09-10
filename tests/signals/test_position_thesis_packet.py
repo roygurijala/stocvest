@@ -228,5 +228,38 @@ def test_deterministic_read_is_non_advisory() -> None:
 
 def test_to_api_dict_shape() -> None:
     d = build_position_thesis_packet(_body()).to_api_dict()
-    assert set(d) == {"symbol", "verdict", "bull_case", "bear_case", "open_questions", "pillar_snapshot_hash"}
+    assert set(d) == {
+        "symbol",
+        "verdict",
+        "bull_case",
+        "bear_case",
+        "open_questions",
+        "pillar_snapshot_hash",
+        "fundamentals_covered",
+    }
     assert all(set(b) == {"text", "source", "confidence"} for b in d["bull_case"])
+
+
+def test_covered_when_pillars_present() -> None:
+    packet = build_position_thesis_packet(_body())
+    assert packet.fundamentals_covered is True
+    assert packet.to_api_dict()["fundamentals_covered"] is True
+
+
+def test_insufficient_data_marks_fundamentals_not_covered() -> None:
+    packet = build_position_thesis_packet(
+        {"symbol": "ZZZ", "verdict": "bullish", "status": "insufficient_data"}
+    )
+    assert packet.fundamentals_covered is False
+
+
+def test_deterministic_read_does_not_assert_verdict_without_coverage() -> None:
+    # A bullish routing verdict must NOT surface as "reads bullish on fundamentals" when there
+    # are no scored pillars — that contradicted the "insufficient coverage" body (copy bug).
+    packet = build_position_thesis_packet(
+        {"symbol": "ZZZ", "verdict": "bullish", "status": "insufficient_data"}
+    )
+    read = deterministic_investment_read(packet).lower()
+    assert "reads bullish on fundamentals" not in read
+    assert "does not have enough fundamentals coverage" in read
+    assert read.endswith("signal data only.")

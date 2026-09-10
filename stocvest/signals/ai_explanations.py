@@ -270,6 +270,7 @@ class AIExplanationService:
         open_questions: list[dict[str, Any]],
         pillar_snapshot_hash: str,
         user_profile: UserProfile,
+        fundamentals_covered: bool = True,
     ) -> ExplanationResult:
         """Long-horizon Investment Read for the Position deep-dive (ADR-004 POS-AI-2).
 
@@ -281,7 +282,9 @@ class AIExplanationService:
         """
         sym = symbol.strip().upper()
         v = (verdict or "neutral").strip().lower() or "neutral"
-        det = self._deterministic_position_read(sym, v, bull_case, bear_case, open_questions)
+        det = self._deterministic_position_read(
+            sym, v, bull_case, bear_case, open_questions, fundamentals_covered=fundamentals_covered
+        )
 
         if not user_profile.has_ai_explanations:
             return ExplanationResult(
@@ -477,8 +480,19 @@ class AIExplanationService:
         bull_case: list[dict[str, Any]],
         bear_case: list[dict[str, Any]],
         open_questions: list[dict[str, Any]],
+        fundamentals_covered: bool = True,
     ) -> str:
         sym = symbol or "This name"
+        if not fundamentals_covered:
+            parts = [
+                f"On the Long Term desk (long-horizon quality), {sym} does not have enough "
+                "fundamentals coverage yet to form a read."
+            ]
+            top_q0 = next((str(b.get("text") or "").strip() for b in (open_questions or []) if b.get("text")), "")
+            if top_q0:
+                parts.append(f"Open question: {top_q0}")
+            parts.append("Signal data only.")
+            return " ".join(parts)
         parts = [
             f"On the Long Term desk (long-horizon quality), {sym} reads {verdict} on fundamentals."
         ]

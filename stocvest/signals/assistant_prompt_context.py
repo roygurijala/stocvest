@@ -74,13 +74,26 @@ _POSITION_PILLAR_IDS: frozenset[str] = frozenset({"F1", "F2", "F3", "F4", "F5", 
 _POSITION_PILLAR_VERDICTS: frozenset[str] = frozenset({"bullish", "neutral", "bearish", "unavailable"})
 
 
-def _iter_position_pillars(raw_list: Any) -> "list[tuple[str, str, str, str]]":
-    """Validate + normalize position pillar rows into ``(id, label, verdict, score)`` tuples.
+def _coerce_str_list(raw: Any, *, max_items: int, item_limit: int) -> list[str]:
+    """Bounded list of short strings (chips / indicator highlights) for assistant context."""
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw[:max_items]:
+        s = _coerce_str(item, limit=item_limit)
+        if s:
+            out.append(s)
+    return out
+
+
+def _iter_position_pillars(raw_list: Any) -> "list[tuple[str, str, str, str, str, list[str]]]":
+    """Validate + normalize position pillar rows into ``(id, label, verdict, score, reasoning, chips)``.
 
     Shared by the structured tail block and the plain-English mirror so both render the same
     whitelisted, bounded view of ``position_pillars`` (max 8; unknown ids/verdicts dropped).
+    ``reasoning``/``chips`` (POS-AI glass-box) are optional — empty when the page omitted them.
     """
-    out: list[tuple[str, str, str, str]] = []
+    out: list[tuple[str, str, str, str, str, list[str]]] = []
     if not isinstance(raw_list, list):
         return out
     for raw in raw_list[:8]:
@@ -94,7 +107,47 @@ def _iter_position_pillars(raw_list: Any) -> "list[tuple[str, str, str, str]]":
             verdict = "unavailable"
         label = _coerce_str(raw.get("label"), limit=48)
         score = _coerce_num(raw.get("score"))
-        out.append((pid, label, verdict, score))
+        reasoning = _coerce_str(raw.get("reasoning"), limit=200)
+        chips = _coerce_str_list(raw.get("chips"), max_items=4, item_limit=60)
+        out.append((pid, label, verdict, score, reasoning, chips))
+    return out
+
+
+# Per-layer glass-box detail (reasoning + chips + indicator values) so the assistant can explain
+# HOW a layer reached its read (e.g. price vs SMA-50/200), not just the Bullish/Bearish verdict.
+_ASSISTANT_LAYER_KEYS: tuple[str, ...] = (
+    "technical",
+    "news",
+    "macro",
+    "sector",
+    "geopolitical",
+    "internals",
+)
+
+
+def _iter_layer_details(raw_list: Any) -> "list[tuple[str, str, list[str], list[str]]]":
+    """Validate + bound per-layer detail rows into ``(key, reasoning, chips, indicators)``.
+
+    Whitelisted layer keys only (max 6 rows, deduped). Reasoning capped at 280 chars; chips and
+    indicator highlights capped at 4 items of 60 chars each. Rows with no content are dropped.
+    """
+    out: list[tuple[str, str, list[str], list[str]]] = []
+    if not isinstance(raw_list, list):
+        return out
+    seen: set[str] = set()
+    for raw in raw_list[:6]:
+        if not isinstance(raw, dict):
+            continue
+        key = _coerce_str(raw.get("key"), limit=16).lower()
+        if key not in _ASSISTANT_LAYER_KEYS or key in seen:
+            continue
+        seen.add(key)
+        reasoning = _coerce_str(raw.get("reasoning"), limit=280)
+        chips = _coerce_str_list(raw.get("chips"), max_items=4, item_limit=60)
+        indicators = _coerce_str_list(raw.get("indicators"), max_items=4, item_limit=60)
+        if not reasoning and not chips and not indicators:
+            continue
+        out.append((key, reasoning, chips, indicators))
     return out
 
 
@@ -334,7 +387,7 @@ _DESK_POSTURE_LABELS: dict[str, str] = {
 _INTERNAL_TOKEN_RE = re.compile(
     r"\b(?:"
     r"decision_reinforcement_\d+|decision_rationale_(?:category|text)|"
-    r"gap_intel_[a-z0-9_]+|layer_status_[a-z]+|dashboard_context_version|"
+    r"gap_intel_[a-z0-9_]+|layer_status_[a-z]+|layer_detail_\d+|dashboard_context_version|"
     r"discovery_[a-z_]+|gap_intel_summary_[a-z_]+|gap_leader_\d+|"
     r"macro_event_\d+|session_activity_[a-z_]+|"
     r"position_pillar_\d+|position_weakest_pillar|position_thesis_summary|"
@@ -435,9 +488,18 @@ def serialize_page_context_plain_english(ctx: dict[str, Any]) -> str:
         if pillar_rows:
             joined = "; ".join(
                 f"{pid} {label} = {verdict}" if label else f"{pid} = {verdict}"
-                for pid, label, verdict, _score in pillar_rows
+                for pid, label, verdict, _score, _reasoning, _chips in pillar_rows
             )
             lines.append(f"Fundamentals pillars: {joined}")
+            for pid, label, _verdict, _score, reasoning, chips in pillar_rows:
+                bits: list[str] = []
+                if reasoning:
+                    bits.append(reasoning)
+                if chips:
+                    bits.append("; ".join(chips))
+                if bits:
+                    name = f"{pid} {label}".strip() if label else pid
+                    lines.append(f"{name} detail: {' — '.join(bits)}")
         pth = _coerce_str(ctx.get("position_thesis_summary"), limit=400)
         if pth:
             lines.append(f"Investment thesis on screen: {pth}")
@@ -507,6 +569,20 @@ def serialize_page_context_plain_english(ctx: dict[str, Any]) -> str:
                 parts.append(f"{_LAYER_LABELS.get(layer, layer)}={status}")
         if parts:
             lines.append("Six layers: " + "; ".join(parts))
+
+    # Per-layer glass-box detail so the assistant can explain HOW a layer read (e.g. the
+    # technical layer's SMA-50/200 levels), not just the verdict.
+    for key, reasoning, chips, indicators in _iter_layer_details(ctx.get("layer_details")):
+        label = _LAYER_LABELS.get(key, key)
+        detail_bits: list[str] = []
+        if reasoning:
+            detail_bits.append(reasoning)
+        if indicators:
+            detail_bits.append("; ".join(indicators))
+        if chips:
+            detail_bits.append("; ".join(chips))
+        if detail_bits:
+            lines.append(f"{label} detail: {' — '.join(detail_bits)}")
 
     swing_posture = _coerce_str(ctx.get("swing_desk_posture"), limit=32).lower()
     if swing_posture in _DESK_POSTURE_LABELS:
@@ -587,12 +663,18 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
     position_weakest = _coerce_str(ctx.get("position_weakest_pillar"), limit=64)
     if position_weakest:
         lines.append(f"position_weakest_pillar={position_weakest}")
-    for idx, (pid, label, verdict, score) in enumerate(_iter_position_pillars(ctx.get("position_pillars"))):
+    for idx, (pid, label, verdict, score, reasoning, chips) in enumerate(
+        _iter_position_pillars(ctx.get("position_pillars"))
+    ):
         parts = [f"id={pid}", f"verdict={verdict}"]
         if label:
             parts.append(f"label={label}")
         if score:
             parts.append(f"score={score}")
+        if reasoning:
+            parts.append(f"reasoning={reasoning}")
+        if chips:
+            parts.append(f"chips={', '.join(chips)}")
         lines.append(f"position_pillar_{idx + 1}={'|'.join(parts)}")
     position_thesis = _coerce_str(ctx.get("position_thesis_summary"), limit=400)
     if position_thesis:
@@ -690,6 +772,20 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
                     dissenting.append(layer)
         if dissenting:
             lines.append(f"dissenting_layers={','.join(dissenting[:6])}")
+
+    # Per-layer glass-box detail (reasoning + chips + indicator values) — lets the assistant
+    # explain HOW each layer read (e.g. price vs SMA-50/200), not just the verdict.
+    for idx, (key, reasoning, chips, indicators) in enumerate(
+        _iter_layer_details(ctx.get("layer_details"))
+    ):
+        parts = [f"key={key}"]
+        if reasoning:
+            parts.append(f"reasoning={reasoning}")
+        if chips:
+            parts.append(f"chips={', '.join(chips)}")
+        if indicators:
+            parts.append(f"indicators={', '.join(indicators)}")
+        lines.append(f"layer_detail_{idx + 1}={'|'.join(parts)}")
 
     # Scanner-overview fields. These describe a multi-symbol page; they are all qualitative
     # summaries of what is already on screen (counts, top items, buckets — never raw scores).

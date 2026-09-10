@@ -62,6 +62,48 @@ describe("buildSignalsPageAssistantContext", () => {
     expect(ctx?.execution_readiness_label).toBe("Not actionable yet");
   });
 
+  test("forwards per-layer reasoning + technical indicator values as layer_details", () => {
+    const richRows = [
+      {
+        key: "technical",
+        name: "Technical",
+        status: "Bullish" as const,
+        explanation: "Weekly close above SMA-50 and SMA-200.",
+        reasoning: "Weekly close above SMA-50 and SMA-200 — durable uptrend.",
+        chips: ["Golden cross", "Near 52w high"],
+        indicatorSnapshot: { sma50: 123.45, sma200: 110.1, golden_cross: true },
+        score: 70
+      },
+      { key: "sector", name: "Sector", status: "Bearish" as const, explanation: "Sector lagging SPY.", score: 42 }
+    ];
+    const ctx = buildSignalsPageAssistantContext({
+      tradingMode: "position",
+      symbol: "AMD",
+      symbolCommitted: true,
+      hasValidSignal: true,
+      compositeLoading: false,
+      isInsufficientComposite: false,
+      pageDecision: monitorDecision,
+      signalsPresentRows: richRows,
+      setupBias: "Bullish",
+      compositeAlignmentRatio: 0.55,
+      layerAgreementPercent: 55,
+      setupJudgment: null,
+      compositeResult: compositeLoaded,
+      gapIntelSnapshot: null,
+      signalEvidence: null
+    });
+    const tech = ctx?.layer_details?.find((d) => d.key === "technical");
+    expect(tech?.reasoning).toContain("durable uptrend");
+    expect(tech?.chips).toEqual(["Golden cross", "Near 52w high"]);
+    expect(tech?.indicators).toContain("sma50: $123.45");
+    expect(tech?.indicators).toContain("sma200: $110.10");
+    // Non-technical layers carry reasoning (from explanation) but no indicator values.
+    const sector = ctx?.layer_details?.find((d) => d.key === "sector");
+    expect(sector?.reasoning).toContain("lagging SPY");
+    expect(sector?.indicators).toBeUndefined();
+  });
+
   test("marks loading only when composite fetch is in flight", () => {
     const ctx = buildSignalsPageAssistantContext({
       tradingMode: "swing",
