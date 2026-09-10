@@ -612,8 +612,13 @@ def enrich_gap_items_with_market_context(
     items: list[dict[str, Any]],
     *,
     references_by_symbol: dict[str, TickerReference | None] | None = None,
+    as_of: date | None = None,
 ) -> GapMarketContextEnrichment:
-    """Attach IPO/index context; route unseasoned listed issuers to ``ipo_watch``."""
+    """Attach IPO/index context; route unseasoned listed issuers to ``ipo_watch``.
+
+    ``as_of`` defaults to today (production); tests pin it so listing-age windows are
+    deterministic instead of drifting with the calendar.
+    """
     refs = references_by_symbol or {}
     kept: list[dict[str, Any]] = []
     ipo_watch: list[dict[str, Any]] = []
@@ -621,7 +626,7 @@ def enrich_gap_items_with_market_context(
         sym = str(row.get("symbol") or "").strip().upper()
         if not sym:
             continue
-        flags = resolve_market_context_flags(sym, reference=refs.get(sym))
+        flags = resolve_market_context_flags(sym, reference=refs.get(sym), as_of=as_of)
         row["market_context_flags"] = flags
         warn = gap_item_market_context_warning(flags)
         if warn:

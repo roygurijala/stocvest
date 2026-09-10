@@ -103,7 +103,9 @@ def test_enrich_gap_items_excludes_unseasoned_listed_issuer() -> None:
             "gap_quality_score": 80,
         }
     ]
-    enriched = enrich_gap_items_with_market_context(items, references_by_symbol={"SPCX": None})
+    enriched = enrich_gap_items_with_market_context(
+        items, references_by_symbol={"SPCX": None}, as_of=date(2026, 6, 20)
+    )
     assert enriched.items == ()
     assert len(enriched.ipo_watch) == 1
     assert enriched.ipo_watch[0]["ipo_watch"] is True
