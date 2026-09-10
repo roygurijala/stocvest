@@ -1290,6 +1290,7 @@ def ai_explanations_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     open_questions=_bullets(packet.get("open_questions")),
                     pillar_snapshot_hash=str(packet.get("pillar_snapshot_hash") or ""),
                     user_profile=profile,
+                    fundamentals_covered=bool(packet.get("fundamentals_covered", True)),
                 )
             )
         elif typ == "layer_read":

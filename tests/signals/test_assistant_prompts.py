@@ -1459,6 +1459,65 @@ def test_serialize_page_context_rejects_invalid_position_pillar_rows() -> None:
     assert "strong_buy" not in out
 
 
+def test_serialize_page_context_emits_position_pillar_reasoning_and_chips() -> None:
+    """POS glass-box enrichment — per-pillar reasoning/chips reach the model so it can say
+    WHY a pillar reads the way it does (structured tail + plain-English mirror)."""
+    ctx = {
+        "trading_mode": "position",
+        "position_pillars": [
+            {
+                "id": "F4",
+                "label": "Valuation",
+                "score": 40,
+                "verdict": "neutral",
+                "reasoning": "Trades at a premium to peers on P/E and EV/EBITDA.",
+                "chips": ["P/E 34x", "EV/EBITDA 22x"],
+            },
+        ],
+    }
+    out = serialize_page_context(ctx)
+    assert (
+        "position_pillar_1=id=F4|verdict=neutral|label=Valuation|score=40|"
+        "reasoning=Trades at a premium to peers on P/E and EV/EBITDA.|chips=P/E 34x, EV/EBITDA 22x"
+    ) in out
+    assert "F4 Valuation detail: Trades at a premium to peers on P/E and EV/EBITDA. — P/E 34x; EV/EBITDA 22x" in out
+
+
+def test_serialize_page_context_emits_layer_details() -> None:
+    """Per-layer glass-box detail (reasoning + chips + indicator values) so the assistant can
+    explain HOW a layer read — e.g. the technical layer's SMA-50/200 levels."""
+    ctx = {
+        "trading_mode": "position",
+        "layer_details": [
+            {
+                "key": "technical",
+                "reasoning": "Weekly close above SMA-50 and SMA-200 — durable uptrend.",
+                "chips": ["Golden cross"],
+                "indicators": ["sma50: $123.45", "sma200: $110.10"],
+            },
+            {"key": "sector", "reasoning": "Sector lagging SPY over 26 weeks."},
+            {"key": "BOGUS", "reasoning": "should be dropped"},
+            {"key": "news"},  # no content → dropped
+        ],
+    }
+    out = serialize_page_context(ctx)
+    assert (
+        "layer_detail_1=key=technical|reasoning=Weekly close above SMA-50 and SMA-200 — durable "
+        "uptrend.|chips=Golden cross|indicators=sma50: $123.45, sma200: $110.10"
+    ) in out
+    assert "layer_detail_2=key=sector|reasoning=Sector lagging SPY over 26 weeks." in out
+    assert "BOGUS" not in out
+    assert "should be dropped" not in out
+    # Plain-English mirror carries the indicator values so the model can cite SMA levels.
+    assert "Technical detail: Weekly close above SMA-50 and SMA-200 — durable uptrend. — sma50: $123.45; sma200: $110.10 — Golden cross" in out
+
+
+def test_sanitize_assistant_user_reply_strips_layer_detail_tokens() -> None:
+    raw = "The technical layer (layer_detail_1) shows strength."
+    cleaned = sanitize_assistant_user_reply(raw)
+    assert "layer_detail_1" not in cleaned
+
+
 def test_prompt_carries_gem_discovery_and_lookup_block_rules() -> None:
     """The prompt must teach the model how to use the two long-horizon gem blocks
     and forbid inventing tiers or crowning a single 'best' pick."""

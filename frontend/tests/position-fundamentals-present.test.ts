@@ -63,6 +63,22 @@ describe("parsePositionThesisPacket", () => {
     expect(packet?.bearCase[0].source).toBe("F4");
     expect(packet?.openQuestions[0].confidence).toBe("low");
     expect(packet?.pillarSnapshotHash).toBe("abc123");
+    expect(packet?.fundamentalsCovered).toBe(true);
+  });
+
+  it("marks fundamentals not covered when the server flag is false", () => {
+    const packet = parsePositionThesisPacket({
+      position_thesis_packet: {
+        symbol: "ZZZ",
+        verdict: "bullish",
+        bull_case: [],
+        bear_case: [],
+        open_questions: [{ text: "Insufficient fundamentals coverage.", source: "layer:fundamentals", confidence: "low" }],
+        pillar_snapshot_hash: "nohash",
+        fundamentals_covered: false
+      }
+    });
+    expect(packet?.fundamentalsCovered).toBe(false);
   });
 
   it("drops bullets with no text and defaults bad confidence to low", () => {

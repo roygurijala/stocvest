@@ -1,5 +1,11 @@
-import type { AssistantLayerKey, AssistantLayerStatus, AssistantPageContext } from "@/lib/assistant/types";
+import type {
+  AssistantLayerDetail,
+  AssistantLayerKey,
+  AssistantLayerStatus,
+  AssistantPageContext
+} from "@/lib/assistant/types";
 import { narrowGapIntelForAssistant } from "@/lib/assistant/gap-intel-context";
+import { indicatorHighlights } from "@/lib/signals/layer-drawer-present";
 import { enrichSignalsDeskAssistantContext } from "@/lib/assistant/signals-desk-assistant-context";
 import {
   deriveEvidenceInsightFallback,
@@ -72,12 +78,54 @@ function mergeLayerStatus(
   return layerStatusFromSignalsRows(deskRows) ?? layerStatusFromEvidence(evidence);
 }
 
+/** Format one indicator snapshot entry for assistant narration (public market technicals only). */
+function formatIndicatorHighlight(key: string, value: string | number | boolean | null): string {
+  if (typeof value === "number") {
+    const priceLike = /sma|ema|vwap/.test(key);
+    return `${key}: ${priceLike ? `$${value.toFixed(2)}` : value}`;
+  }
+  return `${key}: ${String(value)}`;
+}
+
+/**
+ * Per-layer glass-box detail (reasoning + chips + technical indicator values) so the assistant
+ * can explain WHY each layer reads the way it does — not just the verdict. Deep-dive rows carry
+ * the full payload; the Signals desk carries reasoning (as `explanation`). Bounded + faithful.
+ */
+export function layerDetailsFromSignalsRows(
+  rows: SignalsLayerRowInput[]
+): AssistantLayerDetail[] | undefined {
+  const out: AssistantLayerDetail[] = [];
+  for (const row of rows) {
+    if (!isAssistantLayerKey(row.key)) continue;
+    const reasoning = String(row.reasoning ?? row.explanation ?? "").trim();
+    const chips = (row.chips ?? [])
+      .map((c) => String(c).trim())
+      .filter(Boolean)
+      .slice(0, 4);
+    const indicators =
+      row.key === "technical"
+        ? indicatorHighlights(row.indicatorSnapshot)
+            .slice(0, 4)
+            .map(([k, v]) => formatIndicatorHighlight(k, v))
+        : [];
+    if (!reasoning && chips.length === 0 && indicators.length === 0) continue;
+    const detail: AssistantLayerDetail = { key: row.key };
+    if (reasoning) detail.reasoning = reasoning;
+    if (chips.length) detail.chips = chips;
+    if (indicators.length) detail.indicators = indicators;
+    out.push(detail);
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 function buildLoadedAssistantBase(input: {
   pageId: string;
   tradingMode: "day" | "swing" | "position";
   symbol: string;
   decision: TradeDecision;
   layerStatusForCtx?: Partial<Record<AssistantLayerKey, AssistantLayerStatus>>;
+  layerDetailsForCtx?: AssistantLayerDetail[];
   gapIntelForAssistant?: ReturnType<typeof narrowGapIntelForAssistant>;
   tradeReadiness: number | null;
   riskReward: number | null;
@@ -111,6 +159,7 @@ function buildLoadedAssistantBase(input: {
     environment_tier: input.environmentTier,
     environment_headline: input.environmentHeadline,
     layer_status: input.layerStatusForCtx,
+    ...(input.layerDetailsForCtx ? { layer_details: input.layerDetailsForCtx } : {}),
     ...(input.gapIntelForAssistant ? { gap_intel: input.gapIntelForAssistant } : {})
   };
 }
@@ -166,6 +215,7 @@ export function buildSignalsPageAssistantContext(
 
   const gapIntelForAssistant = narrowGapIntelForAssistant(input.gapIntelSnapshot);
   const layerStatusForCtx = mergeLayerStatus(input.signalsPresentRows, input.signalEvidence);
+  const layerDetailsForCtx = layerDetailsFromSignalsRows(input.signalsPresentRows);
 
   const enrichInput = {
     setupBias: input.setupBias,
@@ -197,6 +247,7 @@ export function buildSignalsPageAssistantContext(
       symbol: sym,
       decision: input.pageDecision,
       layerStatusForCtx,
+      layerDetailsForCtx,
       gapIntelForAssistant,
       tradeReadiness:
         input.setupJudgment?.engineScores?.quality ??
@@ -238,6 +289,7 @@ export function buildSignalsPageAssistantContext(
       symbol: sym,
       decision,
       layerStatusForCtx: layerStatusForCtx ?? layerStatusFromEvidence(input.signalEvidence),
+      layerDetailsForCtx,
       gapIntelForAssistant,
       tradeReadiness:
         input.setupJudgment?.engineScores?.quality ??

@@ -58,6 +58,23 @@ export interface AssistantScannerGapSummary {
 }
 
 /**
+ * Per-layer glass-box detail so the assistant can explain WHY a layer reads the way it does
+ * (engine reasoning + the same chips/indicator values shown in the layer drawer), instead of
+ * only the Bullish/Bearish/Neutral verdict. Bounded + source-faithful — the assistant narrates
+ * these; it never invents or overrides the math. Indicators are public market technicals
+ * (e.g. "sma50: $123.45", "daily_rsi: 61") — never account values or PII.
+ */
+export interface AssistantLayerDetail {
+  key: AssistantLayerKey;
+  /** Engine reasoning sentence — same copy as the layer drawer "Why this read". */
+  reasoning?: string;
+  /** Display chips (max 4), e.g. "Above W-SMA50", "Golden cross". */
+  chips?: string[];
+  /** Formatted indicator highlights (max 4), e.g. "sma50: $123.45" — technical layer only. */
+  indicators?: string[];
+}
+
+/**
  * Page context the Assistant is allowed to see. Only fields enumerated here are forwarded
  * to the backend; unknown keys are dropped server-side as well.
  */
@@ -84,7 +101,16 @@ export interface AssistantPageContext {
    * deterministic bull/bear/open-questions packet.
    */
   position_weakest_pillar?: string;
-  position_pillars?: { id: string; label: string; score: number | null; verdict: string }[];
+  position_pillars?: {
+    id: string;
+    label: string;
+    score: number | null;
+    verdict: string;
+    /** Engine reasoning for the pillar — lets the assistant say WHY F4 valuation is weak, etc. */
+    reasoning?: string;
+    /** Pillar chips (max 4), e.g. "ROE 24%", "Net cash". */
+    chips?: string[];
+  }[];
   position_thesis_summary?: string;
   /** User subscription tier — forwarded from dashboard pages that know the plan. */
   subscription_plan?: "free" | "swing_pro" | "swing_day_pro";
@@ -112,6 +138,12 @@ export interface AssistantPageContext {
   /** One-line Layer 0 policy headline from composite `market_environment`. */
   environment_headline?: string;
   layer_status?: Partial<Record<AssistantLayerKey, AssistantLayerStatus>>;
+  /**
+   * Per-layer reasoning + chips + indicator values (glass-box). Populated when the composite
+   * layer rows carry them (always on the Trading Room deep-dive; reasoning-only on the Signals
+   * desk). Lets the assistant explain how e.g. SMA-50/200 drove the technical read.
+   */
+  layer_details?: AssistantLayerDetail[];
   /** Setup tab / command-bar bias headline (Bullish / Bearish / Neutral). */
   setup_bias?: "Bullish" | "Bearish" | "Neutral";
   /** Human alignment line on desk (e.g. Strong (5/6)). */

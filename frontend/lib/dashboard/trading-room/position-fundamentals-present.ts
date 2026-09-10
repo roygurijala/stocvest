@@ -89,6 +89,8 @@ export type PositionThesisPacket = {
   bearCase: ThesisBullet[];
   openQuestions: ThesisBullet[];
   pillarSnapshotHash: string;
+  /** False when there are no scored F1-F5 pillars — do NOT claim a fundamentals verdict. */
+  fundamentalsCovered: boolean;
 };
 
 function parseBullet(raw: unknown): ThesisBullet | null {
@@ -122,7 +124,8 @@ export function parsePositionThesisPacket(
     bullCase: parseBullets(o.bull_case),
     bearCase: parseBullets(o.bear_case),
     openQuestions: parseBullets(o.open_questions),
-    pillarSnapshotHash: str(o.pillar_snapshot_hash)
+    pillarSnapshotHash: str(o.pillar_snapshot_hash),
+    fundamentalsCovered: o.fundamentals_covered !== false
   };
   if (!packet.bullCase.length && !packet.bearCase.length && !packet.openQuestions.length) {
     return null;
