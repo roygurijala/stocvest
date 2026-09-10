@@ -11,7 +11,7 @@
 import { applyMinStopDistance } from "@/lib/scenario/scenario-stop-policy";
 import type { ScenarioDirection } from "@/lib/scenario/types";
 export type ReferenceStopPresetId = "continuation" | "dip" | "breakout";
-export type ReferenceStopTradingMode = "day" | "swing";
+export type ReferenceStopTradingMode = "day" | "swing" | "position";
 
 export const REFERENCE_STOP_ATR_K_BY_PRESET: Record<ReferenceStopPresetId, number> = {
   dip: 0.75,
@@ -34,6 +34,7 @@ export function referenceStopAtrK(opts?: {
 }): number {
   if (opts?.preset) return REFERENCE_STOP_ATR_K_BY_PRESET[opts.preset];
   if (opts?.tradingMode === "day") return 0.85;
+  if (opts?.tradingMode === "position") return 3.0;
   return SWING_STOP_ATR_K;
 }
 
@@ -124,7 +125,7 @@ function mergeStructuralAndAtrStop(args: {
   atrStop: number;
   tradingMode?: ReferenceStopTradingMode | null;
 }): { merged: number; usedAtrFloor: boolean } {
-  const swing = args.tradingMode !== "day";
+  const swing = args.tradingMode === "swing" || args.tradingMode === "position";
   const { structural, atrStop } = args;
 
   if (args.direction === "bullish") {

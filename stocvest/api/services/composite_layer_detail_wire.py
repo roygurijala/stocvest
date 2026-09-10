@@ -50,6 +50,34 @@ def technical_indicator_snapshot_wire(res: Any, *, mode: str) -> dict[str, Any] 
     """Structured indicator readout for layer detail drawers."""
     if res is None:
         return None
+    if mode == "position":
+        snap: dict[str, Any] = {"mode": "position"}
+        for key in (
+            "weekly_sma50",
+            "weekly_sma200",
+            "daily_sma50",
+            "daily_sma200",
+            "pct_from_52w_high",
+            "range_position_pct",
+            "rs_vs_spy_6m_pct",
+            "weekly_bars_analyzed",
+            "daily_bars_analyzed",
+            "base_weeks",
+            "base_range_pct",
+        ):
+            val = getattr(res, key, None)
+            if val is not None:
+                snap[key] = val
+        if getattr(res, "golden_cross", False):
+            snap["golden_cross"] = True
+        if getattr(res, "higher_highs_lows", False):
+            snap["higher_highs_lows"] = True
+        if getattr(res, "in_base", False):
+            snap["in_base"] = True
+        if getattr(res, "daily_confirm_bullish", False):
+            snap["daily_confirm_bullish"] = True
+        return snap if len(snap) > 1 else None
+
     if mode == "swing":
         snap: dict[str, Any] = {"mode": "swing"}
         for key in (

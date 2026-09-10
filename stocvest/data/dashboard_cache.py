@@ -69,12 +69,14 @@ def get_upstash():  # type: ignore[no-untyped-def]
 
 
 def make_state_version(mode: str = "swing") -> str:
-    """swing → swing_YYYY_MM_DD; day → day_YYYY_MM_DD_HH_MM (ET wall clock)."""
+    """swing → swing_YYYY_MM_DD; day → day_YYYY_MM_DD_HH_MM (ET); position → position_YYYY_MM_DD."""
     now = datetime.now(ET)
     date_str = now.strftime("%Y_%m_%d")
     if mode == "day":
         time_str = now.strftime("%H_%M")
         return f"day_{date_str}_{time_str}"
+    if mode == "position":
+        return f"position_{date_str}"
     return f"swing_{date_str}"
 
 
@@ -196,8 +198,14 @@ def publish_signals_live_hint(state_version: str) -> None:
 
 def evidence_cache_key(symbol: str, mode: str) -> str:
     sym = str(symbol or "").strip().upper()
-    m = "day" if str(mode or "").strip().lower() in ("day", "intraday", "real") else "swing"
-    return f"stocvest:evidence:{sym}:{m}:v3"
+    m = str(mode or "").strip().lower()
+    if m in ("day", "intraday", "real"):
+        desk = "day"
+    elif m == "position":
+        desk = "position"
+    else:
+        desk = "swing"
+    return f"stocvest:evidence:{sym}:{desk}:v3"
 
 
 def evidence_rate_limit_exceeded(user_id: str | None) -> bool:

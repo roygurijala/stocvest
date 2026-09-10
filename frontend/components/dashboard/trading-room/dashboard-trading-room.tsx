@@ -61,6 +61,7 @@ import { useDashboardTape } from "@/lib/hooks/use-dashboard-tape";
 import { useWatchlistAtClose } from "@/lib/hooks/use-watchlist-at-close";
 import { useWeeklySetupOutcomes } from "@/lib/hooks/use-weekly-setup-outcomes";
 import { DeepDive } from "@/components/dashboard/trading-room/deep-dive";
+import { PositionGemRail } from "@/components/dashboard/trading-room/position-gem-rail";
 import { QuietFeed } from "@/components/dashboard/trading-room/quiet-feed";
 import { TradingRoomMountRefresh } from "@/components/dashboard/trading-room/trading-room-mount-refresh";
 import { TradingRoomPeriodicRefresh } from "@/components/dashboard/trading-room/trading-room-periodic-refresh";
@@ -95,7 +96,11 @@ import {
   applyDashboardSymbolUrl,
   clearTradingRoomOpenIntent,
   feedCardIdForDeepLink,
+  feedLaneFromIdPrefix,
+  deepDiveLaneFromFeedCard,
+  feedCardForDeepDiveLane,
   parseDashboardTradingRoomDeepLink,
+  stashDeepDiveLanePreference,
   peekTradingRoomOpenIntent,
   syntheticFeedCardForDeepLink,
   type DashboardTradingRoomDeepLink
@@ -109,6 +114,7 @@ import {
   type FeedCard,
   type FeedFilters,
   type FeedLane,
+  type DeepDiveLane,
   type FeedState,
   DEFAULT_FEED_FILTERS,
   describeFeedFilterSummary,
@@ -552,7 +558,7 @@ function TradingRoomBody({
     setLastSelectedId(id);
     const colon = id.indexOf(":");
     if (colon > 0) {
-      const lane = (id.slice(0, colon) === "day" ? "day" : "swing") as FeedLane;
+      const lane = feedLaneFromIdPrefix(id.slice(0, colon));
       const sym = id.slice(colon + 1).trim().toUpperCase();
       if (sym) {
         syncSymbolInUrl(syntheticFeedCardForDeepLink({ symbol: sym, lane, key: id }));
@@ -562,11 +568,16 @@ function TradingRoomBody({
   // Open any searched symbol in the deep dive: reuse the richer feed card when
   // the symbol is already on the desk; otherwise synthesize a minimal card and
   // let the deep dive's composite fetch fill in the read.
-  const openSymbol = (symbol: string, company?: string | null, lane: FeedLane = "swing") => {
+  const openSymbol = (symbol: string, company?: string | null, lane: DeepDiveLane = "swing") => {
     const sym = symbol.trim().toUpperCase();
     if (!sym) return;
     userInitiatedSelectionRef.current = true;
-    const existing = findFeedCardForSymbolLane(allCards, sym, lane);
+    stashDeepDiveLanePreference(sym, lane);
+    const feedLane: FeedLane = lane === "position" ? "swing" : lane;
+    const existing =
+      lane === "position"
+        ? allCards.find((c) => c.id === feedCardIdForDeepLink(sym, "position"))
+        : findFeedCardForSymbolLane(allCards, sym, feedLane);
     if (existing) {
       selectCard(existing);
       return;
@@ -576,7 +587,7 @@ function TradingRoomBody({
       id: feedCardIdForDeepLink(sym, lane),
       symbol: sym,
       company: company?.trim() || companyBySymbol.get(sym) || snap?.company_name?.trim() || null,
-      lane,
+      lane: feedLane,
       state: "potential",
       bias: "neutral",
       verdict: "Looked up from search — full read below.",
@@ -590,6 +601,42 @@ function TradingRoomBody({
       lastEvaluatedAt: null
     });
   };
+  const openSymbolFromSearch = (symbol: string, company?: string | null) => {
+    openSymbol(symbol, company, "position");
+  };
+  const applyDeepDiveLane = useCallback(
+    (source: FeedCard, lane: DeepDiveLane) => {
+      const sym = source.symbol.trim().toUpperCase();
+      if (!sym) return;
+      stashDeepDiveLanePreference(sym, lane);
+      if (lane !== "position") {
+        const existing = findFeedCardForSymbolLane(allCards, sym, lane);
+        if (existing) {
+          selectCard(existing);
+          return;
+        }
+      }
+      const snap = snapshotsBySymbol.get(sym);
+      const next: FeedCard = {
+        ...feedCardForDeepDiveLane(source, lane),
+        company:
+          source.company?.trim() ||
+          companyBySymbol.get(sym) ||
+          snap?.company_name?.trim() ||
+          null,
+        price: source.price ?? resolveSnapshotDisplayPrice(snap),
+        changePct: source.changePct ?? snapPct(snap)
+      };
+      userInitiatedSelectionRef.current = true;
+      setSelectedId(next.id);
+      setOverrideCard(next);
+      setLastSelectedId(next.id);
+      recordTradingRoomVisit();
+      selectionBootstrappedRef.current = true;
+      syncSymbolInUrl(next);
+    },
+    [allCards, companyBySymbol, snapshotsBySymbol, searchParams, pathname]
+  );
   const selected = useMemo(() => {
     if (!selectedId) return null;
     const fromFeed = cardsWithNames.find((c) => c.id === selectedId);
@@ -610,10 +657,10 @@ function TradingRoomBody({
     if (!selected) return;
     const sym = selected.symbol.trim().toUpperCase();
     if (!sym) return;
-    const lane = selected.lane === "day" ? "day" : "swing";
-    const key = signalCompositeCacheKey(sym, lane);
+    const compositeMode = deepDiveLaneFromFeedCard(selected);
+    const key = signalCompositeCacheKey(sym, compositeMode);
     if (key) {
-      void mutateSwr(key, () => __internal_fetchSignalComposite(sym, lane), { revalidate: false });
+      void mutateSwr(key, () => __internal_fetchSignalComposite(sym, compositeMode), { revalidate: false });
     }
   }, [selected?.id, selected?.symbol, selected?.lane]);
 
@@ -705,7 +752,7 @@ function TradingRoomBody({
     }
     const colon = lastId.indexOf(":");
     if (colon <= 0) return;
-    const lane = lastId.slice(0, colon) === "day" ? "day" : "swing";
+    const lane = feedLaneFromIdPrefix(lastId.slice(0, colon));
     const sym = lastId.slice(colon + 1).trim().toUpperCase();
     if (sym) openSymbol(sym, null, lane);
   };
@@ -1079,6 +1126,7 @@ function TradingRoomBody({
       companyBySymbol={resolvedCompanyBySymbol}
       snapshot={snapshotsBySymbol.get(centerCard.symbol) ?? null}
       onBackToBrief={() => select(null)}
+      onLaneChange={(lane) => applyDeepDiveLane(centerCard, lane)}
       isMobile={isMobile}
       colors={colors}
       dataRefreshNonce={centerDataRefreshNonce}
@@ -1089,7 +1137,7 @@ function TradingRoomBody({
       onViewTopSetup={() => topCard && selectCard(topCard)}
       onViewTopSwingSetup={() => topSwingCard && selectCard(topSwingCard)}
       onSearch={undefined}
-      onSelectSymbol={(sym, company, lane) => openSymbol(sym, company, lane ?? "swing")}
+      onSelectSymbol={(sym, company, lane) => openSymbol(sym, company, lane ?? "position")}
       trackedCards={allCards}
       briefExpanded={briefExpanded}
       onBriefExpandedChange={setBriefExpanded}
@@ -1209,7 +1257,8 @@ function TradingRoomBody({
         marketOpen={marketOpen}
         counts={counts}
         updatedAtIso={updatedAtIso}
-        onOpenSymbol={openSymbol}
+        onOpenSymbol={openSymbolFromSearch}
+        searchPlaceholder="Look up any symbol on the Position desk…"
         bleed={bleed}
         isMobile={isMobile}
         colors={colors}
@@ -1235,6 +1284,8 @@ function TradingRoomBody({
       >
         {wrapPanel(
           <>
+            {/* ADR-004 POS-D8 — optional gem strip (dark by default), never a feed card. */}
+            <PositionGemRail />
             {deskSetupCards.length > 0 ? (
               <FilterBar
                 filters={filters}

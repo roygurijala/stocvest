@@ -2,13 +2,18 @@ import { describe, expect, test } from "vitest";
 
 import {
   buildDashboardSymbolUrl,
+  clearDeepDiveLanePreference,
   clearTradingRoomOpenIntent,
   dashboardTradingRoomHref,
+  feedCardForDeepDiveLane,
   feedCardIdForDeepLink,
   parseDashboardTradingRoomDeepLink,
+  peekDeepDiveLanePreference,
+  resolveDeepDiveLaneForCard,
   syntheticFeedCardForDeepLink,
   peekTradingRoomOpenIntent,
   resolveTradingRoomOpenIntent,
+  stashDeepDiveLanePreference,
   stashTradingRoomOpenIntent
 } from "@/lib/nav/dashboard-trading-room-deeplink";
 
@@ -25,6 +30,12 @@ describe("dashboardTradingRoomHref", () => {
     const href = dashboardTradingRoomHref("TSLA", "day");
     const u = new URL(href, "http://local.test");
     expect(u.searchParams.get("lane")).toBe("day");
+  });
+
+  test("position lane is preserved", () => {
+    const href = dashboardTradingRoomHref("AAPL", "position");
+    const u = new URL(href, "http://local.test");
+    expect(u.searchParams.get("lane")).toBe("position");
   });
 
   test("blank symbol falls back to bare dashboard path", () => {
@@ -60,6 +71,39 @@ describe("feedCardIdForDeepLink", () => {
   });
 });
 
+describe("resolveDeepDiveLaneForCard", () => {
+  const swingCard = syntheticFeedCardForDeepLink({ symbol: "AAPL", lane: "swing", key: "swing:AAPL" });
+
+  test("position card id wins", () => {
+    const card = syntheticFeedCardForDeepLink({ symbol: "MSFT", lane: "position", key: "position:MSFT" });
+    expect(resolveDeepDiveLaneForCard(card)).toBe("position");
+  });
+
+  test("url intent overrides swing card when symbol matches", () => {
+    expect(
+      resolveDeepDiveLaneForCard(swingCard, { symbol: "AAPL", lane: "position", key: "position:AAPL" })
+    ).toBe("position");
+  });
+
+  test("session preference applies when id and url are silent", () => {
+    clearDeepDiveLanePreference("NVDA");
+    stashDeepDiveLanePreference("NVDA", "position");
+    const card = syntheticFeedCardForDeepLink({ symbol: "NVDA", lane: "swing", key: "swing:NVDA" });
+    expect(resolveDeepDiveLaneForCard(card)).toBe("position");
+    clearDeepDiveLanePreference("NVDA");
+  });
+});
+
+describe("feedCardForDeepDiveLane", () => {
+  test("re-keys card to position id", () => {
+    const card = syntheticFeedCardForDeepLink({ symbol: "TSLA", lane: "swing", key: "swing:TSLA" });
+    const next = feedCardForDeepDiveLane(card, "position");
+    expect(next.id).toBe("position:TSLA");
+    expect(next.lane).toBe("swing");
+    expect(next.setupTier).toBe("setup");
+  });
+});
+
 describe("buildDashboardSymbolUrl", () => {
   test("adds symbol and lane query params", () => {
     const url = buildDashboardSymbolUrl(
@@ -76,7 +120,8 @@ describe("buildDashboardSymbolUrl", () => {
         changePct: null,
         alignment: null,
         rankScore: 0,
-        source: "desk"
+        source: "desk",
+        setupTier: "setup"
       },
       "/dashboard",
       ""

@@ -438,6 +438,54 @@ def test_build_engine_swing_mode_does_not_pick_up_day_override():
 
 
 @pytest.mark.unit
+def test_build_engine_position_mode_includes_fundamentals_weight():
+    """Position desk uses a seven-layer blend with fundamentals first."""
+    engine = build_composite_score_engine_from_params(default_signal_parameters(), mode="position")
+    assert "fundamentals" in engine._base_weights
+    assert engine._base_weights["fundamentals"] == pytest.approx(0.32)
+    assert engine._base_weights["technical"] == pytest.approx(0.22)
+    total = sum(engine._base_weights.values())
+    assert total == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_composite_score_engine_resolve_weights_position():
+    """POS-D6: resolve_weights(mode=position) returns seven-layer map."""
+    from stocvest.signals.composite_score import CompositeScoreEngine
+
+    weights = CompositeScoreEngine.resolve_weights(default_signal_parameters(), mode="position")
+    assert set(weights.keys()) == {
+        "fundamentals",
+        "technical",
+        "news",
+        "macro",
+        "sector",
+        "geopolitical",
+        "internals",
+    }
+    assert sum(weights.values()) == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_resolve_composite_weights_normalizes_bad_secrets_block():
+    """Invalid position_composite weights are normalized instead of crashing the engine."""
+    from dataclasses import replace
+
+    from stocvest.signals.composite_score import resolve_composite_weights
+
+    params = default_signal_parameters()
+    bad = replace(
+        params.position_composite,
+        fundamentals_weight=0.9,
+        technical_weight=0.9,
+    )
+    custom = replace(params, position_composite=bad)
+    weights = resolve_composite_weights(custom, mode="position")
+    assert sum(weights.values()) == pytest.approx(1.0)
+    assert len(weights) == 7
+
+
+@pytest.mark.unit
 def test_build_engine_day_mode_does_not_pick_up_swing_override():
     """Cross-mode isolation: setting swing_composite must NOT leak into day engine."""
     params = default_signal_parameters()

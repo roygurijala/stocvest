@@ -347,4 +347,17 @@ describe("compositeToSignalsLayerRows", () => {
     expect(tech?.score).toBe(0);
     expect(tech?.status).toBe("Bearish");
   });
+
+  test("position mode includes fundamentals as first layer", () => {
+    const rows = compositeToSignalsLayerRows({
+      mode: "position",
+      layers: [
+        { layer: "fundamentals", status: "available", score: 68, verdict: "bullish", reasoning: "Solid F1-F3" },
+        { layer: "technical", status: "available", score: 55, verdict: "neutral", reasoning: "Weekly structure" }
+      ]
+    });
+    expect(rows[0]?.key).toBe("fundamentals");
+    expect(rows).toHaveLength(7);
+    expect(rows.find((r) => r.key === "fundamentals")?.score).toBe(68);
+  });
 });

@@ -20,11 +20,12 @@ export function enrichSignalsDeskAssistantContext(
     alignmentRatio: number | null | undefined;
     maturationState?: string | null;
     maturationLabel?: string | null;
-    tradingMode: "day" | "swing";
+    tradingMode: "day" | "swing" | "position";
     regularSessionOpen?: boolean | null;
     setupJudgment?: SetupJudgment | null;
   }
 ): AssistantPageContext {
+  const kpiMode: "day" | "swing" = input.tradingMode === "day" ? "day" : "swing";
   const alignment = resolveSignalsLayerAlignment({
     rows: input.rows,
     bias: input.setupBias,
@@ -44,13 +45,13 @@ export function enrichSignalsDeskAssistantContext(
       input.maturationState
     ),
     execution_readiness_label: executionReadinessLabel(input.decision.state, {
-      tradingMode: input.tradingMode,
+      tradingMode: kpiMode,
       regularSessionOpen: input.regularSessionOpen
     }),
     execution_hint:
       buildExecutionHeaderHint(
         input.decision,
-        input.tradingMode,
+        kpiMode,
         alignment.aligned,
         alignment.total,
         input.setupBias,

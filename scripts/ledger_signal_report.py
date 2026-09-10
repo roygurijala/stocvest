@@ -587,6 +587,7 @@ def _format_report(
     maturation: dict[str, int],
     sample_rows: list[dict[str, Any]],
     email_stats: dict[str, int] | None = None,
+    modes: tuple[str, ...] = ("day", "swing", "position"),
 ) -> str:
     lines: list[str] = []
     now_et = datetime.now(_ET).strftime("%Y-%m-%d %H:%M %Z")
@@ -598,14 +599,15 @@ def _format_report(
     lines.append("")
     lines.append("WHAT THIS COUNTS")
     lines.append("- Platform ledger captures from the scheduled jobs:")
-    lines.append("    Day desk   - ~3:55 PM ET (ledger_capture_day)")
-    lines.append("    Swing desk - ~4:00 PM ET (ledger_capture_swing)")
+    lines.append("    Day desk      - ~3:55 PM ET (ledger_capture_day)")
+    lines.append("    Swing desk    - ~4:00 PM ET (ledger_capture_swing)")
+    lines.append("    Position desk - Fri ~4:10 PM ET (ledger_capture_position, weekly)")
     lines.append("- Qualified = passed all ledger gates (ledger_qualified=true).")
     lines.append("- Shadow    = gate audit row (ledger_qualified=false, still saved).")
     lines.append("- Actionable / monitor / blocked = decision_state on each row.")
     lines.append("- Rows counted once via PUBLIC mirror scope (no per-user double count).")
     lines.append("")
-    for desk in ("day", "swing"):
+    for desk in modes:
         st = desks.get(desk) or DeskTally()
         lines.append(f"--- {desk.upper()} DESK ---")
         lines.append(f"  Ledger rows (total)     : {st.ledger_rows}")
@@ -620,7 +622,7 @@ def _format_report(
             suffix = " ..." if len(st.symbols) > 20 else ""
             lines.append(f"  Symbols                 : {preview}{suffix}")
         lines.append("")
-    for desk in ("day", "swing"):
+    for desk in modes:
         st = desks.get(desk) or DeskTally()
         lines.extend(_format_gate_breakdown(desk, st))
     lines.append("--- WATCHLIST MATURATION (actionable state, same ET window) ---")
@@ -631,9 +633,17 @@ def _format_report(
     if period == "weekly":
         stats = email_stats or {"total": 0, "swing": 0, "day": 0, "other_mode": 0}
         lines.extend(_format_val1_weekly_section(desks=desks, email_stats=stats))
-    if sample_rows:
+    # When a single desk is requested (--mode), scope the sample rows to match; the
+    # default all-modes report keeps every row (including any "unknown" mode).
+    sample_scoped = sample_rows
+    if len(modes) < 3:
+        wanted = set(modes)
+        sample_scoped = [
+            it for it in sample_rows if str(it.get("mode") or "").strip().lower() in wanted
+        ]
+    if sample_scoped:
         lines.append("--- SAMPLE ROWS (up to 15, newest first) ---")
-        for item in sample_rows[:15]:
+        for item in sample_scoped[:15]:
             sym = item.get("symbol")
             mode = item.get("mode")
             qual = item.get("ledger_qualified")
@@ -669,6 +679,12 @@ def main() -> int:
         "--date",
         default="",
         help="Anchor date YYYY-MM-DD in America/New_York (default: yesterday ET).",
+    )
+    ap.add_argument(
+        "--mode",
+        choices=("day", "swing", "position", "all"),
+        default="all",
+        help="Restrict the desk sections to one mode (default: all).",
     )
     ap.add_argument("--table", default="", help="SignalHistory table name override.")
     ap.add_argument("--region", default="", help="AWS region override.")
@@ -709,7 +725,7 @@ def main() -> int:
     desks: dict[str, DeskTally] = defaultdict(DeskTally)
     for item in rows:
         mode = str(item.get("mode") or "").strip().lower()
-        if mode not in ("day", "swing"):
+        if mode not in ("day", "swing", "position"):
             mode = "unknown"
         desks[mode].add(item)
 
@@ -720,6 +736,7 @@ def main() -> int:
     )
     maturation = _maturation_actionable_counts(start, end)
     email_stats = _execution_actionable_email_stats(start, end) if args.period == "weekly" else None
+    modes = ("day", "swing", "position") if args.mode == "all" else (args.mode,)
     body = _format_report(
         period=args.period,
         window_label=window_label,
@@ -730,6 +747,7 @@ def main() -> int:
         maturation=maturation,
         sample_rows=sample,
         email_stats=email_stats,
+        modes=modes,
     )
 
     out_dir = Path(args.output_dir)

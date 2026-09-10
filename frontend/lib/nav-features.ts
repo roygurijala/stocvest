@@ -53,7 +53,29 @@ export const NAV_FEATURES = {
    * renders the terminal; legacy UI at `/dashboard/scanner/classic`. Roll back with
    * `NEXT_PUBLIC_STOCVEST_FEATURE_SCANNER_TERMINAL=false`.
    */
-  scannerTerminal: envFlag("SCANNER_TERMINAL", true)
+  scannerTerminal: envFlag("SCANNER_TERMINAL", true),
+  /**
+   * ADR-004 POS-D14 — investment-quality tier dot (Gem / Strong / Monitor) on the
+   * watchlist rail, joined from the POS-D15 position candidates cache. Default on now
+   * that POS-D13 (`/dashboard/invest`) has shipped. Roll back with
+   * `NEXT_PUBLIC_STOCVEST_FEATURE_WATCHLIST_POSITION_QUALITY_BADGE=false`.
+   */
+  watchlistPositionQualityBadge: envFlag("WATCHLIST_POSITION_QUALITY_BADGE", true),
+  /**
+   * ADR-004 POS-D8 — optional compact "Gem candidates" strip on the Trading Room feed
+   * column, linking to `/dashboard/invest`. Position cards are NEVER mixed into the
+   * swing/day feed. Default OFF (ships dark) until the POS-D9 validation soak completes;
+   * turn on with `NEXT_PUBLIC_STOCVEST_FEATURE_POSITION_FEED=true`.
+   */
+  positionFeed: envFlag("POSITION_FEED", false),
+  /**
+   * ADR-004 POS-AI-4 — Position deep-dive "Research" panel: external context (SEC 10-K
+   * Item 1A risk-factor excerpt + cited Perplexity recent developments). External content
+   * is badged "External · not scored" and never feeds the composite. Default OFF (ships
+   * dark, paid-gated on the backend too) until counsel sign-off (POS-D12). Turn on with
+   * `NEXT_PUBLIC_STOCVEST_FEATURE_POSITION_RESEARCH=true`.
+   */
+  positionResearch: envFlag("POSITION_RESEARCH", false)
 } as const;
 
 export type NavFeatureKey = keyof typeof NAV_FEATURES;
@@ -82,4 +104,16 @@ export function brokersEnabled(): boolean {
 
 export function scannerTerminalEnabled(): boolean {
   return NAV_FEATURES.scannerTerminal === true;
+}
+
+export function watchlistPositionQualityBadgeEnabled(): boolean {
+  return NAV_FEATURES.watchlistPositionQualityBadge === true;
+}
+
+export function positionFeedEnabled(): boolean {
+  return NAV_FEATURES.positionFeed === true;
+}
+
+export function positionResearchEnabled(): boolean {
+  return NAV_FEATURES.positionResearch === true;
 }

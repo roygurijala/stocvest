@@ -61,7 +61,7 @@ export const colorTokens: Record<ThemeName, ThemeColors> = {
  * cells (percent changes, scores) read from `colors.bullish` / `colors.bearish` /
  * `colors.text` as today — those are unchanged.
  */
-export type CardRole = "shared" | "swing" | "day";
+export type CardRole = "shared" | "swing" | "day" | "position";
 
 export interface RoleAccent {
   /** Surface tint — soft hue blended into the card background. Subtle (~9%). */
@@ -111,6 +111,13 @@ export const roleAccents: Record<ThemeName, Record<CardRole, RoleAccent>> = {
       accentStrong: "#5eead4",
       borderAccent: "#67e8f9",
       pillLabel: "DAY · INTRADAY"
+    },
+    // Position desk — amber/gold rail; distinct from swing violet and day cyan.
+    position: {
+      accent: "#fbbf24",
+      accentStrong: "#fcd34d",
+      borderAccent: "#f59e0b",
+      pillLabel: "POSITION · LONG-HORIZON"
     }
   },
   light: {
@@ -131,6 +138,12 @@ export const roleAccents: Record<ThemeName, Record<CardRole, RoleAccent>> = {
       accentStrong: "#115e59",
       borderAccent: "#0e7490",
       pillLabel: "DAY · INTRADAY"
+    },
+    position: {
+      accent: "#d97706",
+      accentStrong: "#b45309",
+      borderAccent: "#f59e0b",
+      pillLabel: "POSITION · LONG-HORIZON"
     }
   }
 };

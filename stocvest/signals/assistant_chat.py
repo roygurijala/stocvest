@@ -683,6 +683,7 @@ class AssistantChatService:
         preference_context: str = "",
         web_context: str = "",
         multi_symbol_context: str = "",
+        position_gem_context: str = "",
     ) -> AssistantChatResult:
         """Authenticated chat turn.
 
@@ -736,6 +737,8 @@ class AssistantChatService:
             system_text += "\n" + market_context
         if discovery_context:
             system_text += "\n" + discovery_context
+        if position_gem_context:
+            system_text += "\n" + position_gem_context
         if watchlist_context:
             system_text += "\n" + watchlist_context
         if preference_context:
@@ -750,6 +753,7 @@ class AssistantChatService:
         elif (
             symbol_block
             or discovery_context
+            or position_gem_context
             or market_context
             or watchlist_context
             or web_context

@@ -28,6 +28,7 @@ import type { WatchlistHeatWindow, WatchlistRailViewMode } from "@/lib/dashboard
 import {
   WATCHLIST_HEAT_WINDOW_LABEL,
   WATCHLIST_HEAT_WINDOWS,
+  watchlistQualityDotColor,
   watchlistSessionChangePct
 } from "@/lib/dashboard/trading-room/watchlist-rail-present";
 import { WatchlistHeatGrid } from "@/components/dashboard/trading-room/watchlist-heat-grid";
@@ -54,6 +55,12 @@ import {
   formatTransitionTimelineRow
 } from "@/lib/setup-evolution-present";
 import type { FeedBias, FeedCard, FeedLane, FeedState } from "@/lib/dashboard/trading-room/feed-model";
+import { usePositionCandidates } from "@/lib/hooks/use-position-candidates";
+import {
+  buildWatchlistQualityMap,
+  type WatchlistQualityBadge
+} from "@/lib/dashboard/position-ranked-home-present";
+import { watchlistPositionQualityBadgeEnabled } from "@/lib/nav-features";
 
 type Colors = ReturnType<typeof useTheme>["colors"];
 
@@ -130,6 +137,27 @@ function cardFromWatchlist(
 }
 
 const STATE_RANK: Record<FeedState, number> = { actionable: 0, near: 1, potential: 2, cooling: 3 };
+
+/** ADR-004 POS-D14 — small investment-quality tier dot (Gem/Strong/Monitor) with a
+ * weakest-pillar tooltip. Informational only; never a buy signal. */
+function QualityDot({ badge, colors }: { badge: WatchlistQualityBadge; colors: Colors }) {
+  return (
+    <span
+      role="img"
+      title={badge.tooltip}
+      aria-label={badge.tooltip}
+      data-testid="watchlist-quality-dot"
+      data-tier={badge.tier}
+      style={{
+        width: 7,
+        height: 7,
+        borderRadius: borderRadius.full,
+        background: watchlistQualityDotColor(badge.tier, colors),
+        flex: "0 0 auto"
+      }}
+    />
+  );
+}
 
 function biasPill(bias: FeedBias, colors: Colors) {
   const tone = bias === "bull" ? colors.bullish : bias === "bear" ? colors.bearish : colors.textMuted;
@@ -229,7 +257,8 @@ function RailCard({
   onToggleExpand,
   colors,
   onRefresh,
-  refreshing = false
+  refreshing = false,
+  quality = null
 }: {
   card: FeedCard;
   active: boolean;
@@ -239,6 +268,7 @@ function RailCard({
   colors: Colors;
   onRefresh?: () => void;
   refreshing?: boolean;
+  quality?: WatchlistQualityBadge | null;
 }) {
   const sTone = stateTone(card.state, colors);
   const biasAccent = feedBiasColor(card.bias, colors);
@@ -283,6 +313,7 @@ function RailCard({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: spacing[2] }}>
           <span style={{ display: "flex", alignItems: "center", gap: spacing[1], minWidth: 0 }}>
             <span style={{ fontSize: typography.scale.sm, fontWeight: 700 }}>{card.symbol}</span>
+            {quality ? <QualityDot badge={quality} colors={colors} /> : null}
           </span>
           <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
             <span style={{ fontSize: typography.scale.xs, fontWeight: 600, color: pctTone }}>
@@ -556,6 +587,24 @@ export function WatchlistRail({
     });
   }, [symbols, bySymbol, mergedSnaps, companyBySymbol, symbolNames, mode, liveBiasBySymbol, heatWindow, windowChangePcts]);
 
+  // ADR-004 POS-D14 — investment-quality tier dot. Join watchlist symbols against the
+  // POS-D15 position candidates cache (all tiers; `insufficient` is filtered out in the
+  // presenter). Read-only, flag-gated, and desk-independent — a name's long-horizon
+  // quality is the same whether the rail is viewed in day, swing, or position mode. The
+  // hook is SWR-cached; a cold scan cache simply yields no dots (never blocks the rail).
+  const qualityBadgeEnabled = watchlistPositionQualityBadgeEnabled();
+  const { response: gemResponse } = usePositionCandidates("all", {
+    limit: 100,
+    enabled: qualityBadgeEnabled
+  });
+  const qualityBySymbol = useMemo(
+    () =>
+      qualityBadgeEnabled && gemResponse
+        ? buildWatchlistQualityMap(gemResponse.candidates)
+        : new Map<string, WatchlistQualityBadge>(),
+    [qualityBadgeEnabled, gemResponse]
+  );
+
   if (!open) {
     // Mobile: a full-width horizontal toggle bar; desktop: a thin vertical rail.
     return (
@@ -765,6 +814,7 @@ export function WatchlistRail({
             onSelectCard={onSelectCard}
             quotesLoading={windowQuotesLoading && heatWindow !== "1d"}
             heatWindow={heatWindow}
+            qualityBySymbol={qualityBySymbol}
           />
         ) : (
           cards.map((card) => (
@@ -778,6 +828,7 @@ export function WatchlistRail({
               colors={colors}
               onRefresh={onRefreshCard ? () => onRefreshCard(card) : undefined}
               refreshing={refreshingCardIds?.has(card.id) ?? false}
+              quality={qualityBySymbol.get(card.symbol.trim().toUpperCase()) ?? null}
             />
           ))
         )}

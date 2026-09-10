@@ -68,6 +68,36 @@ def _append_gap_summary_lines(
         lines.append(f"{line_prefix}_{idx + 1}={'|'.join(parts)}")
 
 
+# ADR-004 POS-AI-3 — position fundamentals pillars surfaced in the assistant page context.
+# F1–F5 ship today; F6–F8 are reserved (POS-AI-5 v2) so a forward-compatible body still parses.
+_POSITION_PILLAR_IDS: frozenset[str] = frozenset({"F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8"})
+_POSITION_PILLAR_VERDICTS: frozenset[str] = frozenset({"bullish", "neutral", "bearish", "unavailable"})
+
+
+def _iter_position_pillars(raw_list: Any) -> "list[tuple[str, str, str, str]]":
+    """Validate + normalize position pillar rows into ``(id, label, verdict, score)`` tuples.
+
+    Shared by the structured tail block and the plain-English mirror so both render the same
+    whitelisted, bounded view of ``position_pillars`` (max 8; unknown ids/verdicts dropped).
+    """
+    out: list[tuple[str, str, str, str]] = []
+    if not isinstance(raw_list, list):
+        return out
+    for raw in raw_list[:8]:
+        if not isinstance(raw, dict):
+            continue
+        pid = _coerce_str(raw.get("id"), limit=4).upper()
+        if pid not in _POSITION_PILLAR_IDS:
+            continue
+        verdict = _coerce_str(raw.get("verdict"), limit=12).lower()
+        if verdict not in _POSITION_PILLAR_VERDICTS:
+            verdict = "unavailable"
+        label = _coerce_str(raw.get("label"), limit=48)
+        score = _coerce_num(raw.get("score"))
+        out.append((pid, label, verdict, score))
+    return out
+
+
 def _serialize_dashboard_context_v1(lines: list[str], dc: dict[str, Any]) -> None:
     """Tier 1.C Phase 4 — nested dashboard_context version 1 block."""
     if dc.get("version") != 1:
@@ -307,6 +337,8 @@ _INTERNAL_TOKEN_RE = re.compile(
     r"gap_intel_[a-z0-9_]+|layer_status_[a-z]+|dashboard_context_version|"
     r"discovery_[a-z_]+|gap_intel_summary_[a-z_]+|gap_leader_\d+|"
     r"macro_event_\d+|session_activity_[a-z_]+|"
+    r"position_pillar_\d+|position_weakest_pillar|position_thesis_summary|"
+    r"position_verdict|position_fundamentals_summary|position_gem_tier|"
     r"decision_state|analysis_status|scanner_focus|swing_desk_posture|day_desk_posture|"
     r"top_setup_\d+|top_gap_\d+"
     r")\b",
@@ -385,6 +417,30 @@ def serialize_page_context_plain_english(ctx: dict[str, Any]) -> str:
         lines.append("Active desk: Swing (multi-day)")
     elif mode == "day":
         lines.append("Active desk: Day (intraday)")
+    elif mode == "position":
+        lines.append("Active desk: Position (long-horizon quality)")
+        pv = _coerce_str(ctx.get("position_verdict"), limit=24).lower()
+        if pv in ("bullish", "neutral", "bearish"):
+            lines.append(f"Position fundamentals read: {pv}")
+        ps = _coerce_str(ctx.get("position_fundamentals_summary"), limit=280)
+        if ps:
+            lines.append(f"Position summary: {ps}")
+        pt = _coerce_str(ctx.get("position_gem_tier"), limit=16).lower()
+        if pt in ("gem", "strong", "monitor", "insufficient"):
+            lines.append(f"Investment tier on screen: {pt}")
+        pw = _coerce_str(ctx.get("position_weakest_pillar"), limit=64)
+        if pw:
+            lines.append(f"Weakest pillar on screen: {pw}")
+        pillar_rows = _iter_position_pillars(ctx.get("position_pillars"))
+        if pillar_rows:
+            joined = "; ".join(
+                f"{pid} {label} = {verdict}" if label else f"{pid} = {verdict}"
+                for pid, label, verdict, _score in pillar_rows
+            )
+            lines.append(f"Fundamentals pillars: {joined}")
+        pth = _coerce_str(ctx.get("position_thesis_summary"), limit=400)
+        if pth:
+            lines.append(f"Investment thesis on screen: {pth}")
 
     analysis_status = _coerce_str(ctx.get("analysis_status"), limit=24).lower()
     if analysis_status == "loading":
@@ -511,8 +567,36 @@ def serialize_page_context(ctx: dict[str, Any] | None) -> str:
     if symbol:
         lines.append(f"symbol={symbol}")
     mode = _coerce_str(ctx.get("trading_mode"), limit=12).lower()
-    if mode in ("swing", "day"):
+    if mode in ("swing", "day", "position"):
         lines.append(f"trading_mode={mode}")
+
+    # ADR-004 POS-D10 — Position desk read (long-horizon fundamentals). Emitted only
+    # when the Position tab is in scope so the assistant can narrate the glass-box
+    # verdict/summary without ever crossing into Swing/Day decisions or inventing a rating.
+    position_verdict = _coerce_str(ctx.get("position_verdict"), limit=24).lower()
+    if position_verdict in ("bullish", "neutral", "bearish"):
+        lines.append(f"position_verdict={position_verdict}")
+    position_summary = _coerce_str(ctx.get("position_fundamentals_summary"), limit=280)
+    if position_summary:
+        lines.append(f"position_fundamentals_summary={position_summary}")
+    position_tier = _coerce_str(ctx.get("position_gem_tier"), limit=16).lower()
+    if position_tier in ("gem", "strong", "monitor", "insufficient"):
+        lines.append(f"position_gem_tier={position_tier}")
+    # POS-AI-3 — pillar-aware read so the assistant can name the weakest pillar and speak to
+    # any F-pillar (glass-box) without inventing scores. All bounded + whitelisted.
+    position_weakest = _coerce_str(ctx.get("position_weakest_pillar"), limit=64)
+    if position_weakest:
+        lines.append(f"position_weakest_pillar={position_weakest}")
+    for idx, (pid, label, verdict, score) in enumerate(_iter_position_pillars(ctx.get("position_pillars"))):
+        parts = [f"id={pid}", f"verdict={verdict}"]
+        if label:
+            parts.append(f"label={label}")
+        if score:
+            parts.append(f"score={score}")
+        lines.append(f"position_pillar_{idx + 1}={'|'.join(parts)}")
+    position_thesis = _coerce_str(ctx.get("position_thesis_summary"), limit=400)
+    if position_thesis:
+        lines.append(f"position_thesis_summary={position_thesis}")
 
     decision_state = _coerce_str(ctx.get("decision_state"), limit=24).lower()
     if decision_state in ("actionable", "monitor", "blocked"):

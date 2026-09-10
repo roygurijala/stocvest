@@ -4,6 +4,7 @@
  */
 
 export const SIGNAL_LAYER_DISPLAY_NAMES: Record<string, string> = {
+  fundamentals: "Fundamentals",
   technical: "Technical",
   news: "News",
   macro: "Macro",

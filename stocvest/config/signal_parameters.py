@@ -267,6 +267,66 @@ class SwingTechnicalParameters:
 
 
 @dataclass
+class PositionTechnicalParameters:
+    """Weekly-bar structural trend tuning for Position desk (ADR-004 POS-D3)."""
+
+    sma_fast_period: int = 50
+    sma_slow_period: int = 200
+    min_weekly_bars_full: int = 52
+    min_weekly_bars_degraded: int = 26
+    range_lookback_weeks: int = 52
+    rs_lookback_weeks: int = 26
+    base_min_weeks: int = 20
+    base_max_weeks: int = 52
+    base_max_range_pct: float = 0.25
+    structure_lookback_weeks: int = 20
+    above_sma50_score: int = 12
+    below_sma50_score: int = 12
+    above_sma200_score: int = 10
+    below_sma200_score: int = 10
+    daily_confirm_score: int = 6
+    near_52w_high_score: int = 10
+    pct_from_high_strong_break_pct: float = -20.0
+    pct_from_high_moderate_break_pct: float = -10.0
+    pct_from_high_strong_penalty: int = 15
+    pct_from_high_moderate_penalty: int = 8
+    rs_strong_outperform_pct: float = 15.0
+    rs_moderate_outperform_pct: float = 5.0
+    rs_strong_underperform_pct: float = -15.0
+    rs_moderate_underperform_pct: float = -5.0
+    rs_strong_score: int = 12
+    rs_moderate_score: int = 6
+    higher_highs_lows_score: int = 10
+    lower_highs_lows_score: int = 14
+    base_formation_score: int = 10
+    golden_cross_score: int = 8
+    daily_confirm_sma_fast: int = 50
+    daily_confirm_sma_slow: int = 200
+    bullish_threshold: int = 60
+    bearish_threshold: int = 40
+
+
+@dataclass
+class PositionCompositeParameters:
+    """Seven-layer blend for Position desk (fundamentals + six shared layer types)."""
+
+    fundamentals_weight: float = 0.32
+    technical_weight: float = 0.22
+    macro_weight: float = 0.15
+    sector_weight: float = 0.12
+    news_weight: float = 0.08
+    geopolitical_weight: float = 0.06
+    internals_weight: float = 0.05
+    bullish_threshold: float = 0.20
+    bearish_threshold: float = -0.20
+    min_signal_strength: int = 55
+    min_available_layers: int = 4
+    confluence_min_confirming: int = 3
+    confluence_conflict_penalty: int = 8
+    confluence_alert_threshold: int = 60
+
+
+@dataclass
 class EntryZoneModeParameters:
     """Per-desk entry-zone geometry. Widths are a fraction of price.
 
@@ -360,6 +420,14 @@ def default_swing_composite_parameters() -> CompositeParameters:
 DEFAULT_SWING_COMPOSITE_PARAMETERS = default_swing_composite_parameters()
 
 
+def default_position_composite_parameters() -> PositionCompositeParameters:
+    """ADR-004 default Position desk blend (fundamentals-first)."""
+    return PositionCompositeParameters()
+
+
+DEFAULT_POSITION_COMPOSITE_PARAMETERS = default_position_composite_parameters()
+
+
 @dataclass
 class SignalParameters:
     version: str = "1.0.0"
@@ -393,17 +461,28 @@ class SignalParameters:
     # in `stocvest.signals.composite_score`.
     swing_composite: CompositeParameters | None = None
     day_composite: CompositeParameters | None = None
+    position_composite: PositionCompositeParameters | None = None
 
     swing_technical: SwingTechnicalParameters = field(default_factory=SwingTechnicalParameters)
+    position_technical: PositionTechnicalParameters = field(default_factory=PositionTechnicalParameters)
     entry_zone: EntryZoneParameters = field(default_factory=EntryZoneParameters)
     swing_news_lookback_hours: int = 120
     swing_macro_events_days: int = 14
     swing_geo_lookback_hours: int = 168
     swing_sector_use_weekly: bool = True
+    position_signal_valid_days: int = 90
+    position_news_lookback_hours: int = 720
+    position_macro_events_days: int = 45
+    position_geo_lookback_hours: int = 2160
+    position_daily_bars_lookback: int = 400
+    position_sector_use_weekly: bool = True
 
 
 def default_signal_parameters() -> SignalParameters:
-    return SignalParameters(swing_composite=default_swing_composite_parameters())
+    return SignalParameters(
+        swing_composite=default_swing_composite_parameters(),
+        position_composite=default_position_composite_parameters(),
+    )
 
 
 def signal_parameters_to_dict(params: SignalParameters) -> dict:

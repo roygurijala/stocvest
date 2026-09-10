@@ -21,6 +21,8 @@ from stocvest.api.services.historical_validation_service import HistoricalValida
 from stocvest.api.services.signal_analysis import analysis_authorized, build_signal_analysis_payload
 from stocvest.api.services.real_composite_engine import real_composite_body_sync
 from stocvest.api.services.swing_composite_engine import swing_composite_body_sync
+from stocvest.api.services.position_composite_engine import position_composite_body_sync
+from stocvest.api.services.position_research import build_position_research_bundle
 from stocvest.api.services.signal_snapshot_builders import build_swing_composite_snapshot_payload
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.api.services.composite_market_context import fetch_composite_market_status_payload_sync
@@ -137,6 +139,15 @@ def _compute_with_thread_timeout(
             return None
 
 
+def _evidence_desk_mode(mode: str) -> str:
+    m = str(mode or "").strip().lower()
+    if m in ("day", "intraday", "real"):
+        return "day"
+    if m == "position":
+        return "position"
+    return "swing"
+
+
 def _try_sync_watchlist_maturation_from_evidence(
     *,
     user_id: str | None,
@@ -149,12 +160,15 @@ def _try_sync_watchlist_maturation_from_evidence(
         return None
     if body.get("error"):
         return None
+    if str(mode or "").strip().lower() == "position":
+        # POS-D9 adds position ledger / watchlist maturation — never blend into swing.
+        return None
     try:
         from stocvest.api.services.watchlist_maturation_sync import (
             sync_watchlist_maturation_from_composite,
         )
 
-        desk_mode = "day" if mode == "day" else "swing"
+        desk_mode = _evidence_desk_mode(mode)
         try:
             from stocvest.api.services.system_signal_maturation_sync import sync_system_signal_from_composite
 
@@ -262,7 +276,7 @@ def composite_response_with_evidence_cache(
         cache_key,
         dict(body),
         "evidence",
-        "day" if mode == "day" else "swing",
+        _evidence_desk_mode(mode),
     )
     out = dict(body)
     out["source"] = "computed"
@@ -412,6 +426,31 @@ def swing_real_composite_handler(event: LambdaEvent, context: LambdaContext) -> 
             user_id=rc.user_id,
             user_email=rc.email,
             perplexity_mode="deep_dive",
+        ),
+    )
+    return ok(body)
+
+
+def position_real_composite_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/signals/composite/position — seven-layer position desk composite."""
+    _ = context
+    try:
+        payload = parse_json_body(event)
+    except ValueError as exc:
+        return bad_request(str(exc))
+    symbol = str(payload.get("symbol") or "").strip().upper()
+    if not symbol:
+        return bad_request("Body field 'symbol' is required.")
+    rc = build_request_context(event)
+    body = composite_response_with_evidence_cache(
+        symbol=symbol,
+        user_id=rc.user_id,
+        user_email=rc.email,
+        mode="position",
+        sync_compute=lambda: position_composite_body_sync(
+            symbol=symbol,
+            user_id=rc.user_id,
+            user_email=rc.email,
         ),
     )
     return ok(body)
@@ -876,6 +915,48 @@ def scanner_trace_handler(event: LambdaEvent, context: LambdaContext) -> dict[st
     return ok(payload)
 
 
+def position_candidates_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """GET /v1/signals/position/candidates — ranked gem candidates (ADR-004 POS-D15).
+
+    Transparent gem-gate screening over a curated liquid US universe. Informational
+    only — a "gem candidate" has passed internal quality gates, not a recommendation.
+    """
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    qs = event.get("queryStringParameters") or {}
+    tier = str(qs.get("tier") or "gem").strip().lower()
+    if tier not in ("gem", "strong", "monitor", "all"):
+        return bad_request("Query param 'tier' must be gem, strong, monitor, or all.")
+    try:
+        limit = max(1, min(100, int(str(qs.get("limit") or "50"))))
+    except (TypeError, ValueError):
+        limit = 50
+    force = str(qs.get("refresh") or "").strip().lower() in ("1", "true", "yes")
+
+    from stocvest.api.services.position_scan import get_position_scan_snapshot_sync
+
+    try:
+        snapshot, cached = get_position_scan_snapshot_sync(force=force)
+    except Exception as exc:  # scan should never 500 the discovery home
+        _LOG.warning("position_candidates scan failed: %s", exc)
+        return ok(
+            {
+                "mode": "position",
+                "tier": tier,
+                "candidates": [],
+                "count": 0,
+                "universe_size": 0,
+                "scan_generated_at": None,
+                "cached": False,
+                "degraded": True,
+                "disclaimer": API_SIGNAL_DISCLAIMER,
+            }
+        )
+    return ok(snapshot.to_api_dict(tier=tier, limit=limit, cached=cached))
+
+
 def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """POST /v1/signals/swing/setups — rank swing candidates from daily (DAY_1) bars."""
     _ = context
@@ -1187,8 +1268,34 @@ def ai_explanations_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     user_profile=profile,
                 )
             )
+        elif typ == "position_setup_read":
+            symbol = str(body.get("symbol") or "").strip().upper()
+            if not symbol:
+                return bad_request("symbol is required.")
+            verdict = str(body.get("verdict") or "neutral")
+            packet = body.get("packet")
+            packet = packet if isinstance(packet, dict) else {}
+
+            def _bullets(value: object) -> list[dict[str, Any]]:
+                if not isinstance(value, list):
+                    return []
+                return [x for x in value if isinstance(x, dict)][:6]
+
+            result = asyncio.run(
+                svc.explain_position_setup_read(
+                    symbol=symbol,
+                    verdict=verdict,
+                    bull_case=_bullets(packet.get("bull_case")),
+                    bear_case=_bullets(packet.get("bear_case")),
+                    open_questions=_bullets(packet.get("open_questions")),
+                    pillar_snapshot_hash=str(packet.get("pillar_snapshot_hash") or ""),
+                    user_profile=profile,
+                )
+            )
         else:
-            return bad_request("type must be signal_capture, news_synthesis, or setup_read.")
+            return bad_request(
+                "type must be signal_capture, news_synthesis, setup_read, or position_setup_read."
+            )
     except (TypeError, ValueError) as exc:
         return bad_request(f"Invalid explanation request: {exc}")
 
@@ -1201,6 +1308,46 @@ def ai_explanations_handler(event: LambdaEvent, context: LambdaContext) -> dict[
             "disclaimer": API_SIGNAL_DISCLAIMER,
         }
     )
+
+
+def position_research_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """POST /v1/signals/position/research — external Research tab (ADR-004 POS-AI-4).
+
+    Returns a paid-gated, flag-gated bundle of *external* context (SEC 10-K Item 1A excerpt
+    + a cited Perplexity "recent developments" summary). The content is INFORMATIONAL ONLY —
+    badged ``scored: false`` and never merged into the composite. Ships DARK behind
+    ``STOCVEST_POSITION_RESEARCH_ENABLED``.
+    """
+    _ = context
+    rc = build_request_context(event)
+    if not rc.user_id:
+        return unauthorized("Authenticated user is required.")
+    try:
+        body = parse_json_body(event)
+    except (TypeError, ValueError, KeyError):
+        return bad_request("Invalid JSON body.")
+    if not isinstance(body, dict):
+        return bad_request("Body must be a JSON object.")
+
+    symbol = str(body.get("symbol") or "").strip().upper()
+    if not symbol:
+        return bad_request("symbol is required.")
+    company_name = str(body.get("company_name") or "").strip() or None
+
+    profile = get_user_profile_store().get_profile(rc.user_id)
+    # Admin entitlement bump — mirrors ai_explanations_handler so admins see the paid view.
+    headers = event.get("headers") or {}
+    if isinstance(headers, dict) and analysis_authorized(
+        user_id=rc.user_id, claims=rc.claims, headers=headers
+    ):
+        profile = profile.model_copy(update={"beta_full_access": True})
+
+    bundle = asyncio.run(
+        build_position_research_bundle(
+            symbol=symbol, user_profile=profile, company_name=company_name
+        )
+    )
+    return ok(bundle.to_api_dict())
 
 
 def founding_members_count_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -1852,14 +1999,20 @@ def signals_http_dispatch(event: LambdaEvent, context: LambdaContext) -> dict[st
         return historical_validation_summary_handler(event, context)
     if route == "GET /v1/signals/scanner-trace" or route.startswith("GET /v1/signals/scanner-trace?"):
         return scanner_trace_handler(event, context)
+    if route == "GET /v1/signals/position/candidates" or route.startswith(
+        "GET /v1/signals/position/candidates?"
+    ):
+        return position_candidates_handler(event, context)
 
     routes: dict[str, Callable[[LambdaEvent, LambdaContext], dict[str, Any]]] = {
         "GET /v1/signals/founding-members": founding_members_count_handler,
         "POST /v1/signals/ai/explanations": ai_explanations_handler,
+        "POST /v1/signals/position/research": position_research_handler,
         "POST /v1/signals/assistant/chat": assistant_chat_handler,
         "POST /v1/public/assistant/chat": public_assistant_chat_handler,
         "POST /v1/signals/composite/real": real_composite_handler,
         "POST /v1/signals/composite/swing": swing_real_composite_handler,
+        "POST /v1/signals/composite/position": position_real_composite_handler,
         "POST /v1/signals/swing/composite": swing_composite_handler,
         "POST /v1/signals/swing/synthesis/parse": swing_synthesis_parse_handler,
         "POST /v1/signals/day/setups": day_setups_handler,

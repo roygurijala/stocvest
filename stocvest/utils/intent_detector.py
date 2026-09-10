@@ -177,6 +177,95 @@ def is_watchlist_intelligence_query(text: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Position "gem" intents (ADR-004 POS-D10) — long-horizon investment desk
+# ─────────────────────────────────────────────────────────────────────────────
+# Journey A (discovery / list): "what are today's gems?", "find strong long-term
+# stocks". Journey B (single name): "is MSFT a gem?", "is it a good long-term hold?".
+# Both read the POS-D15 position candidates cache — never the swing/day scanner — so
+# the handler routes them independently of the day/swing desk. Lookup (Journey B)
+# takes precedence over discovery only when a specific symbol is detected.
+
+_GEM_DISCOVERY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(today'?s|the|any|best|top|current|some)\s+gems?\b", re.IGNORECASE),
+    re.compile(r"\bgem\s+(candidates?|stocks?|list|names?|picks?)\b", re.IGNORECASE),
+    re.compile(r"\b(find|show|give)\s+(me\s+)?.{0,20}\bgems?\b", re.IGNORECASE),
+    re.compile(r"\bwhat\s+are\s+.{0,25}\bgems?\b", re.IGNORECASE),
+    re.compile(
+        r"\b(find|show|give|any|best|top|good)\b.{0,25}\blong[\s-]?term\b.{0,15}"
+        r"\b(stocks?|plays?|holds?|opportunit(y|ies)|investments?|ideas?|names?|picks?|candidates?)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\blong[\s-]?term\s+(opportunit(y|ies)|gems?|holds?|investments?|candidates?|ideas?|picks?)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(stocks?|names?|companies)\s+to\s+(invest\s+in|buy\s+and\s+hold|hold\s+long)\b", re.IGNORECASE),
+    re.compile(r"\bposition\s+(desk\s+)?(candidates?|gems?)\b", re.IGNORECASE),
+    re.compile(r"\binvestment\s+(candidates?|gems?|ideas?|opportunit(y|ies))\b", re.IGNORECASE),
+)
+
+_GEM_LOOKUP_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bis\s+\S+\s+a\s+gem\b", re.IGNORECASE),
+    re.compile(r"\b(is|are)\s+(it|this|that|they)\s+a\s+gem\b", re.IGNORECASE),
+    re.compile(r"\ba\s+gem\b", re.IGNORECASE),
+    re.compile(r"\b(good|solid|quality|worth|strong)\s+long[\s-]?term\s+(hold|buy|pick|investment|bet)\b", re.IGNORECASE),
+    re.compile(r"\blong[\s-]?term\s+(outlook|prospects?|potential|quality)\b", re.IGNORECASE),
+    re.compile(r"\bscores?\b.{0,15}\bfor\s+(the\s+)?long[\s-]?term\b", re.IGNORECASE),
+    re.compile(r"\bworth\s+(investing\s+in|holding|buying)\s+(for\s+)?(the\s+)?long[\s-]?term\b", re.IGNORECASE),
+    re.compile(r"\bgood\s+(quality|fundamentals?)\s+(stock|company|name)\b", re.IGNORECASE),
+)
+
+
+def is_gem_discovery_query(text: str) -> bool:
+    """Return True for a long-horizon gem *discovery* (list) question (Journey A)."""
+    if not text or not text.strip():
+        return False
+    return any(p.search(text) for p in _GEM_DISCOVERY_PATTERNS)
+
+
+def is_gem_lookup_query(text: str) -> bool:
+    """Return True for a single-name long-horizon *qualification* question (Journey B)."""
+    if not text or not text.strip():
+        return False
+    return any(p.search(text) for p in _GEM_LOOKUP_PATTERNS)
+
+
+def is_position_intent_query(text: str) -> bool:
+    """Any position/gem intent — discovery, single-name lookup, or compare."""
+    return is_gem_discovery_query(text) or is_gem_lookup_query(text) or is_gem_compare_query(text)
+
+
+# ADR-004 POS-AI-6 — long-horizon *compare* intent ("compare AAPL vs MSFT for the long term",
+# "which is the better quality compounder, KO or PEP?"). Distinguished from the swing/day
+# multi-symbol comparison by requiring an investment/long-horizon cue in the same message; the
+# handler additionally requires ≥2 distinct tickers (and treats any comparison as a gem compare
+# when the Position tab is already in scope).
+_GEM_COMPARE_CONTEXT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bgems?\b", re.IGNORECASE),
+    re.compile(r"\blong[\s-]?term\b", re.IGNORECASE),
+    re.compile(r"\binvest(ing|ment)?\b", re.IGNORECASE),
+    re.compile(r"\bfundamentals?\b", re.IGNORECASE),
+    re.compile(r"\bquality\b", re.IGNORECASE),
+    re.compile(r"\bcompounder\b", re.IGNORECASE),
+    re.compile(r"\bbuy[\s-]?and[\s-]?hold\b", re.IGNORECASE),
+    re.compile(r"\bhold\s+(for\s+)?(the\s+)?long\b", re.IGNORECASE),
+)
+
+
+def is_gem_compare_query(text: str) -> bool:
+    """Return True for a long-horizon head-to-head comparison (POS-AI-6, Journey C).
+
+    Requires both comparison language *and* an investment/long-horizon cue so a plain
+    "compare NVDA vs AMD" stays on the swing/day desk unless the user frames it as a
+    long-term / quality / fundamentals question."""
+    if not text or not text.strip():
+        return False
+    return is_comparison_query(text) and any(
+        p.search(text) for p in _GEM_COMPARE_CONTEXT_PATTERNS
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Explicit trading-desk language (mode resolution + light personalization)
 # ─────────────────────────────────────────────────────────────────────────────
 

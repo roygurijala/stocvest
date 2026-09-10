@@ -8,11 +8,56 @@ from scripts.ledger_signal_report import (
     DeskTally,
     _describe_gate_failure,
     _failed_gates_from_item,
+    _format_report,
     _format_val1_weekly_section,
     _is_ledger_row,
     _period_window,
     _primary_gate_failure,
 )
+
+
+def _report(**over) -> str:
+    kwargs = dict(
+        period="daily",
+        window_label="2026-09-08",
+        table_name="T",
+        start=date(2026, 9, 8),
+        end=date(2026, 9, 8),
+        desks={"position": DeskTally()},
+        maturation={"day": 0, "swing": 0},
+        sample_rows=[],
+    )
+    kwargs.update(over)
+    return _format_report(**kwargs)
+
+
+def test_report_includes_position_desk_by_default() -> None:
+    body = _report()
+    assert "POSITION DESK" in body
+    assert "DAY DESK" in body
+    assert "SWING DESK" in body
+    assert "ledger_capture_position" in body
+
+
+def test_report_mode_filter_restricts_to_position() -> None:
+    body = _report(modes=("position",))
+    assert "POSITION DESK" in body
+    assert "DAY DESK" not in body
+    assert "SWING DESK" not in body
+
+
+def test_report_sample_rows_scoped_to_selected_mode() -> None:
+    rows = [
+        {"symbol": "AAA", "mode": "position", "ledger_qualified": True},
+        {"symbol": "BBB", "mode": "swing", "ledger_qualified": True},
+        {"symbol": "CCC", "mode": "day", "ledger_qualified": True},
+    ]
+    scoped = _report(modes=("position",), sample_rows=rows)
+    assert "AAA" in scoped
+    assert "BBB" not in scoped and "CCC" not in scoped
+    # Default (all modes) keeps every sample row.
+    full = _report(sample_rows=rows)
+    assert "AAA" in full and "BBB" in full and "CCC" in full
 
 
 def test_period_window_daily() -> None:

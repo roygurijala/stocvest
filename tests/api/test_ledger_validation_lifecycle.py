@@ -123,6 +123,7 @@ class _FakeDynamoTable:
     ("mode", "used_trio", "unused_trio"),
     [
         ("swing", ("#p1d", "#o1d", "#r1d"), ("#p1h", "#o1h", "#r1h")),
+        ("position", ("#p1d", "#o1d", "#r1d"), ("#p1h", "#o1h", "#r1h")),
         ("day", ("#p1h", "#o1h", "#r1h"), ("#p1d", "#o1d", "#r1d")),
     ],
 )
@@ -177,3 +178,62 @@ def test_has_open_validation_position() -> None:
     )
     assert rec.has_open_validation_position("ux", "IBM", "swing") is True
     assert rec.has_open_validation_position("ux", "IBM", "day") is False
+
+
+def test_close_validation_position_mode_position_uses_daily_horizon() -> None:
+    """Position exits resolve on the daily (1d) horizon, like swing (weekly close)."""
+    rec = InMemorySignalRecorder()
+    gen = datetime.now(timezone.utc) - timedelta(days=10)
+    rec.record_signal(
+        SignalRecord(
+            signal_id="p1",
+            symbol="AAPL",
+            direction="bullish",
+            signal_strength=70,
+            pattern="position_composite",
+            layer_scores={},
+            price_at_signal=100.0,
+            generated_at=gen,
+            user_id="up",
+            ledger_qualified=True,
+            ledger_position_open=True,
+            mode="position",
+        )
+    )
+    now = datetime.now(timezone.utc)
+    ok = rec.close_validation_position(
+        signal_id="p1",
+        exit_price=120.0,
+        exit_rule="position_structure_invalidated",
+        exit_reason="unit test",
+        mode="position",
+        now=now,
+    )
+    assert ok
+    got = rec.get_signal_record_raw("p1")
+    assert got is not None
+    assert got.ledger_position_open is False
+    assert got.outcome_1d == outcome_from_prices("bullish", 100.0, 120.0)
+    assert got.exit_rule == "position_structure_invalidated"
+
+
+def test_has_open_validation_position_mode_position() -> None:
+    rec = InMemorySignalRecorder()
+    rec.record_signal(
+        SignalRecord(
+            signal_id="po1",
+            symbol="MSFT",
+            direction="bullish",
+            signal_strength=60,
+            pattern="position_composite",
+            layer_scores={},
+            price_at_signal=1.0,
+            generated_at=datetime.now(timezone.utc),
+            user_id="upx",
+            ledger_qualified=True,
+            ledger_position_open=True,
+            mode="position",
+        )
+    )
+    assert rec.has_open_validation_position("upx", "MSFT", "position") is True
+    assert rec.has_open_validation_position("upx", "MSFT", "swing") is False

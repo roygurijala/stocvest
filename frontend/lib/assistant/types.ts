@@ -67,7 +67,25 @@ export interface AssistantPageContext {
   /** Public marketing surface vs signed-in app (backend whitelists marketing/* only on public route). */
   session_mode?: "public" | "authenticated";
   /** Active trading mode if the page exposes one. */
-  trading_mode?: "swing" | "day";
+  trading_mode?: "swing" | "day" | "position";
+  /**
+   * ADR-004 POS-D10 — long-horizon Position desk read, emitted only when the Position tab
+   * is active. Glass-box fundamentals verdict + one-line summary + deterministic gem tier.
+   * The assistant narrates these; it never sets, upgrades, or overrides them.
+   */
+  position_verdict?: "bullish" | "neutral" | "bearish";
+  position_fundamentals_summary?: string;
+  position_gem_tier?: "gem" | "strong" | "monitor" | "insufficient";
+  /**
+   * POS-AI-3 — pillar-aware Position context so the assistant can name the weakest pillar
+   * and speak to any F-pillar accurately (glass-box), never inventing scores/verdicts.
+   * `position_weakest_pillar` is a display string ("F4 · Valuation"); `position_pillars`
+   * mirrors the on-screen fundamentals grid; `position_thesis_summary` condenses the
+   * deterministic bull/bear/open-questions packet.
+   */
+  position_weakest_pillar?: string;
+  position_pillars?: { id: string; label: string; score: number | null; verdict: string }[];
+  position_thesis_summary?: string;
   /** User subscription tier — forwarded from dashboard pages that know the plan. */
   subscription_plan?: "free" | "swing_pro" | "swing_day_pro";
   /** Plan-based default-watchlist symbol cap (5 / 50 / 100). */

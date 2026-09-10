@@ -2,6 +2,8 @@
 
 Swing: evaluate after each RTH close (structure, regime veto, max hold). First matching rule wins.
 Day: evaluate during RTH (VWAP violation, flatten cutoff, session close). First matching rule wins.
+Position (ADR-004 POS-D9): evaluate weekly after the Friday cash close (weekly structural break,
+validity expiry). First matching rule wins.
 
 Exit prices use Polygon snapshot (last / day close) as documented tradable references.
 Full composite “decision downgrade” is not recomputed here (cost/latency); structure, regime,
@@ -16,10 +18,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from stocvest.api.services.validation_timing import (
+    MAX_HOLD_CALENDAR_DAYS_POSITION,
     MAX_HOLD_CALENDAR_DAYS_SWING,
     MIN_SESSION_VOLUME_SHARES_DAY_LEDGER,
     is_at_or_after_day_flatten_cutoff_et,
     is_day_monitor_active_session_et,
+    is_position_monitor_evaluation_window_et,
     is_swing_monitor_evaluation_window_et,
     now_et,
 )
@@ -109,7 +113,13 @@ def _vwap_violated(direction: str, vwap: float, last_px: float) -> bool:
 async def run_ledger_position_monitor(client: PolygonClient, recorder: Any) -> dict[str, int]:
     """Process open validation rows; returns counts."""
     now = datetime.now(timezone.utc)
-    counts: dict[str, int] = {"swing_closed": 0, "day_closed": 0, "skipped": 0, "errors": 0}
+    counts: dict[str, int] = {
+        "swing_closed": 0,
+        "day_closed": 0,
+        "position_closed": 0,
+        "skipped": 0,
+        "errors": 0,
+    }
     day_target_exit_enabled = bool(get_settings().stocvest_day_profit_target_exit_enabled)
 
     try:
@@ -247,6 +257,50 @@ async def run_ledger_position_monitor(client: PolygonClient, recorder: Any) -> d
                     )
                     if ok:
                         counts["day_closed"] += 1
+                    else:
+                        counts["errors"] += 1
+                else:
+                    counts["skipped"] += 1
+
+            elif rec.mode == "position":
+                # Weekly: evaluate holds once after the Friday cash close.
+                if not is_position_monitor_evaluation_window_et(now):
+                    counts["skipped"] += 1
+                    continue
+                px_close = _exit_px_from_snapshot(snap)
+                if px_close is None:
+                    counts["errors"] += 1
+                    continue
+
+                exit_rule_p: str | None = None
+                exit_reason_p: str | None = None
+
+                # Rule 1: structural break — weekly (Friday) close through the reference stop.
+                stop_p = rec.stop_level
+                if stop_p is not None and _structure_invalidated(rec.direction, float(stop_p), px_close):
+                    exit_rule_p = "position_structure_invalidated"
+                    exit_reason_p = "Reference stop / structure invalidated vs weekly (Friday) close"
+                else:
+                    # Rule 2: validity expiry — thesis horizon elapsed.
+                    gen_d = now_et(rec.generated_at).date()
+                    days_open = (now_et(now).date() - gen_d).days
+                    if days_open >= MAX_HOLD_CALENDAR_DAYS_POSITION:
+                        exit_rule_p = "position_validity_expiry"
+                        exit_reason_p = (
+                            f"Validity horizon {MAX_HOLD_CALENDAR_DAYS_POSITION} calendar days reached"
+                        )
+
+                if exit_rule_p and exit_reason_p:
+                    ok = recorder.close_validation_position(
+                        signal_id=rec.signal_id,
+                        exit_price=px_close,
+                        exit_rule=exit_rule_p,
+                        exit_reason=exit_reason_p,
+                        mode="position",
+                        now=now,
+                    )
+                    if ok:
+                        counts["position_closed"] += 1
                     else:
                         counts["errors"] += 1
                 else:

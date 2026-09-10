@@ -132,6 +132,9 @@ export type SignalsLayerRowInput = {
   techVolRegime?: string | null;
   techRvolMultiplier?: number | null;
   techOverboughtMultiplier?: number | null;
+  /** Position fundamentals layer (ADR-004). */
+  weakestPillarId?: string | null;
+  fundamentalsDataQuality?: string | null;
   /**
    * Verdict band for this layer's 0–100 score: the score must reach `bullishThreshold`
    * to read bullish or fall to `bearishThreshold` to read bearish; in between it is the
@@ -700,7 +703,7 @@ export function buildLayerInsightLine(row: SignalsLayerRowInput, bias: SignalsSe
 }
 
 export function buildSignalsPageDecision(input: {
-  mode: "swing" | "day";
+  mode: "swing" | "day" | "position";
   bias: SignalsSetupBias;
   rows: SignalsLayerRowInput[];
   /** @deprecated Use layer alignment — kept for callers not yet migrated. */
@@ -770,7 +773,7 @@ export function buildSignalsPageDecision(input: {
   }
   if (weakAgreement) reinforcements.push("Layers don't agree enough across the desk.");
   if (timeframeCounterTrend) {
-    reinforcements.push(timeframeDivergenceReinforcement(mode));
+    reinforcements.push(timeframeDivergenceReinforcement(mode === "position" ? "swing" : mode));
   }
 
   if (hasInsufficient || (rrFail && weakAgreement && lowReadiness) || availableLayers < 4) {

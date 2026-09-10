@@ -92,6 +92,7 @@ DEFAULT_BASE_WEIGHTS: dict[str, float] = {
 # Keys are intentionally explicit and stable for downstream consumers.
 REGIME_WEIGHTS: dict[str, dict[str, float]] = {
     "bull": {
+        "fundamentals": 1.10,
         "technical": 1.20,
         "news": 1.05,
         "sector": 1.10,
@@ -100,6 +101,7 @@ REGIME_WEIGHTS: dict[str, dict[str, float]] = {
         "internals": 1.00,
     },
     "bear": {
+        "fundamentals": 1.05,
         "technical": 1.00,
         "news": 1.15,
         "sector": 1.05,
@@ -108,6 +110,7 @@ REGIME_WEIGHTS: dict[str, dict[str, float]] = {
         "internals": 1.05,
     },
     "sideways": {
+        "fundamentals": 1.00,
         "technical": 1.00,
         "news": 1.00,
         "sector": 1.00,
@@ -133,6 +136,11 @@ class CompositeScoreEngine:
         self._regime_weights = dict(regime_weights or REGIME_WEIGHTS)
         self._bullish_threshold = bullish_threshold
         self._bearish_threshold = bearish_threshold
+
+    @classmethod
+    def resolve_weights(cls, params: object, *, mode: str | None = None) -> dict[str, float]:
+        """Return the base-weight map for ``mode`` (ADR-004 POS-D6 entry point)."""
+        return resolve_composite_weights(params, mode=mode)
 
     def compute(
         self,
@@ -340,6 +348,22 @@ class CompositeScoreEngine:
         return score
 
 
+def resolve_composite_weights(params: object, *, mode: str | None = None) -> dict[str, float]:
+    """Return validated base-weight map for ``mode`` from ``SignalParameters``."""
+    from stocvest.signals.signal_math_contract import (
+        composite_weights_from_block,
+        normalize_composite_weights,
+        validate_composite_weights,
+    )
+
+    block = resolve_composite_block(params, mode)
+    raw = composite_weights_from_block(block, mode=mode)
+    ok, _errors = validate_composite_weights(raw, mode=mode)
+    if ok:
+        return raw
+    return normalize_composite_weights(raw, mode=mode)
+
+
 def resolve_composite_block(params: object, mode: str | None = None) -> object:
     """Pick the active :class:`CompositeParameters` block for a given engine mode.
 
@@ -378,6 +402,13 @@ def resolve_composite_block(params: object, mode: str | None = None) -> object:
         per_mode = getattr(params, "day_composite", None)
         if per_mode is not None:
             return per_mode
+    elif mode == "position":
+        per_mode = getattr(params, "position_composite", None)
+        if per_mode is not None:
+            return per_mode
+        from stocvest.config.signal_parameters import DEFAULT_POSITION_COMPOSITE_PARAMETERS
+
+        return DEFAULT_POSITION_COMPOSITE_PARAMETERS
     return params.composite  # type: ignore[attr-defined]
 
 
@@ -413,14 +444,7 @@ def build_composite_score_engine_from_params(
     :data:`DEFAULT_BASE_WEIGHTS` which is documented as the test/no-args default.
     """
     composite = resolve_composite_block(params, mode)
-    base_weights: dict[str, float] = {
-        "technical": float(composite.technical_weight),  # type: ignore[attr-defined]
-        "news": float(composite.news_weight),  # type: ignore[attr-defined]
-        "macro": float(composite.macro_weight),  # type: ignore[attr-defined]
-        "sector": float(composite.sector_weight),  # type: ignore[attr-defined]
-        "geopolitical": float(composite.geopolitical_weight),  # type: ignore[attr-defined]
-        "internals": float(composite.internals_weight),  # type: ignore[attr-defined]
-    }
+    base_weights = resolve_composite_weights(params, mode=mode)
     return CompositeScoreEngine(
         base_weights=base_weights,
         bullish_threshold=float(composite.bullish_threshold),  # type: ignore[attr-defined]

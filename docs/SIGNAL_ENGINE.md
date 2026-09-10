@@ -1,8 +1,10 @@
 # Signal engine (real composite)
 
-**Last updated:** 2026-06-20 (P68 — Signal Math Contract + financial-math accuracy)
+**Last updated:** 2026-09-08 (ADR-004 Position desk — composite API shipped POS-D4/D5; signal math contract extended POS-D6)
 
-This document describes the **server-side** multi-layer stacks behind **`POST /v1/signals/composite/real`** (intraday / day-trade mode) and **`POST /v1/signals/composite/swing`** (daily-bar swing mode). Both reuse the same six layer *types*, `CompositeScoreEngine`, and confluence/evidence plumbing; data fetch windows and the technical implementation differ (`technical_analyzer` vs `swing_technical_analyzer`). Tunables live in `SignalParameters` (Secrets Manager JSON); defaults in `stocvest/config/signal_parameters.py` and `stocvest/config/sector_etf_defaults.py`.
+This document describes the **server-side** multi-layer stacks behind **`POST /v1/signals/composite/real`** (intraday / day-trade mode), **`POST /v1/signals/composite/swing`** (daily-bar swing mode), and **`POST /v1/signals/composite/position`** (long-horizon position desk). Day and swing reuse the same six layer *types*; position adds a scored **fundamentals** layer (seven layers total). All modes share `CompositeScoreEngine`, confluence/evidence plumbing where applicable, and the Signal Math Contract. Tunables live in `SignalParameters` (Secrets Manager JSON); defaults in `stocvest/config/signal_parameters.py` and `stocvest/config/sector_etf_defaults.py`.
+
+Position desk details: [`adr/ADR-004-position-desk-long-term-investment.md`](./adr/ADR-004-position-desk-long-term-investment.md).
 
 ## Architecture: Stage A → Stage B (contributor contract)
 
@@ -28,7 +30,17 @@ Single source of truth for signal scoring math, so scanner / watchlist / scenari
 
 **Neutral rule (load-bearing):** a value exactly on the neutral anchor contributes **no direction** (`0`) — never a defaulted bullish/bearish lean.
 
-**Helpers:** `clamp_layer_score` / `clamp_directional_score` / `clamp_unit`; `layer_score_direction` (50→0), `directional_sign` (0→0), `directional_verdict`; `ratio_to_layer_count(ratio, total)`; `normalize_to_unit(magnitude, scale)`; scale converters `layer_score_to_directional` / `directional_to_layer_score`. **Canonical layer set:** `SIGNAL_LAYERS` (sourced from `MATURATION_LAYER_KEYS`; a test pins they never drift).
+**Helpers:** `clamp_layer_score` / `clamp_directional_score` / `clamp_unit`; `layer_score_direction` (50→0), `directional_sign` (0→0), `directional_verdict`; `ratio_to_layer_count(ratio, total?, mode=)`; `normalize_to_unit(magnitude, scale)`; scale converters `layer_score_to_directional` / `directional_to_layer_score`; **`signal_layers_for_mode(mode)`** / **`validate_composite_weights(weights, mode=)`**; **`CompositeScoreEngine.resolve_weights(params, mode=)`**. **Canonical layer sets:** `SIGNAL_LAYERS` (six — swing/day; sourced from `MATURATION_LAYER_KEYS`); **`POSITION_SIGNAL_LAYERS`** (seven — adds `fundamentals` first). **`POSITION_GATE_CATALOG`** documents position desk geometry/entry gates.
+
+### Position desk (ADR-004 POS-D4–D6)
+
+| Item | Value |
+|------|-------|
+| Layers | `fundamentals`, `technical`, `news`, `macro`, `sector`, `geopolitical`, `internals` |
+| Default weights | fundamentals 32%, technical 22%, macro 15%, sector 12%, news 8%, geo 6%, internals 5% |
+| Secrets block | `position_composite` (validated on load; invalid sums normalized) |
+| Min R/R (T1) | 1.5 default (`min_rr_position` in market environment) |
+| Verdict band | ±0.20 directional (shared contract) |
 
 **Enforcement / fixes that now route through the contract:**
 
@@ -37,8 +49,21 @@ Single source of truth for signal scoring math, so scanner / watchlist / scenari
 - **Confluence tiers** (`confluence.py`) — tier floors are driven by `n_confirming` (5/4/3); each tier's score threshold is the conflict-free score *at that floor* (`≈55/44/33` with `denom=9`) so floors actually bind and conflicts demote. `is_confluence_alert = tier != "weak"`.
 - **`gap_pct`** — composite engines compute it from prior close via `session_price_guard.session_gap_percent` (corporate-action guarded; `quiet_leaders` delegates to the same helper) instead of a hardcoded `0.0`, so confluence `gap_confirm` fires when prev close is available.
 - **Weekly RSI** (`multi_timeframe`) — a **true weekly RSI**: daily bars collapsed to one close per ISO week, RSI on that weekly series (adaptive period). Was a daily-close RSI mislabeled weekly.
-- **Layer alignment** (`layer_directional_alignment`) — ratio→whole-layer count via `ratio_to_layer_count` (no hardcoded ×6).
+- **Layer alignment** (`layer_directional_alignment`) — ratio→whole-layer count via `ratio_to_layer_count(..., mode=)`; swing/day use 6 layers, position uses 7 (includes fundamentals). `composite_direction_fields` reads `mode` from the response body.
 - **Frontend** — `signals-page-present` alignment count + `signal-evidence` directional→0-100 conversion route through the mirror; the fallback R/R path now threads T2 **provenance** so a resistance-anchored T2 is gate-eligible.
+
+### Position universe hygiene (gem gate G8, ADR-004 POS-D11)
+
+Gem discovery screens each candidate through `position_gem_gates.py` (G1–G9). **G8 — universe hygiene** delegates to **`position_universe_filter.py`** (`passes_position_universe_filter`). A failed G8 forces tier **Insufficient** (never surfaced), independent of fundamentals.
+
+| Check | Rule |
+|-------|------|
+| Leveraged / inverse | Symbol in the shared GEO-2 blocklist (`swing_universe_filter.SWING_EXCLUDED_SYMBOLS`) + a position-specific extension (`POSITION_EXTRA_EXCLUDED_SYMBOLS`), or a company-name marker (`3X`, `UltraPro`, `Daily Bull/Bear`, `Inverse`, …). **Always enforced.** |
+| SPAC / blank-check shell | Company-name markers (`Acquisition Corp`, `Blank Check`, `SPAC`). **Always enforced** when a name is present. |
+| Micro-cap | `market_cap < STOCVEST_POSITION_MIN_MARKET_CAP_USD` (default **$500M**). Applied **only when** `market_cap` is present (graceful pass otherwise, like G6). |
+| Illiquidity | `avg_dollar_volume < STOCVEST_POSITION_MIN_AVG_DOLLAR_VOLUME_USD` (default **$20M**). Applied **only when** the metric is present. |
+
+The curated v1 scan universe scores without reference financials, so the cap/ADV floors are inert there and bind once the full POS-D15 batch threads `market_cap` / `avg_dollar_volume` into the body. Both floors are disabled by setting the threshold to `0`.
 
 ## Layers
 

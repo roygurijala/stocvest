@@ -30,6 +30,17 @@ from stocvest.api.services.assistant_discovery import (
     fetch_discovery_context,
     serialize_discovery_context,
 )
+from stocvest.api.services.assistant_position_discovery import (
+    fetch_gem_compare_context,
+    fetch_gem_lookup_context,
+    fetch_position_gem_context,
+    gem_compare_payload,
+    gem_lookup_payload,
+    position_gem_payload,
+    serialize_gem_compare_context,
+    serialize_gem_lookup_context,
+    serialize_position_gem_context,
+)
 from stocvest.api.services.assistant_market_context import (
     fetch_market_pulse_context,
     serialize_market_pulse_context,
@@ -66,6 +77,9 @@ from stocvest.utils.intent_detector import (
     is_comparison_query,
     is_discovery_query,
     is_forecast_query,
+    is_gem_compare_query,
+    is_gem_discovery_query,
+    is_gem_lookup_query,
     is_market_overview_query,
     is_mode_sensitive_query,
     is_price_chart_query,
@@ -244,10 +258,40 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # Priority: explicit screen mode > explicit desk language in the message >
     # stored preference > default (day). A newly stated preference is persisted so
     # future desk-ambiguous questions inherit it without re-asking.
+    # ADR-004 POS-D10 — Position is a third, independent desk. When the Position tab is
+    # in scope we must NOT inject swing/day discovery, watchlist, comparison, or composite
+    # reads (they would contradict the long-horizon fundamentals read the user is looking
+    # at). `page_mode` stays swing|day for the day/swing services; `is_position_scope`
+    # gates those services off. Position gem-discovery / "is X a gem?" lookup is POS-D10
+    # increment 2. The Position page-context block still flows through serialize_page_context.
     page_mode: str | None = None
+    is_position_scope = False
     if page_context and isinstance(page_context.get("trading_mode"), str):
         _pm = page_context["trading_mode"].strip().lower()
-        page_mode = _pm if _pm in ("swing", "day") else None
+        if _pm in ("swing", "day"):
+            page_mode = _pm
+        elif _pm == "position":
+            is_position_scope = True
+
+    # ADR-004 POS-D10 increment 2 — long-horizon "gem" intents read the POS-D15
+    # candidates cache (never the swing/day scanner). Lookup (single name) takes
+    # precedence over discovery (list) when a specific symbol is detected below.
+    wants_gem_lookup = profile.has_ai_explanations and is_gem_lookup_query(last_user_text_for_intent)
+    wants_gem_discovery = (
+        profile.has_ai_explanations and is_gem_discovery_query(last_user_text_for_intent)
+    )
+    # ADR-004 POS-AI-6 — long-horizon head-to-head compare. A comparison framed as
+    # long-term/quality/investment, OR any comparison while the Position tab is in scope,
+    # routes to the gem-compare matrix (never the swing/day multi-symbol read). Requires
+    # ≥2 distinct tickers, so single-symbol questions never trip it.
+    wants_gem_compare = profile.has_ai_explanations and (
+        is_gem_compare_query(last_user_text_for_intent)
+        or (is_position_scope and is_comparison_query(last_user_text_for_intent))
+    )
+    gem_compare_syms = (
+        detect_symbols(last_user_text_for_intent, limit=4) if wants_gem_compare else []
+    )
+    gem_compare_active = wants_gem_compare and len(gem_compare_syms) >= 2
 
     explicit_desk = (
         detect_explicit_desk(last_user_text_for_intent) if profile.has_ai_explanations else None
@@ -276,7 +320,14 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # from the cached desk results and inject them as context. No new scan.
     discovery_block = ""
     discovery_payload_out: dict | None = None
-    if profile.has_ai_explanations and is_discovery_query(last_user_text_for_intent):
+    if (
+        profile.has_ai_explanations
+        and not is_position_scope
+        and not wants_gem_discovery
+        and not wants_gem_lookup
+        and not wants_gem_compare
+        and is_discovery_query(last_user_text_for_intent)
+    ):
         try:
             disc = fetch_discovery_context(resolved_desk)
             discovery_block = serialize_discovery_context(disc)
@@ -312,7 +363,11 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # "How is my watchlist doing today?" / "best opportunities from my watchlist"
     # are answered from cached maturation data (no expensive recompute).
     watchlist_block = ""
-    if profile.has_ai_explanations and is_watchlist_intelligence_query(last_user_text_for_intent):
+    if (
+        profile.has_ai_explanations
+        and not is_position_scope
+        and is_watchlist_intelligence_query(last_user_text_for_intent)
+    ):
         try:
             wl_ctx = fetch_watchlist_context(rc.user_id, resolved_desk)  # type: ignore[arg-type]
             watchlist_block = serialize_watchlist_context(wl_ctx)
@@ -334,7 +389,12 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # fetch below (detected_sym stays None ⇒ no chart/citations/navigate/web).
     multi_symbol_block = ""
     compared_symbols_out: list[dict] | None = None
-    if profile.has_ai_explanations and is_comparison_query(last_user_text_for_intent):
+    if (
+        profile.has_ai_explanations
+        and not is_position_scope
+        and not gem_compare_active
+        and is_comparison_query(last_user_text_for_intent)
+    ):
         comparison_syms = detect_symbols(last_user_text_for_intent, limit=3)
         if len(comparison_syms) >= 2:
             try:
@@ -354,7 +414,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     # up?") with real data rather than generic explanations.
     symbol_context = None
     detected_sym: str | None = None
-    if profile.has_ai_explanations and not multi_symbol_block:
+    if profile.has_ai_explanations and not multi_symbol_block and not gem_compare_active:
         try:
             messages_list = raw_messages if isinstance(raw_messages, list) else []
             # The CURRENT message is authoritative. Resolve the symbol from it
@@ -406,7 +466,10 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 # per symbol+mode) so the assistant can lead with what STOCVEST
                 # thinks — not just an external news synthesis. Best-effort: a
                 # missing/failed read simply leaves the field None.
-                if symbol_context is not None:
+                # Skip the swing/day composite read under Position scope or for a gem
+                # lookup — a day/swing verdict would contradict the long-horizon read.
+                # (The gem lookup attaches a POSITION GEM LOOKUP block instead, below.)
+                if symbol_context is not None and not is_position_scope and not wants_gem_lookup:
                     try:
                         symbol_context.stocvest_read = fetch_stocvest_composite_read(
                             detected_sym, resolved_desk
@@ -448,6 +511,41 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     except Exception:  # noqa: BLE001
         citations_out = None
 
+    # ── Position gem intents (ADR-004 POS-D10 increment 2) ───────────────────
+    # Journey B (single name, "is MSFT a gem?") wins over Journey A (list) when a
+    # symbol is in scope; both read the POS-D15 candidates cache, never the scanner.
+    position_gem_block = ""
+    gem_candidates_out: dict | None = None
+    gem_lookup_out: dict | None = None
+    gem_compare_out: dict | None = None
+    if gem_compare_active:
+        try:
+            compare = fetch_gem_compare_context(gem_compare_syms)
+            block = serialize_gem_compare_context(compare)
+            if block:
+                position_gem_block = block
+                gem_compare_out = gem_compare_payload(compare)
+        except Exception:  # noqa: BLE001 — gem compare must never break the reply
+            position_gem_block = ""
+    elif wants_gem_lookup and detected_sym:
+        try:
+            lookup = fetch_gem_lookup_context(detected_sym)
+            block = serialize_gem_lookup_context(lookup)
+            if block:
+                position_gem_block = block
+                gem_lookup_out = gem_lookup_payload(lookup)
+        except Exception:  # noqa: BLE001 — gem lookup must never break the reply
+            position_gem_block = ""
+    elif wants_gem_discovery:
+        try:
+            gems = fetch_position_gem_context()
+            block = serialize_position_gem_context(gems)
+            if block:
+                position_gem_block = block
+                gem_candidates_out = position_gem_payload(gems)
+        except Exception:  # noqa: BLE001 — gem discovery must never break the reply
+            position_gem_block = ""
+
     # ── Web search fallback (out-of-envelope breadth) ────────────────────────
     # When the question isn't about a specific symbol and none of the structured
     # context paths fired (discovery / market overview / watchlist), and it looks
@@ -461,6 +559,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
         and get_settings().stocvest_assistant_web_search_enabled
         and detected_sym is None
         and not discovery_block
+        and not position_gem_block
         and not market_block
         and not watchlist_block
         and is_web_search_query(last_user_text_for_intent)
@@ -480,6 +579,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     clarify_out: dict | None = None
     if (
         profile.has_ai_explanations
+        and not is_position_scope
         and is_mode_sensitive_query(last_user_text_for_intent)
         and not page_mode
         and not explicit_desk
@@ -536,6 +636,7 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
                 preference_context=preference_block,
                 web_context=web_block,
                 multi_symbol_context=multi_symbol_block,
+                position_gem_context=position_gem_block,
             )
         )
     except (TypeError, ValueError) as exc:
@@ -560,6 +661,9 @@ def assistant_chat_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
             "navigate_to": navigate_to,
             "chart": chart_payload,
             "discovery": discovery_payload_out,
+            "gem_candidates": gem_candidates_out,
+            "gem_lookup": gem_lookup_out,
+            "gem_compare": gem_compare_out,
             "citations": citations_out,
             "clarify": clarify_out,
             "web_sources": web_sources_out,

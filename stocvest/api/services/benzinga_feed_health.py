@@ -76,18 +76,32 @@ def layer_available_for_composite(status: str) -> bool:
     return str(status or "").strip().lower() in ("available", "as_of_close")
 
 
-def composite_layers_meta(layer_results: list[object], layer_ids: list[str]) -> dict[str, object]:
+def composite_layers_meta(
+    layer_results: list[object],
+    layer_ids: list[str],
+    *,
+    mode: str | None = None,
+) -> dict[str, object]:
+    desk = str(mode or "").strip().lower()
+    if desk == "position":
+
+        def _active(status: str) -> bool:
+            return str(status or "").strip().lower() in ("available", "as_of_close", "active")
+
+    else:
+        _active = layer_available_for_composite
+
     excluded = [
         lid
         for lid, res in zip(layer_ids, layer_results)
         if str(getattr(res, "status", "") or "").strip().lower() == "degraded"
     ]
-    active = sum(
-        1 for res in layer_results if layer_available_for_composite(getattr(res, "status", ""))
-    )
+    active = sum(1 for res in layer_results if _active(getattr(res, "status", "")))
     note = None
     if "news" in excluded:
         note = "News layer unavailable — composite based on remaining layers only."
+    elif "fundamentals" in excluded:
+        note = "Fundamentals partially scored — composite based on remaining layers only."
     return {
         "composite_layers_total": len(layer_ids),
         "composite_layers_active": active,

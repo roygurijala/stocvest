@@ -16,9 +16,19 @@
  * one composite fetch so the deep dive never contradicts the signal card.
  */
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { borderRadius, roleAccents, spacing, typography, animationDurations } from "@/lib/design-system";
 import { DeepDiveEvidenceTabs } from "@/components/dashboard/trading-room/deep-dive-evidence-tabs";
+import { DeepDiveLaneToggle } from "@/components/dashboard/trading-room/deep-dive-lane-toggle";
+import { PositionSetupRead } from "@/components/dashboard/trading-room/position-setup-read";
+import {
+  buildPositionThesisSummary,
+  parsePositionFundamentals,
+  parsePositionThesisPacket
+} from "@/lib/dashboard/trading-room/position-fundamentals-present";
+import type { DeepDiveLane, FeedLane } from "@/lib/dashboard/trading-room/feed-model";
+import { parseDashboardTradingRoomDeepLink, resolveDeepDiveLaneForCard, stashDeepDiveLanePreference } from "@/lib/nav/dashboard-trading-room-deeplink";
 import {
   tradingRoomEvidenceShellStyle,
   tradingRoomMotionTransition,
@@ -416,122 +426,6 @@ function ScenarioGeometry({
   );
 }
 
-/** Feed-state dot on each lane tab (actionable / near / cooling / potential). */
-function LaneStateDot({ state, colors }: { state: FeedState | null; colors: Colors }) {
-  if (!state) return null;
-  const tone =
-    state === "actionable"
-      ? colors.bullish
-      : state === "near"
-        ? colors.caution
-        : state === "cooling"
-          ? colors.bearish
-          : colors.textMuted;
-  return (
-    <span
-      aria-hidden
-      style={{
-        width: 6,
-        height: 6,
-        borderRadius: "50%",
-        background: tone,
-        flexShrink: 0,
-        boxShadow: state === "actionable" ? `0 0 8px ${tone}99` : undefined
-      }}
-    />
-  );
-}
-
-/**
- * Day / Swing segmented control — desk-colored pills with a clear active state.
- * State dots reflect each lane's feed card when one exists.
- */
-function LaneToggle({
-  activeLane,
-  onChange,
-  dayState,
-  swingState,
-  symbol,
-  colors
-}: {
-  activeLane: "day" | "swing";
-  onChange: (lane: "day" | "swing") => void;
-  /** null = no signal card in current feed for this lane. */
-  dayState: FeedState | null;
-  swingState: FeedState | null;
-  symbol: string;
-  colors: Colors;
-}) {
-  const dayAccent = roleAccents.dark.day;
-  const swingAccent = roleAccents.dark.swing;
-
-  const btn = (
-    lane: "day" | "swing",
-    label: string,
-    laneState: FeedState | null,
-    accent: (typeof roleAccents)["dark"]["day"]
-  ) => {
-    const active = activeLane === lane;
-    const available = laneState !== null;
-    const rail = accent.borderAccent;
-    const text = accent.accentStrong;
-    const tooltip = !available ? `No ${lane} setup for ${symbol} in today's feed` : undefined;
-
-    return (
-      <button
-        key={lane}
-        type="button"
-        role="tab"
-        aria-selected={active}
-        onClick={() => onChange(lane)}
-        title={tooltip}
-        style={{
-          border: "none",
-          background: active ? `${rail}30` : "transparent",
-          boxShadow: active ? `inset 0 0 0 1.5px ${rail}, 0 0 14px ${rail}40` : "none",
-          color: active ? text : colors.textMuted,
-          fontSize: typography.scale.sm,
-          fontWeight: 700,
-          padding: "7px 16px",
-          borderRadius: borderRadius.full,
-          cursor: "pointer",
-          letterSpacing: "0.03em",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          opacity: available || active ? 1 : 0.55,
-          transition: "background .14s, color .14s, box-shadow .14s, opacity .14s",
-          whiteSpace: "nowrap"
-        }}
-      >
-        <LaneStateDot state={laneState} colors={colors} />
-        {label}
-      </button>
-    );
-  };
-
-  return (
-    <div
-      role="tablist"
-      aria-label={`${symbol} desk mode`}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: 4,
-        border: `1px solid ${colors.border}`,
-        borderRadius: borderRadius.full,
-        background: colors.background,
-        flexShrink: 0
-      }}
-    >
-      {btn("day", "Day", dayState, dayAccent)}
-      {btn("swing", "Swing", swingState, swingAccent)}
-    </div>
-  );
-}
-
-
 /** Compact entry / stop / target row under the decision geometry bar. */
 function DecisionLevelStrip({
   entryLow,
@@ -753,6 +647,7 @@ export function DeepDive({
   companyBySymbol,
   snapshot,
   onBackToBrief,
+  onLaneChange,
   isMobile = false,
   colors,
   dataRefreshNonce = 0
@@ -765,22 +660,40 @@ export function DeepDive({
   /** Live quote from dashboard tape when the feed card has no price yet. */
   snapshot?: SnapshotPayload | null;
   onBackToBrief: () => void;
+  /** Sync URL + parent card id when the user toggles Day/Swing/Position. */
+  onLaneChange?: (lane: DeepDiveLane) => void;
   isMobile?: boolean;
   colors: Colors;
   /** Bumped by periodic or per-card refresh to re-fetch deep-dive data. */
   dataRefreshNonce?: number;
 }) {
+  const searchParams = useSearchParams();
+  const urlIntent = useMemo(
+    () => parseDashboardTradingRoomDeepLink(searchParams),
+    [searchParams]
+  );
   const [showBriefDetails, setShowBriefDetails] = useState(false);
   const [evidenceTab, setEvidenceTab] = useState<DeepDiveEvidenceTab>(DEFAULT_DEEP_DIVE_EVIDENCE_TAB);
-  // activeLane allows switching Day/Swing within the deep dive
-  const [activeLane, setActiveLane] = useState<"day" | "swing">(card.lane);
+  // activeLane allows switching Day/Swing/Position within the deep dive
+  const [activeLane, setActiveLane] = useState<DeepDiveLane>(() => resolveDeepDiveLaneForCard(card, urlIntent));
+  const feedLane: FeedLane = activeLane === "day" ? "day" : "swing";
+  const isPositionLane = activeLane === "position";
+
+  const handleLaneChange = useCallback(
+    (lane: DeepDiveLane) => {
+      setActiveLane(lane);
+      stashDeepDiveLanePreference(card.symbol, lane);
+      onLaneChange?.(lane);
+    },
+    [card.symbol, onLaneChange]
+  );
 
   // Sync activeLane when card changes (fixes loading issue when clicking different signals)
   useEffect(() => {
-    setActiveLane(card.lane);
+    setActiveLane(resolveDeepDiveLaneForCard(card, urlIntent));
     setEvidenceTab(DEFAULT_DEEP_DIVE_EVIDENCE_TAB);
     setShowBriefDetails(false);
-  }, [card.symbol, card.lane]);
+  }, [card.symbol, card.id, card.lane, urlIntent]);
 
   const symbolName = useSymbolName(card.symbol);
 
@@ -887,6 +800,8 @@ export function DeepDive({
     composite != null && !isNonRenderableCompositeResponse(composite);
   const isInsufficient = !hasRenderableComposite;
   const allowsScenarioGeometry = feedCardAllowsScenarioGeometry(card);
+  const showSwingDayScenario = !isPositionLane && allowsScenarioGeometry;
+  const showSetupEvidence = (isPositionLane || allowsScenarioGeometry) && !isInsufficient;
 
   const unavailableMessage = useMemo(
     () =>
@@ -946,7 +861,7 @@ export function DeepDive({
     const c = composite as Record<string, unknown>;
     const { riskReward: rr, rrWarning } = resolveCompositeRiskRewardForDecision(c, deskMinRr);
     const ar = typeof c.alignment_ratio === "number" ? c.alignment_ratio : null;
-    const tfCtx = resolveTimeframeContext(c, activeLane);
+    const tfCtx = resolveTimeframeContext(c, feedLane);
     return buildSignalsPageDecision({
       mode: activeLane,
       bias: setupBias,
@@ -958,7 +873,7 @@ export function DeepDive({
       counterTrend: parseCompositeAlignment(composite)?.is_counter_trend === true,
       timeframeCounterTrend: isTimeframeCounterTrend(tfCtx)
     });
-  }, [composite, isInsufficient, setupBias, layerRows, activeLane, deskMinRr]);
+  }, [composite, isInsufficient, setupBias, layerRows, activeLane, deskMinRr, feedLane]);
 
   const previewBlockingLayers = useMemo(
     () => pickPreviewLayers(layerRows, setupBias, 3),
@@ -978,7 +893,10 @@ export function DeepDive({
 
   const timeframeContext = useMemo(() => {
     if (isInsufficient) return null;
-    return resolveTimeframeContext(composite as Record<string, unknown>, activeLane);
+    return resolveTimeframeContext(
+      composite as Record<string, unknown>,
+      activeLane === "day" ? "day" : "swing"
+    );
   }, [composite, isInsufficient, activeLane]);
 
   const ledgerGateSummary = useMemo(
@@ -997,12 +915,12 @@ export function DeepDive({
   const setupJudgment = useMemo(() => {
     if (isInsufficient) return null;
     return resolveSetupJudgmentFromComposite(composite as Record<string, unknown>, {
-      mode: activeLane,
+      mode: feedLane,
       rows: layerRows,
       bias: setupBias,
       alignmentRatio: compositeAlignmentRatio
     });
-  }, [composite, isInsufficient, activeLane, layerRows, setupBias, compositeAlignmentRatio]);
+  }, [composite, isInsufficient, feedLane, layerRows, setupBias, compositeAlignmentRatio]);
 
   // Publish full-depth per-symbol context to the Assistant while this deep dive is open — the
   // same context the Signals desk publishes (decision, layers, readiness, R/R, regime, causal
@@ -1010,10 +928,10 @@ export function DeepDive({
   // resolves the correct desk cache so the chatbot never claims it lacks the on-screen symbol.
   // The publisher clears this automatically when the deep dive closes (component unmount).
   const assistantContext = useMemo<AssistantPageContext | null>(
-    () =>
-      buildSignalsPageAssistantContext({
+    () => {
+      const ctx = buildSignalsPageAssistantContext({
         pageId: "dashboard/trading-room",
-        tradingMode: activeLane,
+        tradingMode: isPositionLane ? "position" : feedLane,
         symbol: card.symbol,
         symbolCommitted: true,
         hasValidSignal: hasRenderableComposite && pageDecision != null,
@@ -1033,9 +951,44 @@ export function DeepDive({
         regularSessionOpen: null,
         gapIntelSnapshot: null,
         signalEvidence: null
-      }),
+      });
+      // ADR-004 POS-D10 / POS-AI-3 — enrich the Position tab context with the glass-box
+      // fundamentals read: verdict + one-line summary, plus the pillar grid, weakest pillar,
+      // and a condensed thesis so the assistant can answer pillar-specific questions without
+      // inventing scores. Sourced from the same composite body the grid + thesis card render;
+      // never a swing/day verdict.
+      if (!ctx || !isPositionLane) return ctx;
+      const body = (hasRenderableComposite ? composite : null) as Record<string, unknown> | null;
+      if (!body) return ctx;
+      const fund = parsePositionFundamentals(body);
+      const packet = parsePositionThesisPacket(body);
+      const enriched: AssistantPageContext = { ...ctx };
+      const verdict = (fund?.verdict ?? "").trim().toLowerCase();
+      if (verdict === "bullish" || verdict === "neutral" || verdict === "bearish") {
+        enriched.position_verdict = verdict;
+      }
+      if (fund?.reasoning) enriched.position_fundamentals_summary = fund.reasoning;
+      if (fund && fund.pillars.length > 0) {
+        enriched.position_pillars = fund.pillars.map((p) => ({
+          id: p.pillarId,
+          label: p.label,
+          score: p.score,
+          verdict: p.verdict
+        }));
+        if (fund.weakestPillarId) {
+          const weak = fund.pillars.find((p) => p.pillarId === fund.weakestPillarId);
+          enriched.position_weakest_pillar = weak
+            ? `${weak.pillarId} · ${weak.label}`
+            : fund.weakestPillarId;
+        }
+      }
+      const thesisSummary = buildPositionThesisSummary(packet);
+      if (thesisSummary) enriched.position_thesis_summary = thesisSummary;
+      return enriched;
+    },
     [
-      activeLane,
+      isPositionLane,
+      feedLane,
       card.symbol,
       hasRenderableComposite,
       isInitialLoading,
@@ -1114,10 +1067,10 @@ export function DeepDive({
     if (isInsufficient) return null;
     return buildGeometryHonestyPresent({
       body: composite as Record<string, unknown>,
-      tradingMode: activeLane,
+      tradingMode: isPositionLane ? "position" : feedLane,
       price: displayPrice
     });
-  }, [composite, isInsufficient, activeLane, displayPrice]);
+  }, [composite, isInsufficient, feedLane, isPositionLane, displayPrice]);
 
   // Single source of truth for the scenario panel: stop / entry zone / target,
   // the current-price marker, and the dollar risk/reward. Prefers the engine's
@@ -1334,7 +1287,8 @@ export function DeepDive({
     return typeof raw === "boolean" ? raw : null;
   }, [composite, isInsufficient]);
 
-  const { plan: trackedPlan, refresh: refreshTrackedPlan } = useTrackedPlan(card.symbol, activeLane);
+  const trackedPlanMode = activeLane === "position" ? "swing" : activeLane;
+  const { plan: trackedPlan, refresh: refreshTrackedPlan } = useTrackedPlan(card.symbol, trackedPlanMode);
 
   const livePlanAssessment = useMemo(() => {
     return buildLiveAssessmentFromDeepDive({
@@ -1387,7 +1341,7 @@ export function DeepDive({
     if (!scenario || isInsufficient || setupBias === "Neutral") return;
     const plan = buildTrackedPlanFromDeepDive({
       symbol: card.symbol,
-      mode: activeLane,
+      mode: feedLane,
       setupBias,
       layersAligned: setupJudgment?.process.layersAligned ?? null,
       layersTotal: setupJudgment?.process.layersTotal ?? null,
@@ -1413,7 +1367,7 @@ export function DeepDive({
 
   const handleClearPlan = () => {
     const id = trackedPlan?.id;
-    removeTrackedPlanForSymbol(card.symbol, activeLane);
+    removeTrackedPlanForSymbol(card.symbol, trackedPlanMode);
     notifyTrackedPlanUpdated();
     refreshTrackedPlan();
     if (id) void pushTrackedPlanRemovalToServer(id);
@@ -1439,7 +1393,7 @@ export function DeepDive({
   }, [activeLane, composite, isInsufficient, layerRows, pageDecision?.state]);
 
   const brief = useMemo(() => {
-    if (!allowsScenarioGeometry) {
+    if (!allowsScenarioGeometry && !isPositionLane) {
       return (
         card.verdict?.trim() ||
         "Session activity — not a vetted setup. Momentum and context only; scenario geometry requires passing desk quality gates."
@@ -1462,6 +1416,7 @@ export function DeepDive({
       });
   }, [
     allowsScenarioGeometry,
+    isPositionLane,
     card.symbol,
     card.verdict,
     displayDirection.direction,
@@ -1479,7 +1434,7 @@ export function DeepDive({
 
   // Jargon-free default read; the detailed `brief` above sits behind a "details" toggle.
   const plainSummary = useMemo(() => {
-    if (!allowsScenarioGeometry) return brief;
+    if (!allowsScenarioGeometry && !isPositionLane) return brief;
     return buildPlainSummary({
       symbol: card.symbol,
       direction: displayDirection.direction,
@@ -1494,6 +1449,7 @@ export function DeepDive({
     });
   }, [
     allowsScenarioGeometry,
+    isPositionLane,
     brief,
     card.symbol,
     displayDirection.direction,
@@ -1519,7 +1475,40 @@ export function DeepDive({
             : stateTone(card.state, colors);
   const pct = displayChangePct;
   const pctTone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
-  const laneAccent = activeLane === "day" ? roleAccents.dark.day.borderAccent : roleAccents.dark.swing.borderAccent;
+  const positionFundamentals = useMemo(
+    () =>
+      activeLane === "position" && composite
+        ? parsePositionFundamentals(composite as Record<string, unknown>)
+        : null,
+    [activeLane, composite]
+  );
+
+  const positionThesisPacket = useMemo(
+    () =>
+      activeLane === "position" && composite
+        ? parsePositionThesisPacket(composite as Record<string, unknown>)
+        : null,
+    [activeLane, composite]
+  );
+
+  const signalValidDays = useMemo(() => {
+    if (!composite || isInsufficient) return null;
+    const raw = (composite as Record<string, unknown>).signal_valid_days;
+    return typeof raw === "number" && Number.isFinite(raw) ? Math.round(raw) : null;
+  }, [composite, isInsufficient]);
+
+  const signalBasisLabel = useMemo(() => {
+    if (!composite || isInsufficient) return null;
+    const raw = (composite as Record<string, unknown>).signal_basis_label;
+    return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  }, [composite, isInsufficient]);
+
+  const laneAccent =
+    activeLane === "day"
+      ? roleAccents.dark.day.borderAccent
+      : activeLane === "position"
+        ? roleAccents.dark.position.borderAccent
+        : roleAccents.dark.swing.borderAccent;
   const directionColor =
     displayDirection.direction === "long"
       ? colors.bullish
@@ -1676,9 +1665,9 @@ export function DeepDive({
               </span>
             ) : null}
           </div>
-          <LaneToggle
+          <DeepDiveLaneToggle
             activeLane={activeLane}
-            onChange={setActiveLane}
+            onChange={handleLaneChange}
             dayState={dayState}
             swingState={swingState}
             symbol={card.symbol}
@@ -1730,7 +1719,7 @@ export function DeepDive({
             </span>
           ) : null}
         </div>
-        {!isInsufficient && allowsScenarioGeometry ? (
+        {!isInsufficient && showSwingDayScenario ? (
           <p
             data-testid="deep-dive-trigger-line"
             style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.45 }}
@@ -1763,7 +1752,7 @@ export function DeepDive({
           <p style={{ margin: 0, fontSize: typography.scale.base, lineHeight: 1.7, color: colors.text }}>
             {plainSummary}
           </p>
-          {allowsScenarioGeometry && brief && brief !== plainSummary ? (
+          {showSwingDayScenario && brief && brief !== plainSummary ? (
             <div style={{ marginTop: spacing[2] }}>
               <button
                 type="button"
@@ -1796,7 +1785,7 @@ export function DeepDive({
             </div>
           ) : null}
         </div>
-        {allowsScenarioGeometry && scenario && geometryTradeable ? (
+        {(showSwingDayScenario || (isPositionLane && scenario)) && scenario && geometryTradeable ? (
           <div data-testid="deep-dive-decision-geometry">
             <ScenarioGeometry
               currentPrice={scenario.currentPrice}
@@ -1819,7 +1808,7 @@ export function DeepDive({
               colors={colors}
             />
           </div>
-        ) : allowsScenarioGeometry && scenario && !geometryTradeable ? (
+        ) : (showSwingDayScenario || (isPositionLane && scenario)) && scenario && !geometryTradeable ? (
           <p
             data-testid="geometry-not-tradeable"
             style={{ margin: 0, fontSize: typography.scale.sm, lineHeight: 1.5, color: colors.caution, fontWeight: 600 }}
@@ -1892,7 +1881,7 @@ export function DeepDive({
         ) : null}
         {!loading && evidenceTab === "setup" ? (
           <div data-testid="deep-dive-section-setup" style={{ display: "flex", flexDirection: "column", gap: spacing[4] }}>
-            {!allowsScenarioGeometry ? (
+            {!allowsScenarioGeometry && !isPositionLane ? (
               <SessionMoverContext
                 card={card}
                 company={resolvedCompany}
@@ -1901,7 +1890,7 @@ export function DeepDive({
                 colors={colors}
               />
             ) : null}
-            {allowsScenarioGeometry && !isInsufficient ? (
+            {showSetupEvidence ? (
               <>
                 {/* 1. Bias + layer force summary (prototype panel 1) */}
                 <SignalsBiasRationalePanel
@@ -1910,10 +1899,32 @@ export function DeepDive({
                   signalSummary={layerSignalSummary}
                   layerAlignmentLine={layerAlignmentLine}
                 />
-                {pageDecision ? (
+                {isPositionLane ? (
+                  positionFundamentals ? (
+                    <PositionSetupRead
+                      symbol={card.symbol}
+                      bias={setupBias}
+                      fundamentals={positionFundamentals}
+                      thesisPacket={positionThesisPacket}
+                      signalBasisLabel={signalBasisLabel}
+                      layerAlignmentLine={layerAlignmentLine}
+                      signalValidDays={signalValidDays}
+                      colors={colors}
+                    />
+                  ) : (
+                    <p
+                      data-testid="position-fundamentals-unavailable"
+                      style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.55 }}
+                    >
+                      Fundamentals pillars are not available for {card.symbol} yet — the position composite may still
+                      be loading degraded data or this symbol lacks full FMP coverage.
+                    </p>
+                  )
+                ) : null}
+                {!isPositionLane && pageDecision ? (
                   <SignalsSetupRead
                     symbol={card.symbol}
-                    tradingMode={activeLane}
+                    tradingMode={feedLane}
                     bias={setupBias}
                     rows={layerRows}
                     decision={pageDecision}
@@ -1926,7 +1937,7 @@ export function DeepDive({
                     minRiskReward={deskMinRr}
                   />
                 ) : null}
-                {allowsScenarioGeometry && !isInsufficient && scenario ? (
+                {showSwingDayScenario && scenario ? (
                   <TrackPlanPanel
                     plan={trackedPlan}
                     diff={planDiff}
@@ -1945,8 +1956,8 @@ export function DeepDive({
                 {geometryHonesty?.showPanel ? (
                   <GeometryHonestyPanel present={geometryHonesty} colors={colors} />
                 ) : null}
-                {/* 6. Scenario geometry + R/R gauge side-by-side + Copy scenario */}
-                {displayPrice != null ? (
+                {/* Scenario geometry + R/R — swing/day full stack; position shows structure only (no What-If). */}
+                {displayPrice != null && (showSwingDayScenario || (isPositionLane && scenario)) ? (
                   <article
                     style={{
                       background: colors.surface,
@@ -1975,7 +1986,7 @@ export function DeepDive({
                             color: colors.textMuted
                           }}
                         >
-                          Scenario details
+                          {isPositionLane ? "Position structure" : "Scenario details"}
                         </p>
                         {scenario?.t1TooClose ? (
                           <p
@@ -2174,7 +2185,8 @@ export function DeepDive({
                     </div>
                     {/* Inline what-if planner — nudge entry/stop/target, live R/R (planning only).
                         Gated like the Signals scenario-adjust: Developing+ only, never not_aligned/invalidated. */}
-                    {scenario &&
+                    {showSwingDayScenario &&
+                    scenario &&
                     setupBias !== "Neutral" &&
                     isExecutionStageEligibleForScenarioAdjust({
                       layersAligned: setupJudgment?.process.layersAligned,
@@ -2182,7 +2194,7 @@ export function DeepDive({
                     }) ? (
                       <ScenarioWhatIf
                         direction={setupBias === "Bearish" ? "bearish" : "bullish"}
-                        mode={activeLane}
+                        mode={feedLane}
                         current={scenario.currentPrice}
                         systemStop={scenario.stopPrice}
                         systemTarget={scenario.targetPrice}
@@ -2199,11 +2211,14 @@ export function DeepDive({
                       />
                     ) : null}
                     {/* Copy scenario button */}
+                    {showSwingDayScenario ? (
                     <button
                       type="button"
                       onClick={() => {
                         const lines = [
-                          `${card.symbol} — ${displayDirection.bannerLabel} · ${activeLane === "day" ? "Day desk" : "Swing desk"}`,
+                          `${card.symbol} — ${displayDirection.bannerLabel} · ${
+                            activeLane === "day" ? "Day desk" : "Swing desk"
+                          }`,
                           `Current: $${card.price?.toFixed(2) ?? "—"}`,
                           scenario ? `Stop: $${scenario.stopPrice.toFixed(2)}` : "",
                           scenario
@@ -2238,11 +2253,12 @@ export function DeepDive({
                     >
                       Copy scenario
                     </button>
+                    ) : null}
                   </article>
                 ) : null}
               </>
             ) : null}
-            {allowsScenarioGeometry && isInsufficient ? (
+            {(allowsScenarioGeometry || isPositionLane) && isInsufficient ? (
               <div
                 data-testid="deep-dive-insufficient"
                 style={{ display: "flex", flexDirection: "column", gap: spacing[3] }}
@@ -2278,7 +2294,7 @@ export function DeepDive({
           <div data-testid="deep-dive-section-layers">
           <SignalsLayerBreakdown
             symbol={card.symbol}
-            tradingMode={activeLane}
+            tradingMode={isPositionLane ? "position" : feedLane}
             bias={setupBias}
             rows={layerRows}
             loading={loading}
@@ -2302,7 +2318,9 @@ export function DeepDive({
             <p style={{ margin: `0 0 ${spacing[3]}`, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
               {activeLane === "day"
                 ? "5-min candles · full session · signal levels overlaid — context only, not entry signals"
-                : "Daily candles · 6-month lookback · signal levels overlaid — context only, not entry signals"}
+                : activeLane === "position"
+                  ? "Daily candles · weekly structural context · signal levels overlaid — long-horizon desk"
+                  : "Daily candles · 6-month lookback · signal levels overlaid — context only, not entry signals"}
             </p>
             <FullPriceChart
               key={`chart-${card.symbol}-${activeLane}-${dataRefreshNonce}`}
@@ -2318,7 +2336,7 @@ export function DeepDive({
         ) : null}
         {!loading && evidenceTab === "context" ? (
           <div data-testid="deep-dive-section-context" style={{ display: "flex", flexDirection: "column", gap: spacing[3] }}>
-            {marketEnvironment && apiDecisionState && allowsScenarioGeometry ? (
+            {marketEnvironment && apiDecisionState && (showSwingDayScenario || isPositionLane) ? (
               <RiskStackPanel
                 environment={marketEnvironment}
                 signalState={apiDecisionState}
@@ -2335,11 +2353,11 @@ export function DeepDive({
                 testId="trading-room-deep-dive-market-context"
               />
             ) : null}
-            {timeframeContext ? (
+            {timeframeContext && !isPositionLane ? (
               <DeepDiveCollapsible title="Timeframe alignment" testId="deep-dive-context-timeframe" colors={colors}>
                 <TimeframeContextPanel
                   context={timeframeContext}
-                  tradingMode={activeLane}
+                  tradingMode={feedLane}
                   setupBias={setupBias}
                   compact
                 />
@@ -2350,18 +2368,20 @@ export function DeepDive({
                 <CausalNarrativePanel narrative={causalNarrative} compact />
               </DeepDiveCollapsible>
             ) : null}
+            {!isPositionLane ? (
             <DeepDiveCollapsible title="Evolution" testId="deep-dive-context-evolution" colors={colors}>
               <SetupEvolutionPanel
                 key={`evolution-${card.symbol}-${activeLane}-${dataRefreshNonce}`}
                 symbol={card.symbol}
-                tradingMode={activeLane}
+                tradingMode={feedLane}
               />
             </DeepDiveCollapsible>
-            {allowsScenarioGeometry ? (
+            ) : null}
+            {showSwingDayScenario ? (
               <AiSetupRead
                 symbol={card.symbol}
                 direction={displayDirection.direction}
-                desk={activeLane}
+                desk={feedLane}
                 layers={layerRows.map((r) => ({ layer: r.key, status: r.status ?? "" }))}
                 confirming={(insight?.confirming_signals ?? []).map((s) => s.label).filter(Boolean)}
                 conflicting={(insight?.conflicting_signals ?? []).map((s) => s.label).filter(Boolean)}

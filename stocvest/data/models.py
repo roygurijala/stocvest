@@ -434,10 +434,12 @@ class SignalRecord(BaseModel):
     sector_snapshot_json: str | None = None
     internals_snapshot_json: str | None = None
     layer_scores_json: str | None = None
+    #: ADR-004 POS-AI-7: entry-time F1–F5 pillar baseline (JSON) for informational thesis drift.
+    pillar_snapshot_json: str | None = None
     #: Parameter bundle version; used as **logic_version_id** on the API for validation audit.
     parameter_version: str | None = None
     status: str = "active"  # active | incomplete
-    mode: Literal["day", "swing"] = "day"
+    mode: Literal["day", "swing", "position"] = "day"
     #: True only when strict validation gates passed at entry (user ledger rows).
     ledger_qualified: bool = False
     # ── Signal validation ledger (optional; populated when closed / enriched) ──
@@ -496,8 +498,8 @@ class SignalRecord(BaseModel):
     @classmethod
     def _norm_mode(cls, v: str) -> str:
         m = str(v or "day").strip().lower()
-        if m not in {"day", "swing"}:
-            raise ValueError("mode must be day or swing")
+        if m not in {"day", "swing", "position"}:
+            raise ValueError("mode must be day, swing, or position")
         return m
 
     @field_validator("capture_kind")
@@ -578,6 +580,7 @@ class SignalRecord(BaseModel):
             sector_snapshot_json=_s("sector_snapshot_json"),
             internals_snapshot_json=_s("internals_snapshot_json"),
             layer_scores_json=_s("layer_scores_json"),
+            pillar_snapshot_json=_s("pillar_snapshot_json"),
             parameter_version=_s("parameter_version"),
             status=str(item.get("status") or "active"),
             mode=_coerce_signal_mode(item.get("mode")),
@@ -620,8 +623,10 @@ def _norm_vo(raw: str | None) -> str | None:
     return s
 
 
-def _coerce_signal_mode(raw: object) -> Literal["day", "swing"]:
+def _coerce_signal_mode(raw: object) -> Literal["day", "swing", "position"]:
     m = str(raw or "day").strip().lower()
     if m == "swing":
         return "swing"
+    if m == "position":
+        return "position"
     return "day"

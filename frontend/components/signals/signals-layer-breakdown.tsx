@@ -72,7 +72,7 @@ const LAYER_ICONS: Record<string, React.ComponentType<{ className?: string }>> =
 
 type Props = {
   symbol: string;
-  tradingMode: "day" | "swing";
+  tradingMode: "day" | "swing" | "position";
   bias: SignalsSetupBias;
   rows: SignalsLayerRowInput[];
   loading: boolean;
@@ -198,7 +198,7 @@ export function SignalsLayerBreakdown({
       {loading ? (
         <div style={{ padding: `${spacing[6]} ${spacing[2]}` }} data-testid="signals-layers-loader">
           <CuteLoader
-            label={`Loading ${tradingMode === "swing" ? "swing" : "day"} signal`}
+            label={`Loading ${tradingMode === "swing" ? "swing" : tradingMode === "position" ? "position" : "day"} signal`}
             sublabel={`Refreshing layers for ${symbol.trim().toUpperCase()}.`}
             compact
           />

@@ -48,9 +48,10 @@ def signal_resolution_scheduled_handler(event: LambdaEvent, context: LambdaConte
         n1h = int(result["resolved_1h"])
         n24h = int(result["resolved_24h"])
         _LOG.info(
-            "Ledger monitor: swing=%s day=%s skipped=%s errors=%s; Resolved: %s (1h), %s (24h)",
+            "Ledger monitor: swing=%s day=%s position=%s skipped=%s errors=%s; Resolved: %s (1h), %s (24h)",
             result.get("swing_closed", 0),
             result.get("day_closed", 0),
+            result.get("position_closed", 0),
             result.get("skipped", 0),
             result.get("errors", 0),
             n1h,
@@ -63,6 +64,7 @@ def signal_resolution_scheduled_handler(event: LambdaEvent, context: LambdaConte
             "updated_1d": n24h,
             "ledger_swing_closed": int(result.get("swing_closed", 0)),
             "ledger_day_closed": int(result.get("day_closed", 0)),
+            "ledger_position_closed": int(result.get("position_closed", 0)),
             "ledger_monitor_skipped": int(result.get("skipped", 0)),
             "ledger_monitor_errors": int(result.get("errors", 0)),
         }

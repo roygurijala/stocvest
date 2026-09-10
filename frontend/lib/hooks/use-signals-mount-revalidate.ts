@@ -47,7 +47,11 @@ export function useSignalsMountRevalidate(
     // Revalidate composite too — session-restored symbols can otherwise show a
     // stale-while-revalidate SWR payload on the main page while evidence was
     // built from the synthetic fallback before the first fetch completed.
-    const keys = [compositeKey(sym, mode), snapshotKey(sym), gapIntelKey(sym, mode)] as const;
+    const keys = [
+      compositeKey(sym, mode),
+      snapshotKey(sym),
+      ...(mode !== "position" ? [gapIntelKey(sym, mode as GapIntelMode)] : [])
+    ] as const;
 
     // Defer so the SWR hooks' initial subscribe fetch runs first — avoids
     // aborting an in-flight composite request on mode-toggle tests and first paint.

@@ -21,8 +21,9 @@ import httpx
 from stocvest.data.models import NewsArticle, Newssentiment, UserProfile
 from stocvest.signals.geopolitical_scanner import ANTHROPIC_API_URL, ANTHROPIC_VERSION
 from stocvest.signals.news_copy import no_qualifying_news_reasoning
+from stocvest.signals.position_copy_guard import enforce_position_read
 from stocvest.utils.api_rate_limits import await_claude_api_slot
-from stocvest.utils.config import AI_MODEL_FAST, get_settings
+from stocvest.utils.config import AI_MODEL_FAST, AI_MODEL_STANDARD, get_settings
 from stocvest.utils.logging import get_logger
 from stocvest.utils.redis_client import get_sync_redis
 
@@ -259,6 +260,143 @@ class AIExplanationService:
         await self._cache_write(key, result)
         return result
 
+    async def explain_position_setup_read(
+        self,
+        *,
+        symbol: str,
+        verdict: str,
+        bull_case: list[dict[str, Any]],
+        bear_case: list[dict[str, Any]],
+        open_questions: list[dict[str, Any]],
+        pillar_snapshot_hash: str,
+        user_profile: UserProfile,
+    ) -> ExplanationResult:
+        """Long-horizon Investment Read for the Position deep-dive (ADR-004 POS-AI-2).
+
+        Narrates the deterministic thesis packet (F1-F5 pillars + supporting layers) into a
+        short, non-advisory read. Paid users get a Claude narration keyed by
+        ``pillar_snapshot_hash`` (reused until the underlying pillars change); free users and
+        any failure get the deterministic brief woven from the same packet. The AI never sets
+        or overrides scores/verdicts and never emits buy/sell/allocation guidance.
+        """
+        sym = symbol.strip().upper()
+        v = (verdict or "neutral").strip().lower() or "neutral"
+        det = self._deterministic_position_read(sym, v, bull_case, bear_case, open_questions)
+
+        if not user_profile.has_ai_explanations:
+            return ExplanationResult(
+                text=det, source="deterministic", upgrade_available=True, cached=False
+            )
+
+        ny_date = _ny_calendar_date()
+        h = (pillar_snapshot_hash or "nohash").strip() or "nohash"
+        key = f"stocvest:ai_explain:position_read:{sym}:{v}:{ny_date}:{h}"
+
+        hit = await self._cache_read(key)
+        if hit is not None:
+            return hit
+
+        text_ai = await self._claude_text_or_none(
+            system=(
+                "You are a long-horizon investment research analyst writing a short Investment "
+                "Read for the Position desk (multi-year quality holdings, NOT day/swing trades). "
+                "Write 3-5 sentences in a natural, varied voice — never a template. Narrate ONLY "
+                "the provided bull points, bear/watch points, and open questions; do not invent "
+                "data. Reference the specific pillars by name (F1 profitability/quality, F2 growth, "
+                "F3 balance sheet, F4 valuation, F5 earnings quality) or supporting layers when "
+                "citing a point. Lead with what actually stands out for THIS company, name the key "
+                "risk or open question, and surface uncertainty where data quality is limited. "
+                "Do NOT mention numeric scores or percentages. Never give investment advice: no "
+                "buy/sell/hold, no price targets, no allocation or position-sizing guidance. "
+                "End with exactly: Signal data only."
+            ),
+            user_prompt=self._build_position_read_prompt(
+                symbol=sym,
+                verdict=v,
+                bull_case=bull_case,
+                bear_case=bear_case,
+                open_questions=open_questions,
+            ),
+            max_tokens=280,
+            temperature=0.6,
+            # POS-AI-12: Position Investment Read may use the stronger tier (Sonnet) when the
+            # flag is on; every other explanation stays on the fast tier. Default OFF = Haiku.
+            model=(
+                AI_MODEL_STANDARD
+                if get_settings().stocvest_position_read_strong_model_enabled
+                else AI_MODEL_FAST
+            ),
+        )
+        # POS-D12: never cache/serve an AI read that slips into advice/recommendation/hype
+        # language — fall back to the deterministic (already-compliant) brief instead.
+        safe_text, used_fallback = enforce_position_read(text_ai, det)
+        if text_ai and not used_fallback:
+            result = ExplanationResult(
+                text=safe_text, source="ai", upgrade_available=False, cached=False
+            )
+        else:
+            if text_ai and used_fallback:
+                _LOG.warning(
+                    "position_read_copy_guard_fallback",
+                    extra={"symbol": sym, "reason": "banned_copy_or_empty"},
+                )
+            result = ExplanationResult(
+                text=det, source="deterministic", upgrade_available=False, cached=False
+            )
+        await self._cache_write(key, result)
+        return result
+
+    def _deterministic_position_read(
+        self,
+        symbol: str,
+        verdict: str,
+        bull_case: list[dict[str, Any]],
+        bear_case: list[dict[str, Any]],
+        open_questions: list[dict[str, Any]],
+    ) -> str:
+        sym = symbol or "This name"
+        parts = [
+            f"On the Position desk (long-horizon quality), {sym} reads {verdict} on fundamentals."
+        ]
+        top_bull = next((str(b.get("text") or "").strip() for b in (bull_case or []) if b.get("text")), "")
+        top_bear = next((str(b.get("text") or "").strip() for b in (bear_case or []) if b.get("text")), "")
+        top_q = next((str(b.get("text") or "").strip() for b in (open_questions or []) if b.get("text")), "")
+        if top_bull:
+            parts.append(f"Bull: {top_bull}")
+        if top_bear:
+            parts.append(f"Watch: {top_bear}")
+        if top_q:
+            parts.append(f"Open question: {top_q}")
+        parts.append("Signal data only.")
+        return " ".join(parts)
+
+    def _build_position_read_prompt(
+        self,
+        *,
+        symbol: str,
+        verdict: str,
+        bull_case: list[dict[str, Any]],
+        bear_case: list[dict[str, Any]],
+        open_questions: list[dict[str, Any]],
+    ) -> str:
+        def _compact(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+            out: list[dict[str, str]] = []
+            for x in (rows or [])[:6]:
+                text = str(x.get("text") or "").strip()
+                if not text:
+                    continue
+                out.append({"text": text[:240], "source": str(x.get("source") or "")})
+            return out
+
+        lines = [
+            f"symbol={symbol}",
+            f"fundamentals_verdict={verdict}",
+            f"bull_points={json.dumps(_compact(bull_case))}",
+            f"bear_or_watch_points={json.dumps(_compact(bear_case))}",
+            f"open_questions={json.dumps(_compact(open_questions))}",
+        ]
+        return "\n".join(lines)
+
     def _deterministic_setup_read_copy(self, symbol: str, direction: str, desk: str) -> str:
         lean = (
             "leans long" if direction in ("long", "bullish")
@@ -404,7 +542,13 @@ class AIExplanationService:
             _LOG.debug("ai_explanations cache write skip: %s", type(exc).__name__)
 
     async def _claude_text_or_none(
-        self, *, system: str, user_prompt: str, max_tokens: int, temperature: float = 0.0
+        self,
+        *,
+        system: str,
+        user_prompt: str,
+        max_tokens: int,
+        temperature: float = 0.0,
+        model: str | None = None,
     ) -> str | None:
         settings = get_settings()
         # Tests may monkeypatch env vars after settings cache is primed.
@@ -412,7 +556,7 @@ class AIExplanationService:
         if not api_key:
             return None
         payload = {
-            "model": AI_MODEL_FAST,
+            "model": model or AI_MODEL_FAST,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "messages": [{"role": "user", "content": f"{system}\n\n{user_prompt}"}],

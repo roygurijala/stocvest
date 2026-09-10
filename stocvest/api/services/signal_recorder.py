@@ -125,6 +125,8 @@ def _record_to_item(rec: SignalRecord) -> dict[str, Any]:
         item["internals_snapshot_json"] = rec.internals_snapshot_json
     if rec.layer_scores_json:
         item["layer_scores_json"] = rec.layer_scores_json
+    if rec.pillar_snapshot_json:
+        item["pillar_snapshot_json"] = rec.pillar_snapshot_json
     if rec.parameter_version:
         item["parameter_version"] = rec.parameter_version
     if rec.status != "active":
@@ -281,7 +283,7 @@ class InMemorySignalRecorder:
         cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
         sym_filter = symbol.strip().upper() if symbol else None
         mode_filter = mode.strip().lower() if mode else None
-        if mode_filter not in (None, "", "day", "swing"):
+        if mode_filter not in (None, "", "day", "swing", "position"):
             mode_filter = None
         scope = _scope_key(user_id)
         skip = 0
@@ -335,7 +337,7 @@ class InMemorySignalRecorder:
         from_utc = from_at.astimezone(timezone.utc) if from_at.tzinfo else from_at.replace(tzinfo=timezone.utc)
         to_utc = to_at.astimezone(timezone.utc) if to_at.tzinfo else to_at.replace(tzinfo=timezone.utc)
         mode_filter = mode.strip().lower() if mode else None
-        if mode_filter not in (None, "", "day", "swing"):
+        if mode_filter not in (None, "", "day", "swing", "position"):
             mode_filter = None
         out: list[SignalRecord] = []
         for it in self._items.values():
@@ -413,7 +415,7 @@ class InMemorySignalRecorder:
         scope = _scope_key(user_id.strip())
         sym_u = symbol.strip().upper()
         m = mode.strip().lower()
-        if m not in ("day", "swing"):
+        if m not in ("day", "swing", "position"):
             return False
         for it in self._items.values():
             if it.get("scope_key") != scope:
@@ -452,7 +454,7 @@ class InMemorySignalRecorder:
         outcome = outcome_from_prices(direction, float(it["price_at_signal"]), float(exit_price))
         val = _validation_label_from_directional_outcome(outcome)
         mo = mode.strip().lower()
-        if mo == "swing":
+        if mo in ("swing", "position"):
             it["price_1d_after"] = Decimal(str(float(exit_price)))
             it["resolved_1d"] = True
             it["outcome_1d"] = outcome
@@ -592,7 +594,7 @@ class DynamoDBSignalRecorder:
 
         scope = _scope_key(user_id)
         mode_filter = mode.strip().lower() if mode else None
-        if mode_filter not in (None, "", "day", "swing"):
+        if mode_filter not in (None, "", "day", "swing", "position"):
             mode_filter = None
         sym_filter = symbol.strip().upper() if symbol else None
         cutoff = datetime.now(timezone.utc) - timedelta(days=max(1, days))
@@ -696,7 +698,7 @@ class DynamoDBSignalRecorder:
         from_utc = from_at.astimezone(timezone.utc) if from_at.tzinfo else from_at.replace(tzinfo=timezone.utc)
         to_utc = to_at.astimezone(timezone.utc) if to_at.tzinfo else to_at.replace(tzinfo=timezone.utc)
         mode_filter = mode.strip().lower() if mode else None
-        if mode_filter not in (None, "", "day", "swing"):
+        if mode_filter not in (None, "", "day", "swing", "position"):
             mode_filter = None
         out: list[SignalRecord] = []
         for raw in self._scan_all():
@@ -853,7 +855,7 @@ class DynamoDBSignalRecorder:
         scope = _scope_key(user_id.strip())
         sym_u = symbol.strip().upper()
         m = mode.strip().lower()
-        if m not in ("day", "swing"):
+        if m not in ("day", "swing", "position"):
             return False
         cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=400)).replace(microsecond=0).isoformat().replace(
             "+00:00", "Z"
@@ -932,7 +934,7 @@ class DynamoDBSignalRecorder:
         if market_regime_exit:
             names["#mre"] = "market_regime_exit"
             vals[":mre"] = market_regime_exit
-        if mo == "swing":
+        if mo in ("swing", "position"):
             names["#p1d"] = "price_1d_after"
             names["#o1d"] = "outcome_1d"
             names["#r1d"] = "resolved_1d"

@@ -22,11 +22,13 @@ locals {
     "POST /v1/desk/refresh"         = { module_key = "scanner", authorizer = true }
 
     "POST /v1/signals/ai/explanations"       = { module_key = "signals", authorizer = true }
+    "POST /v1/signals/position/research"     = { module_key = "signals", authorizer = true }
     "POST /v1/signals/assistant/chat"        = { module_key = "signals", authorizer = true }
     "POST /v1/public/assistant/chat"         = { module_key = "signals", authorizer = false }
     "POST /v1/signals/swing/composite"       = { module_key = "signals", authorizer = true }
     "POST /v1/signals/composite/real"        = { module_key = "signals", authorizer = true }
     "POST /v1/signals/composite/swing"       = { module_key = "signals", authorizer = true }
+    "POST /v1/signals/composite/position"    = { module_key = "signals", authorizer = true }
     "POST /v1/signals/swing/synthesis/parse" = { module_key = "signals", authorizer = true }
     "POST /v1/signals/day/setups"            = { module_key = "signals", authorizer = true }
     "POST /v1/signals/swing/setups"          = { module_key = "signals", authorizer = true }

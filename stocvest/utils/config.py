@@ -312,6 +312,54 @@ class Settings(BaseSettings):
         False,
         alias="STOCVEST_DAY_PROFIT_TARGET_EXIT_ENABLED",
     )
+    # ADR-004 POS-D9 — synthetic capture user for platform-wide Position ledger shadow rows.
+    # Position "gems" are platform-wide (no per-user watchlist basis like day/swing), so the
+    # weekly ledger_capture_position job writes user-scoped rows under this id and mirrors a
+    # de-identified PUBLIC copy the report/backtest scans. Not a real account.
+    stocvest_position_ledger_user: str = Field(
+        "platform-position-ledger",
+        alias="STOCVEST_POSITION_LEDGER_USER",
+    )
+    # ADR-004 POS-D11 — Position universe hygiene (gem gate G8). Micro-cap / illiquidity
+    # floors, applied only when the candidate body carries market cap / avg dollar volume
+    # (graceful pass when absent, e.g. the curated v1 large-cap universe). Leveraged/inverse
+    # and SPAC-shell exclusions are symbol/name based and always enforced.
+    stocvest_position_min_market_cap_usd: float = Field(
+        500_000_000.0,
+        alias="STOCVEST_POSITION_MIN_MARKET_CAP_USD",
+    )
+    stocvest_position_min_avg_dollar_volume_usd: float = Field(
+        20_000_000.0,
+        alias="STOCVEST_POSITION_MIN_AVG_DOLLAR_VOLUME_USD",
+    )
+    # ADR-004 POS-AI-4 — Position Research tab (external primary-source context: SEC 10-K
+    # Item 1A risk-factor excerpt + Perplexity "recent developments" with citations). Ships
+    # DARK: paid-gated AND flag-gated. External content is INFORMATIONAL ONLY — it is badged
+    # "External · not scored" and NEVER feeds the pillar math / composite score.
+    stocvest_position_research_enabled: bool = Field(
+        False,
+        alias="STOCVEST_POSITION_RESEARCH_ENABLED",
+    )
+    # Per-user/day cap on external research bundle builds (each does 1 Perplexity call +
+    # 1 SEC fetch). Guards API budget/latency; 0 disables the cap (dev only).
+    stocvest_position_research_max_per_user_per_day: int = Field(
+        15,
+        alias="STOCVEST_POSITION_RESEARCH_MAX_PER_USER_PER_DAY",
+    )
+    # ADR-004 POS-D15: DynamoDB table for the weekly Position scan snapshot (cross-instance
+    # gem list). Empty = in-process store only (no persistence); set to enable the Dynamo store.
+    stocvest_position_scan_table: str = Field(
+        "",
+        alias="STOCVEST_POSITION_SCAN_TABLE",
+    )
+    # ADR-004 POS-AI-12: use the stronger (Sonnet/AI_MODEL_STANDARD) tier for the Position
+    # Investment Read ONLY (low call volume, high value). Paid-gated + cache-keyed as today;
+    # the deterministic fallback + copy guard are unchanged. Default off (OFF = Haiku, the
+    # existing behavior — byte-identical prompt/caching, only the model id differs when ON).
+    stocvest_position_read_strong_model_enabled: bool = Field(
+        False,
+        alias="STOCVEST_POSITION_READ_STRONG_MODEL_ENABLED",
+    )
     # B76 — swing/day target geometry v2. Fixes two defects that produce misleading
     # risk/reward in the deep-dive "what-if" planner:
     #   (A) analyst price targets (Benzinga/Perplexity, ~12-month fundamental PTs) reach

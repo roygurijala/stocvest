@@ -15,7 +15,7 @@ ENVIRONMENT_POLICY_VERSION = "env_policy_v2"
 
 EnvironmentTier = Literal["normal", "elevated", "stressed", "crisis"]
 TargetPolicy = Literal["t1_and_t2", "t1_preferred", "t1_only"]
-Mode = Literal["day", "swing"]
+Mode = Literal["day", "swing", "position"]
 SizeGuidance = Literal["full", "reduced", "minimal"]
 
 # Enter thresholds
@@ -243,8 +243,10 @@ def build_market_environment_policy(
     if tier == "crisis":
         new_swing = False
         new_day = False
+        new_position = False
         min_rr_swing = 3.0
         min_rr_day = 2.0
+        min_rr_position = 3.0
         target_policy: TargetPolicy = "t1_only"
         size_guidance: SizeGuidance = "minimal"
         headline = (
@@ -255,8 +257,10 @@ def build_market_environment_policy(
     elif tier == "stressed":
         new_swing = False
         new_day = True
+        new_position = False
         min_rr_swing = 3.0
         min_rr_day = 1.8
+        min_rr_position = 2.5
         target_policy = "t1_only"
         size_guidance = "reduced"
         headline = (
@@ -267,8 +271,10 @@ def build_market_environment_policy(
     elif tier == "elevated":
         new_swing = True
         new_day = True
+        new_position = True
         min_rr_swing = 3.0
         min_rr_day = 1.8
+        min_rr_position = 2.0
         target_policy = "t1_preferred"
         size_guidance = "reduced"
         headline = (
@@ -279,8 +285,10 @@ def build_market_environment_policy(
     else:
         new_swing = True
         new_day = True
+        new_position = True
         min_rr_swing = 2.0
         min_rr_day = 1.3
+        min_rr_position = 1.5
         target_policy = "t1_and_t2"
         size_guidance = "full"
         headline = (
@@ -296,8 +304,15 @@ def build_market_environment_policy(
     if chg5 is not None and chg5 >= SPIKE_5D_CHANGE_PCT:
         headline = f"{headline} VIX +{chg5:.1f}% over ~5 sessions."
 
-    min_rr = min_rr_day if mode == "day" else min_rr_swing
-    ledger_environment_pass = new_day if mode == "day" else new_swing
+    if mode == "day":
+        min_rr = min_rr_day
+        ledger_environment_pass = new_day
+    elif mode == "position":
+        min_rr = min_rr_position
+        ledger_environment_pass = new_position
+    else:
+        min_rr = min_rr_swing
+        ledger_environment_pass = new_swing
 
     reg = str(macro_regime or "neutral").strip()
     if reg.lower() == "avoid":
@@ -319,8 +334,10 @@ def build_market_environment_policy(
         "mode": mode,
         "new_swing_allowed": new_swing,
         "new_day_allowed": new_day,
+        "new_position_allowed": new_position,
         "min_rr_swing": min_rr_swing,
         "min_rr_day": min_rr_day,
+        "min_rr_position": min_rr_position,
         "min_rr": min_rr,
         "target_policy": target_policy,
         "size_guidance": size_guidance,
@@ -331,7 +348,12 @@ def build_market_environment_policy(
 
 def min_risk_reward_from_environment(market_environment: dict[str, Any] | None, *, mode: Mode) -> float:
     if isinstance(market_environment, dict):
-        key = "min_rr_day" if mode == "day" else "min_rr_swing"
+        if mode == "day":
+            key = "min_rr_day"
+        elif mode == "position":
+            key = "min_rr_position"
+        else:
+            key = "min_rr_swing"
         v = _float_or_none(market_environment.get(key))
         if v is not None:
             return v
@@ -340,10 +362,15 @@ def min_risk_reward_from_environment(market_environment: dict[str, Any] | None, 
             return v2
     from stocvest.api.services.signal_validation_eligibility import (
         MIN_RISK_REWARD_DAY,
+        MIN_RISK_REWARD_POSITION,
         MIN_RISK_REWARD_SWING,
     )
 
-    return MIN_RISK_REWARD_DAY if mode == "day" else MIN_RISK_REWARD_SWING
+    if mode == "day":
+        return MIN_RISK_REWARD_DAY
+    if mode == "position":
+        return MIN_RISK_REWARD_POSITION
+    return MIN_RISK_REWARD_SWING
 
 
 def target_policy_from_environment(market_environment: dict[str, Any] | None) -> TargetPolicy:
@@ -437,6 +464,10 @@ def environment_for_ledger_gate(
         allowed = bool(market_environment.get("new_day_allowed", True))
         tier = str(market_environment.get("environment_tier") or "normal")
         return allowed, f"new_day_allowed_{tier}"
+    if mode == "position":
+        allowed = bool(market_environment.get("new_position_allowed", True))
+        tier = str(market_environment.get("environment_tier") or "normal")
+        return allowed, f"new_position_allowed_{tier}"
     allowed = bool(market_environment.get("new_swing_allowed", True))
     tier = str(market_environment.get("environment_tier") or "normal")
     return allowed, f"new_swing_allowed_{tier}"

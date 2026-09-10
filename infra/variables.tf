@@ -176,6 +176,28 @@ variable "news_consumer_sqs_event_source_enabled" {
   default     = false
 }
 
+variable "position_ledger_capture_enabled" {
+  description = <<-EOT
+    ADR-004 POS-D9: enable the weekly Friday-post-close Position validation ledger
+    capture schedule (VAL-POS shadow soak). Default true — applying starts the soak.
+    Set false to pause without destroying the resource. Position ALERTS/EMAILS remain
+    OFF until VAL-POS soak sign-off (POS-D10) regardless of this flag.
+  EOT
+  type        = bool
+  default     = true
+}
+
+variable "position_scan_batch_enabled" {
+  description = <<-EOT
+    ADR-004 POS-D15 (full): enable the weekly Sunday Position gem-scan batch over the
+    expanded FMP-prefiltered universe. Default false — ships dark. Enabling also requires
+    the snapshot store to be provisioned (STOCVEST_POSITION_SCAN_TABLE) so the ranked list
+    is warm across Lambda instances; otherwise the batch only warms the invoking instance.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "lambda_account_concurrent_execution_quota" {
   description = <<-EOT
     AWS Lambda account concurrent execution quota (Service Quotas value).

@@ -71,6 +71,85 @@ def test_ratio_to_layer_count(ratio, expected):
     assert smc.ratio_to_layer_count(ratio) == expected
 
 
+def test_ratio_to_layer_count_position_mode_seven_layers():
+    assert smc.ratio_to_layer_count(0.5, mode="position") == 4
+    assert smc.signal_layer_count_for_mode("position") == 7
+    assert smc.signal_layers_for_mode("position")[0] == "fundamentals"
+
+
+def test_position_signal_layers_distinct_from_six_layer_set():
+    assert "fundamentals" not in smc.SIGNAL_LAYERS
+    assert smc.POSITION_SIGNAL_LAYER_COUNT == 7
+    assert smc.SIGNAL_LAYERS_BY_MODE["position"] == smc.POSITION_SIGNAL_LAYERS
+
+
+def test_default_position_weights_sum_to_one():
+    total = sum(smc.DEFAULT_POSITION_COMPOSITE_WEIGHTS.values())
+    assert total == pytest.approx(1.0)
+    ok, errors = smc.validate_composite_weights(smc.DEFAULT_POSITION_COMPOSITE_WEIGHTS, mode="position")
+    assert ok is True
+    assert errors == []
+
+
+@pytest.mark.parametrize(
+    "weights,mode,ok",
+    [
+        (smc.DEFAULT_POSITION_COMPOSITE_WEIGHTS, "position", True),
+        ({k: v for k, v in smc.DEFAULT_BASE_WEIGHTS_FALLBACK.items()}, "swing", True),
+        ({"fundamentals": 0.5, "technical": 0.5}, "position", False),
+        (None, "swing", False),
+    ],
+)
+def test_validate_composite_weights(weights, mode, ok):
+    passed, _ = smc.validate_composite_weights(weights, mode=mode)
+    assert passed is ok
+
+
+def test_normalize_composite_weights_recovers_invalid_sum():
+    bad = dict(smc.DEFAULT_POSITION_COMPOSITE_WEIGHTS)
+    bad["fundamentals"] = 0.5
+    bad["technical"] = 0.5
+    normalized = smc.normalize_composite_weights(bad, mode="position")
+    ok, _ = smc.validate_composite_weights(normalized, mode="position")
+    assert ok is True
+    assert sum(normalized.values()) == pytest.approx(1.0)
+    assert len(normalized) == 7
+
+
+def test_normalize_composite_weights_fills_missing_layers_from_defaults():
+    partial = {"fundamentals": 0.5, "technical": 0.5}
+    normalized = smc.normalize_composite_weights(partial, mode="position")
+    assert set(normalized.keys()) == set(smc.POSITION_LAYER_WEIGHT_KEYS)
+    assert sum(normalized.values()) == pytest.approx(1.0)
+    ok, _ = smc.validate_composite_weights(normalized, mode="position")
+    assert ok is True
+
+
+def test_normalize_composite_weights_replaces_invalid_negative_weight():
+    bad = dict(smc.DEFAULT_POSITION_COMPOSITE_WEIGHTS)
+    bad["fundamentals"] = -0.1
+    normalized = smc.normalize_composite_weights(bad, mode="position")
+    assert normalized["fundamentals"] > 0
+    assert len(normalized) == 7
+    assert sum(normalized.values()) == pytest.approx(1.0)
+    ok, _ = smc.validate_composite_weights(normalized, mode="position")
+    assert ok is True
+
+
+def test_composite_weights_from_block_position():
+    from stocvest.config.signal_parameters import default_position_composite_parameters
+
+    block = default_position_composite_parameters()
+    weights = smc.composite_weights_from_block(block, mode="position")
+    assert set(weights.keys()) == set(smc.POSITION_LAYER_WEIGHT_KEYS)
+    assert weights["fundamentals"] == pytest.approx(0.32)
+
+
+def test_position_gate_catalog_documents_key_gates():
+    assert "min_rr_t1" in smc.POSITION_GATE_CATALOG
+    assert "geometry_tradeable" in smc.POSITION_GATE_CATALOG
+
+
 def test_normalize_to_unit():
     assert smc.normalize_to_unit(5, 10) == 0.5
     assert smc.normalize_to_unit(-5, 10) == 0.5  # magnitude only

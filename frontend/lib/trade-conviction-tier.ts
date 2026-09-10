@@ -13,6 +13,8 @@ import type { TradeDecisionState } from "@/lib/signal-evidence/trade-decision";
 export const MIN_RR_VERDICT_SWING = 2.0;
 /** Day ledger minimum (matches `MIN_RISK_REWARD_DAY` backend). */
 export const MIN_RR_VERDICT_DAY = 1.3;
+/** Position desk default min R/R (matches backend `min_rr_position` normal tier). */
+export const MIN_RR_VERDICT_POSITION = 1.5;
 /** A+ label always requires this R:R regardless of desk. */
 export const MIN_RR_A_TIER = 2.0;
 /** B+ band floor. */
@@ -34,13 +36,13 @@ export type TradeConvictionTierResult = {
   isDefaultRecommendation: boolean;
 };
 
-function scenarioBuilderNoteForMode(mode: "swing" | "day"): string {
+function scenarioBuilderNoteForMode(mode: "swing" | "day" | "position"): string {
   const deskMin = minRiskRewardForVerdict(mode);
   return `Full Scenario Builder sheet opens at ${deskMin.toFixed(1)} : 1 on reference levels for this desk (${MIN_RR_A_TIER.toFixed(1)} : 1 for A-tier / high conviction).`;
 }
 
 export type TradeConvictionInput = {
-  mode: "swing" | "day";
+  mode: "swing" | "day" | "position";
   riskReward: number;
   layersAligned: number;
   layersTotal?: number;
@@ -50,11 +52,13 @@ export type TradeConvictionInput = {
   hasInsufficient?: boolean;
 };
 
-export function minRiskRewardForVerdict(mode: "swing" | "day"): number {
-  return mode === "day" ? MIN_RR_VERDICT_DAY : MIN_RR_VERDICT_SWING;
+export function minRiskRewardForVerdict(mode: "swing" | "day" | "position"): number {
+  if (mode === "day") return MIN_RR_VERDICT_DAY;
+  if (mode === "position") return MIN_RR_VERDICT_POSITION;
+  return MIN_RR_VERDICT_SWING;
 }
 
-export function isRrBelowVerdictThreshold(riskReward: number, mode: "swing" | "day"): boolean {
+export function isRrBelowVerdictThreshold(riskReward: number, mode: "swing" | "day" | "position"): boolean {
   if (!Number.isFinite(riskReward)) return true;
   return riskReward < minRiskRewardForVerdict(mode);
 }

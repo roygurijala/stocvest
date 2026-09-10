@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-TradingMode = Literal["day", "swing"]
+TradingMode = Literal["day", "swing", "position"]
 PresetId = Literal["continuation", "dip", "breakout"]
 Direction = Literal["bullish", "bearish"]
 
@@ -36,6 +36,10 @@ def reference_stop_atr_k(
         return ATR_K_BY_PRESET[preset]
     if trading_mode == "day":
         return 0.85
+    if trading_mode == "position":
+        from stocvest.api.services.position_reference_stop_policy import POSITION_STOP_ATR_K
+
+        return POSITION_STOP_ATR_K
     return SWING_STOP_ATR_K
 
 
@@ -107,6 +111,15 @@ def _min_stop_distance_usd(
 ) -> float:
     if entry <= 0:
         return 0.1
+    if trading_mode == "position":
+        from stocvest.api.services.position_reference_stop_policy import (
+            POSITION_MIN_STOP_ATR_MULT,
+            POSITION_MIN_STOP_PCT,
+        )
+
+        atr_floor = atr * POSITION_MIN_STOP_ATR_MULT if atr is not None and atr > 0 else 0.0
+        pct_floor = entry * POSITION_MIN_STOP_PCT
+        return max(atr_floor, pct_floor, 0.1)
     if trading_mode == "swing":
         atr_floor = atr * SWING_MIN_STOP_ATR_MULT if atr is not None and atr > 0 else 0.0
         pct_floor = entry * SWING_MIN_STOP_PCT
@@ -168,7 +181,7 @@ def _merge_structural_and_atr_stop(
     if atr_stop is None:
         return structural, False
 
-    swing = trading_mode != "day"
+    swing = trading_mode in ("swing", "position")
     if direction == "bullish":
         if swing:
             merged = _round4(min(structural, atr_stop))
@@ -243,8 +256,14 @@ def resolve_merged_reference_stop(
     return final_stop, used_atr_floor
 
 
-def format_merged_stop_provenance(base_label: str, *, atr_k: float, used_atr_floor: bool) -> str:
+def format_merged_stop_provenance(
+    base_label: str,
+    *,
+    atr_k: float,
+    used_atr_floor: bool,
+    atr_label: str = "ATR14",
+) -> str:
     base = (base_label or "Structural stop").strip()
     if not used_atr_floor:
         return base
-    return f"{base}; widened to {atr_k}×ATR14 floor"
+    return f"{base}; widened to {atr_k}×{atr_label} floor"

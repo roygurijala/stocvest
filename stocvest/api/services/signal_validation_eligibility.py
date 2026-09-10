@@ -41,6 +41,7 @@ MIN_ACTIONABLE_SCORE_0_100 = 72
 MIN_ALIGNMENT_RATIO = 0.52
 MIN_RISK_REWARD_SWING = 2.0
 MIN_RISK_REWARD_DAY = 1.3
+MIN_RISK_REWARD_POSITION = 1.5
 # Backward-compatible name for swing-oriented call sites / evidence copy.
 MIN_RISK_REWARD = MIN_RISK_REWARD_SWING
 MIN_SECTOR_LAYER_SCORE = 45.0
@@ -206,6 +207,51 @@ def evaluate_swing_ledger_entry(
         ok = False
     else:
         gates["sector_gate"] = {"pass": True, "value": sec}
+
+    return ok, gates
+
+
+def evaluate_position_desk_entry(
+    *,
+    response_status: str,
+    verdict: CompositeVerdict,
+    risk_reward: float | None,
+    market_environment: dict[str, Any] | None = None,
+) -> tuple[bool, dict[str, Any]]:
+    """Position desk: geometry-first gates until POS-D9 ledger soak."""
+    gates: dict[str, Any] = {}
+    ds = derive_decision_state(response_status=response_status, verdict=verdict)
+    gates["decision_state"] = {
+        "pass": ds == DECISION_STATE_ACTIONABLE,
+        "value": ds,
+        "need": DECISION_STATE_ACTIONABLE,
+    }
+    if ds != DECISION_STATE_ACTIONABLE:
+        return False, gates
+
+    ok = True
+    min_rr = min_risk_reward_from_environment(market_environment, mode="position")
+    env_ok, env_reason = environment_for_ledger_gate(market_environment, mode="position")
+    gates["market_environment"] = {
+        "pass": env_ok,
+        "reason": env_reason,
+        "tier": (
+            str(market_environment.get("environment_tier"))
+            if isinstance(market_environment, dict)
+            else None
+        ),
+    }
+    if not env_ok:
+        ok = False
+
+    if risk_reward is not None and float(risk_reward) < min_rr:
+        gates["risk_reward"] = {"pass": False, "value": float(risk_reward), "min": min_rr}
+        ok = False
+    elif risk_reward is None:
+        gates["risk_reward"] = {"pass": False, "value": None, "reason": "missing_risk_reward"}
+        ok = False
+    else:
+        gates["risk_reward"] = {"pass": True, "value": float(risk_reward)}
 
     return ok, gates
 

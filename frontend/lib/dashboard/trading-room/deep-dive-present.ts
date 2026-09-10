@@ -324,13 +324,18 @@ export function buildRichBrief(input: {
     watchFor: string | null;
   } | null;
   currentRr: number | null;
-  activeLane: "day" | "swing";
+  activeLane: "day" | "swing" | "position";
   deskMinRr: number;
   verdictFallback: string;
 }): string {
   const dir =
     input.direction === "long" ? "long" : input.direction === "short" ? "short" : "two-sided";
-  const desk = input.activeLane === "day" ? "day desk" : "swing desk";
+  const desk =
+    input.activeLane === "day"
+      ? "day desk"
+      : input.activeLane === "position"
+        ? "position desk"
+        : "swing desk";
   const variant = stableVariant(`${input.symbol}|${input.setupBias}|${input.pageDecisionState ?? ""}`);
 
   let s1: string;
@@ -417,7 +422,7 @@ export function buildRichBrief(input: {
 export function buildPlainSummary(input: {
   symbol: string;
   direction: TradeDirection;
-  activeLane: "day" | "swing";
+  activeLane: "day" | "swing" | "position";
   layersAligned: number | null;
   layersTotal: number | null;
   decisionState: string | null;
@@ -428,7 +433,12 @@ export function buildPlainSummary(input: {
 }): string {
   const sym = input.symbol.trim().toUpperCase();
   if (!sym) return input.fallback;
-  const desk = input.activeLane === "day" ? "day-trading" : "swing";
+  const desk =
+    input.activeLane === "day"
+      ? "day-trading"
+      : input.activeLane === "position"
+        ? "position"
+        : "swing";
   const dirPhrase =
     input.direction === "long"
       ? "a buy (long) idea"

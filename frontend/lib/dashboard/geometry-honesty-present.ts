@@ -115,7 +115,7 @@ function resolvePlanRr(
 /** Build email-parity geometry rows for deep-dive Setup. */
 export function buildGeometryHonestyPresent(input: {
   body: Record<string, unknown>;
-  tradingMode: "swing" | "day";
+  tradingMode: "swing" | "day" | "position";
   price?: number | null;
 }): GeometryHonestyPresent {
   const { body, tradingMode, price } = input;
@@ -128,7 +128,7 @@ export function buildGeometryHonestyPresent(input: {
       ? body.geometry_block_reason.trim()
       : null;
   const stopTooTight = blockReason === "stop_too_tight_for_swing";
-  const isSwing = tradingMode === "swing";
+  const isSwing = tradingMode === "swing" || tradingMode === "position";
 
   const rows: GeometryHonestyRow[] = [];
 
@@ -145,7 +145,7 @@ export function buildGeometryHonestyPresent(input: {
   }
 
   const t1Rr = resolveT1Rr(body, entry);
-  const planRr = resolvePlanRr(body, entry, tradingMode);
+  const planRr = resolvePlanRr(body, entry, tradingMode === "position" ? "swing" : tradingMode);
 
   if (isSwing) {
     const swingRr = planRr ?? t1Rr;

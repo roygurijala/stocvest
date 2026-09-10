@@ -7,7 +7,7 @@
 
 import type { ScenarioDirection } from "@/lib/scenario/types";
 
-export type StopPolicyTradingMode = "day" | "swing";
+export type StopPolicyTradingMode = "day" | "swing" | "position";
 
 function round4(n: number): number {
   return Math.round(n * 10000) / 10000;
@@ -20,6 +20,11 @@ export function minStopDistanceUsd(
   tradingMode?: StopPolicyTradingMode | null
 ): number {
   if (!Number.isFinite(entry) || entry <= 0) return 0.1;
+  if (tradingMode === "position") {
+    const atrFloor = atr != null && Number.isFinite(atr) && atr > 0 ? atr * 2.0 : 0;
+    const pctFloor = entry * 0.1;
+    return Math.max(atrFloor, pctFloor, 0.1);
+  }
   if (tradingMode === "swing") {
     const atrFloor = atr != null && Number.isFinite(atr) && atr > 0 ? atr * 1.5 : 0;
     const pctFloor = entry * 0.06;

@@ -3,8 +3,12 @@ from stocvest.utils.intent_detector import (
     is_chart_relevant_query,
     is_discovery_query,
     is_forecast_query,
+    is_gem_compare_query,
+    is_gem_discovery_query,
+    is_gem_lookup_query,
     is_market_overview_query,
     is_mode_sensitive_query,
+    is_position_intent_query,
     is_price_chart_query,
     is_watchlist_intelligence_query,
     is_comparison_query,
@@ -132,4 +136,59 @@ def test_is_mode_sensitive_query_covers_discovery_and_opportunity() -> None:
     assert is_mode_sensitive_query("what are the momentum stocks this morning")
     assert is_mode_sensitive_query("what are the best opportunities from my watchlist today")
     assert not is_mode_sensitive_query("what is a P/E ratio")
+
+
+# ── ADR-004 POS-D10 — position "gem" intents ──────────────────────────────────
+
+
+def test_gem_discovery_query_matches_list_phrasing() -> None:
+    assert is_gem_discovery_query("what are today's gems?")
+    assert is_gem_discovery_query("find me some long-term stocks to buy")
+    assert is_gem_discovery_query("show me the best long-term opportunities")
+    assert is_gem_discovery_query("gem candidates this week")
+    assert is_gem_discovery_query("which stocks to invest in for the long term")
+    assert is_gem_discovery_query("any investment candidates?")
+
+
+def test_gem_discovery_query_ignores_unrelated_and_empty() -> None:
+    assert not is_gem_discovery_query("what's moving today?")
+    assert not is_gem_discovery_query("what is a P/E ratio")
+    assert not is_gem_discovery_query("")
+
+
+def test_gem_lookup_query_matches_single_name_phrasing() -> None:
+    assert is_gem_lookup_query("is MSFT a gem?")
+    assert is_gem_lookup_query("is it a gem")
+    assert is_gem_lookup_query("is NVDA a good long-term hold?")
+    assert is_gem_lookup_query("what's the long-term outlook here")
+    assert is_gem_lookup_query("how does AAPL score for the long term")
+
+
+def test_gem_lookup_query_ignores_unrelated_and_empty() -> None:
+    assert not is_gem_lookup_query("is NVDA a good day trade")
+    assert not is_gem_lookup_query("what's the price of NVDA")
+    assert not is_gem_lookup_query("")
+
+
+def test_is_position_intent_query_covers_all() -> None:
+    assert is_position_intent_query("what are today's gems?")
+    assert is_position_intent_query("is MSFT a gem?")
+    assert is_position_intent_query("compare KO vs PEP for the long term")
+    assert not is_position_intent_query("how's the market today")
+
+
+def test_is_gem_compare_query_true_for_long_horizon_comparisons() -> None:
+    assert is_gem_compare_query("compare KO vs PEP for the long term")
+    assert is_gem_compare_query("which is the better quality compounder, KO or PEP?")
+    assert is_gem_compare_query("MSFT vs AAPL on fundamentals")
+    assert is_gem_compare_query("compare these two as long-term investments")
+
+
+def test_is_gem_compare_query_false_without_investment_cue() -> None:
+    # Plain swing/day comparison — stays off the gem-compare path.
+    assert not is_gem_compare_query("compare NVDA vs AMD")
+    assert not is_gem_compare_query("which is stronger, NVDA or AMD, for a day trade")
+    # Comparison cue but no second signal, or empty.
+    assert not is_gem_compare_query("long-term outlook for NVDA")  # no comparison cue
+    assert not is_gem_compare_query("")
 

@@ -15,6 +15,9 @@ import type { SnapshotPayload } from "@/lib/api/market";
 
 export type FeedLane = "day" | "swing";
 
+/** Deep-dive desk selector — includes Position lookup (not a feed lane). */
+export type DeepDiveLane = FeedLane | "position";
+
 /** Single ranked verdict state. Ordering matters: lower index = hotter. */
 export type FeedState = "actionable" | "near" | "potential" | "cooling";
 
