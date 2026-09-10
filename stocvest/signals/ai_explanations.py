@@ -299,7 +299,7 @@ class AIExplanationService:
         text_ai = await self._claude_text_or_none(
             system=(
                 "You are a long-horizon investment research analyst writing a short Investment "
-                "Read for the Position desk (multi-year quality holdings, NOT day/swing trades). "
+                "Read for the Long Term desk (multi-year quality holdings, NOT day/swing trades). "
                 "Write 3-5 sentences in a natural, varied voice — never a template. Narrate ONLY "
                 "the provided bull points, bear/watch points, and open questions; do not invent "
                 "data. Reference the specific pillars by name (F1 profitability/quality, F2 growth, "
@@ -480,7 +480,7 @@ class AIExplanationService:
     ) -> str:
         sym = symbol or "This name"
         parts = [
-            f"On the Position desk (long-horizon quality), {sym} reads {verdict} on fundamentals."
+            f"On the Long Term desk (long-horizon quality), {sym} reads {verdict} on fundamentals."
         ]
         top_bull = next((str(b.get("text") or "").strip() for b in (bull_case or []) if b.get("text")), "")
         top_bear = next((str(b.get("text") or "").strip() for b in (bear_case or []) if b.get("text")), "")

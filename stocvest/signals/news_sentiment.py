@@ -32,6 +32,7 @@ DEFAULT_MAX_CONCURRENCY = 5
 # Composite news windows (aligned with `NewsAnalyzer` `mode` kwarg).
 DAY_NEWS_LOOKBACK_HOURS = 8
 SWING_NEWS_LOOKBACK_HOURS = 120  # ~5 trading sessions of headlines for swing context
+POSITION_NEWS_LOOKBACK_HOURS = 720  # ~30 days of headlines for the long-horizon desk
 
 
 def swing_recency_weight(published_at: datetime, now: datetime) -> float:
@@ -50,6 +51,27 @@ def swing_recency_weight(published_at: datetime, now: datetime) -> float:
     if age_hours <= 96:
         return 0.40
     return 0.25
+
+
+def position_recency_weight(published_at: datetime, now: datetime) -> float:
+    """
+    Decay multiplier for the long-horizon (position) news layer.
+
+    Same monotonic shape as ``swing_recency_weight`` but stretched to the desk's
+    ~30-day window: a multi-year holding cares about the last several *weeks* of
+    fundamental narrative, not the last few sessions. Recent news still dominates,
+    but a 3-week-old catalyst is not decayed to near-zero the way swing does.
+    """
+    age_days = (now - published_at).total_seconds() / 86_400.0
+    if age_days <= 7:
+        return 1.0
+    if age_days <= 14:
+        return 0.80
+    if age_days <= 21:
+        return 0.60
+    if age_days <= 30:
+        return 0.45
+    return 0.30
 
 
 @dataclass(frozen=True)

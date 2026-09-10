@@ -33,7 +33,7 @@ type ReadState =
 
 /** Client-side mirror of the deterministic read — shown instantly before any AI call. */
 function localDeterministicRead(symbol: string, packet: PositionThesisPacket): string {
-  const parts = [`On the Position desk (long-horizon quality), ${symbol} reads ${packet.verdict} on fundamentals.`];
+  const parts = [`On the Long Term desk (long-horizon quality), ${symbol} reads ${packet.verdict} on fundamentals.`];
   if (packet.bullCase[0]) parts.push(`Bull: ${packet.bullCase[0].text}`);
   if (packet.bearCase[0]) parts.push(`Watch: ${packet.bearCase[0].text}`);
   if (packet.openQuestions[0]) parts.push(`Open question: ${packet.openQuestions[0].text}`);

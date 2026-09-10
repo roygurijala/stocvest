@@ -1258,7 +1258,7 @@ function TradingRoomBody({
         counts={counts}
         updatedAtIso={updatedAtIso}
         onOpenSymbol={openSymbolFromSearch}
-        searchPlaceholder="Look up any symbol on the Position desk…"
+        searchPlaceholder="Look up any symbol on the Long Term desk…"
         bleed={bleed}
         isMobile={isMobile}
         colors={colors}

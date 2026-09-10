@@ -9,6 +9,26 @@ def _snap(sym: str, pct: float) -> Snapshot:
     return Snapshot(symbol=sym, last_trade_price=100.0, change_percent=pct, prev_close=99.0)
 
 
+def test_position_mode_scores_13week_relative_strength(mock_parameter_store) -> None:
+    """ADR-004 POS-AI: the long-horizon desk scores the ~13-week average-weekly
+    relative strength (weekly threshold path), not the 1d/5d momentum path."""
+    s = SectorAnalyzer().analyze(
+        "NVDA",
+        _snap("SOXX", 0.0),  # intraday snapshot % is ignored on the weekly path
+        _snap("SPY", 0.0),
+        mock_parameter_store.sector,
+        sector_display_name="Semiconductors",
+        use_weekly=True,
+        weekly_sector_pct=1.5,  # avg-weekly sector return over the quarter
+        weekly_spy_pct=0.2,
+        sector_momentum=None,  # bypass the short-horizon persistence path
+        mode="position",
+    )
+    assert s.status == "available"
+    assert s.score is not None and s.score >= 60  # sector clearly leading SPY
+    assert any("13w avg" in c for c in s.chips)
+
+
 def test_outperformance_bullish(mock_parameter_store) -> None:
     s = SectorAnalyzer().analyze(
         "NVDA",

@@ -25,7 +25,9 @@ from stocvest.signals.news_impact import (
 from stocvest.signals.news_ipo_narrative import classify_ipo_narrative_adjustment
 from stocvest.signals.news_sentiment import (
     DAY_NEWS_LOOKBACK_HOURS,
+    POSITION_NEWS_LOOKBACK_HOURS,
     SWING_NEWS_LOOKBACK_HOURS,
+    position_recency_weight,
     swing_recency_weight,
 )
 from stocvest.utils.config import get_settings
@@ -158,16 +160,22 @@ class NewsAnalyzer:
         params: NewsParameters,
         *,
         lookback_hours: int | None = None,
-        mode: Literal["day", "swing"] = "day",
+        mode: Literal["day", "swing", "position"] = "day",
         benzinga_data: BenzingaMultiResult | None = None,
         current_price: float | None = None,
     ) -> NewsLayerResult:
         sym = symbol.upper().strip()
         now = datetime.now(timezone.utc)
+        # The analyst/Benzinga sub-scorers only distinguish intraday (day) from
+        # multi-day (swing) horizons; the long-horizon position desk reuses the
+        # swing analyst blend but changes only the headline lookback + decay.
+        analyst_mode: Literal["day", "swing"] = "day" if mode == "day" else "swing"
         if lookback_hours is not None:
             lb_h = float(lookback_hours)
         elif mode == "swing":
             lb_h = float(SWING_NEWS_LOOKBACK_HOURS)
+        elif mode == "position":
+            lb_h = float(POSITION_NEWS_LOOKBACK_HOURS)
         else:
             lb_h = float(params.lookback_hours if params.lookback_hours else DAY_NEWS_LOOKBACK_HOURS)
         cutoff = now - timedelta(hours=lb_h)
@@ -191,7 +199,7 @@ class NewsAnalyzer:
         quality = [a for a in rows if is_quality_article(a)]
 
         structured = compute_structured_analyst_score(
-            benzinga_data, mode=mode, current_price=current_price, now=now
+            benzinga_data, mode=analyst_mode, current_price=current_price, now=now
         )
         analyst_feed_state = structured.feed_state
         analyst_active = structured.feed_state == "available" and (
@@ -201,12 +209,12 @@ class NewsAnalyzer:
         if not quality:
             headline_avg = 0.0
             catalyst_type_extra, event_adjust, analyst_consensus, analyst_chips = self._benzinga_event_adjustment(
-                benzinga_data, mode=mode, now=now, structured=structured
+                benzinga_data, mode=analyst_mode, now=now, structured=structured
             )
             weighted_avg = blend_headline_and_analyst(
                 headline_avg,
                 structured.score,
-                mode=mode,
+                mode=analyst_mode,
                 analyst_active=analyst_active,
             )
             weighted_avg = max(-1.0, min(1.0, weighted_avg + event_adjust))
@@ -296,6 +304,8 @@ class NewsAnalyzer:
             combined = w_time * rel * _article_benzinga_weight(art)
             if mode == "swing":
                 combined *= swing_recency_weight(pub.astimezone(timezone.utc), now)
+            elif mode == "position":
+                combined *= position_recency_weight(pub.astimezone(timezone.utc), now)
             ipo_adj = classify_ipo_narrative_adjustment(sym, title, desc)
             if ipo_adj.tag == "ipo_narrative_competitive":
                 ipo_competitive_filtered += 1
@@ -333,7 +343,7 @@ class NewsAnalyzer:
 
         headline_avg = sum(s * w for s, w in zip(sentiments, weights)) / wsum
         catalyst_type_extra, event_adjust, analyst_consensus, analyst_chips = self._benzinga_event_adjustment(
-            benzinga_data, mode=mode, now=now, structured=structured
+            benzinga_data, mode=analyst_mode, now=now, structured=structured
         )
         if catalyst_type_extra:
             catalyst_type = catalyst_type_extra
@@ -341,7 +351,7 @@ class NewsAnalyzer:
         weighted_avg = blend_headline_and_analyst(
             headline_avg,
             structured.score,
-            mode=mode,
+            mode=analyst_mode,
             analyst_active=analyst_active,
         )
         weighted_avg = max(-1.0, min(1.0, weighted_avg + event_adjust))

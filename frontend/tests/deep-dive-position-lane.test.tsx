@@ -17,7 +17,7 @@ const colors = {
 };
 
 describe("DeepDiveLaneToggle (POS-D7)", () => {
-  it("renders Day, Swing, and Position tabs", () => {
+  it("renders Day, Swing, and Long Term tabs", () => {
     render(
       <DeepDiveLaneToggle
         activeLane="swing"
@@ -30,10 +30,10 @@ describe("DeepDiveLaneToggle (POS-D7)", () => {
     );
     expect(screen.getByRole("tab", { name: /Day/i })).toBeTruthy();
     expect(screen.getByRole("tab", { name: /Swing/i })).toBeTruthy();
-    expect(screen.getByRole("tab", { name: /Position/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /Long Term/i })).toBeTruthy();
   });
 
-  it("calls onChange with position when Position tab clicked", () => {
+  it("calls onChange with position when Long Term tab clicked", () => {
     let lane: string = "swing";
     render(
       <DeepDiveLaneToggle
@@ -47,7 +47,7 @@ describe("DeepDiveLaneToggle (POS-D7)", () => {
         colors={colors}
       />
     );
-    fireEvent.click(screen.getByRole("tab", { name: /Position/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Long Term/i }));
     expect(lane).toBe("position");
   });
 });

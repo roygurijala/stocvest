@@ -77,6 +77,57 @@ def test_bullish_threshold_param_actually_drives_verdict() -> None:
     assert r_permissive.verdict != r_strict.verdict
 
 
+# ---------------------------------------------------------------------------
+# Long-horizon (position) desk — structural macro (ADR-004 POS-AI engine fix)
+# ---------------------------------------------------------------------------
+
+
+def test_position_mode_neutralizes_intraday_index_momentum(mock_parameter_store) -> None:
+    """The long-horizon desk must not let today's index tape sway macro: a big
+    up day and a big down day produce the SAME structural macro score."""
+    up = MacroAnalyzer().analyze(
+        make_spy_snapshot(2.5),
+        make_qqq_snapshot(3.0),
+        make_vix_snapshot(16.0, 0.0),
+        [],
+        mock_parameter_store.macro,
+        mode="position",
+    )
+    down = MacroAnalyzer().analyze(
+        make_spy_snapshot(-2.5),
+        make_qqq_snapshot(-3.0),
+        make_vix_snapshot(16.0, 0.0),
+        [],
+        mock_parameter_store.macro,
+        mode="position",
+    )
+    assert up.score is not None and up.score == down.score
+    assert "Structural (long-horizon)" in up.chips
+
+    # Control: swing/day (default mode) still respond to the intraday tape.
+    up_swing = MacroAnalyzer().analyze(
+        make_spy_snapshot(2.5), make_qqq_snapshot(3.0), make_vix_snapshot(16.0, 0.0), [], mock_parameter_store.macro
+    )
+    down_swing = MacroAnalyzer().analyze(
+        make_spy_snapshot(-2.5), make_qqq_snapshot(-3.0), make_vix_snapshot(16.0, 0.0), [], mock_parameter_store.macro
+    )
+    assert up_swing.score != down_swing.score
+
+
+def test_position_mode_ignores_vix_intraday_change_nudge(mock_parameter_store) -> None:
+    """Position reads the structural VIX *level* only — a big intraday VIX swing
+    (both at the same level) must not move the score."""
+    vix_falling = MacroAnalyzer().analyze(
+        make_spy_snapshot(0.0), make_qqq_snapshot(0.0), make_vix_snapshot(16.0, -15.0), [],
+        mock_parameter_store.macro, mode="position",
+    )
+    vix_spiking = MacroAnalyzer().analyze(
+        make_spy_snapshot(0.0), make_qqq_snapshot(0.0), make_vix_snapshot(16.0, 15.0), [],
+        mock_parameter_store.macro, mode="position",
+    )
+    assert vix_falling.score is not None and vix_falling.score == vix_spiking.score
+
+
 def test_vix_score_band_params_actually_move_score() -> None:
     """Halving the low-VIX score (default 80 -> 40) must drop the overall
     macro score when the VIX snapshot sits in the low band."""

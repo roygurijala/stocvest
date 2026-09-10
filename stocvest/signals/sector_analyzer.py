@@ -162,7 +162,8 @@ class SectorAnalyzer:
 
         etf = sector_etf_snapshot.symbol
         etf_u = (etf or "").strip().upper()
-        period = "5d" if use_weekly else "1d"
+        # Position feeds an average-weekly figure over ~13 weeks (long-horizon RS).
+        period = "13w avg" if str(mode).lower() == "position" else ("5d" if use_weekly else "1d")
 
         if etf_u == "SPY":
             chips = [

@@ -61,7 +61,13 @@ class MacroAnalyzer:
         *,
         events_lookback_days: int = 1,
         macro_context: dict[str, Any] | None = None,
+        mode: str | None = None,
     ) -> MacroLayerResult:
+        # The long-horizon (position) desk reads macro *structurally* — a single
+        # session's index move and the VIX's intraday change are noise across a
+        # multi-year hold, so they are neutralized here. The structural inputs
+        # (VIX regime level, economic calendar, macro-risk, yield curve) are kept.
+        is_position = str(mode or "").strip().lower() == "position"
         spy_pct = float(spy_snapshot.change_percent) if spy_snapshot and spy_snapshot.change_percent is not None else None
         qqq_pct = float(qqq_snapshot.change_percent) if qqq_snapshot and qqq_snapshot.change_percent is not None else None
 
@@ -74,14 +80,19 @@ class MacroAnalyzer:
                 chips=[],
             )
 
-        # Only average the indices that have real data — padding a missing
-        # reading with 0% (neutral) would distort the score in either direction.
-        valid_scores = []
-        if spy_pct is not None:
-            valid_scores.append(_clamp(50.0 + spy_pct * 10.0, 0.0, 100.0))
-        if qqq_pct is not None:
-            valid_scores.append(_clamp(50.0 + qqq_pct * 10.0, 0.0, 100.0))
-        momentum_score = sum(valid_scores) / len(valid_scores)
+        if is_position:
+            # No intraday index momentum on the long-horizon desk — hold it neutral
+            # so today's tape can't sway a multi-year macro read.
+            momentum_score = 50.0
+        else:
+            # Only average the indices that have real data — padding a missing
+            # reading with 0% (neutral) would distort the score in either direction.
+            valid_scores = []
+            if spy_pct is not None:
+                valid_scores.append(_clamp(50.0 + spy_pct * 10.0, 0.0, 100.0))
+            if qqq_pct is not None:
+                valid_scores.append(_clamp(50.0 + qqq_pct * 10.0, 0.0, 100.0))
+            momentum_score = sum(valid_scores) / len(valid_scores)
 
         vix_price = float(vix_snapshot.last_trade_price) if vix_snapshot and vix_snapshot.last_trade_price else None
         vix_chg = float(vix_snapshot.change_percent) if vix_snapshot and vix_snapshot.change_percent is not None else None
@@ -111,7 +122,9 @@ class MacroAnalyzer:
             else:
                 vol_score = float(params.vix_low_score)
             vix_trend = vix_direction_from_change(vix_snapshot.change_percent if vix_snapshot else None)
-            if vix_chg is not None:
+            # The intraday VIX-change nudge is a tactical signal; the long-horizon
+            # desk reads only the structural VIX *level* (bucket above).
+            if vix_chg is not None and not is_position:
                 if vix_chg < -params.vix_trend_threshold_pct:
                     vol_score = _clamp(vol_score + params.vix_falling_bonus, 0.0, 100.0)
                 elif vix_chg > params.vix_trend_threshold_pct:
@@ -181,6 +194,8 @@ class MacroAnalyzer:
             chips.append(f"VIX {vix_price:.1f}")
         if events_lookback_days > 1:
             chips.append(f"Calendar {events_lookback_days}d")
+        if is_position:
+            chips.append("Structural (long-horizon)")
 
         upcoming = list(ctx.get("upcoming_events") or [])
         if isinstance(upcoming, list) and upcoming:
