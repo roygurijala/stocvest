@@ -1986,7 +1986,7 @@ export function DeepDive({
                             color: colors.textMuted
                           }}
                         >
-                          {isPositionLane ? "Position structure" : "Scenario details"}
+                          {isPositionLane ? "Long-term structure" : "Scenario details"}
                         </p>
                         {scenario?.t1TooClose ? (
                           <p
@@ -2320,14 +2320,14 @@ export function DeepDive({
               {activeLane === "day"
                 ? "5-min candles · full session · signal levels overlaid — context only, not entry signals"
                 : activeLane === "position"
-                  ? "Daily candles · weekly structural context · signal levels overlaid — long-horizon desk"
+                  ? "Weekly candles · multi-year lookback · daily/weekly/monthly switch — long-term desk"
                   : "Daily candles · 6-month lookback · signal levels overlaid — context only, not entry signals"}
             </p>
             <FullPriceChart
               key={`chart-${card.symbol}-${activeLane}-${dataRefreshNonce}`}
               symbol={card.symbol}
               colors={colors}
-              mode={activeLane === "day" ? "day" : "swing"}
+              mode={activeLane === "day" ? "day" : activeLane === "position" ? "position" : "swing"}
               signal={signalOverlay}
               height={320}
               currentPrice={card.price ?? null}

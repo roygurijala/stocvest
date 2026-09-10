@@ -15,6 +15,15 @@ import {
   type IndicatorBar
 } from "@/lib/charts/indicators";
 import { createHorizontalBand } from "@/lib/charts/horizontal-band";
+import {
+  MIN_VISIBLE,
+  defaultTimeframe,
+  fetchLimitFor,
+  isIntradayTf,
+  visibleBarsFor,
+  type ChartMode,
+  type ChartTimeframe
+} from "@/lib/charts/chart-config";
 
 /**
  * Rich, interactive trading chart powered by TradingView's `lightweight-charts`
@@ -33,17 +42,11 @@ import { createHorizontalBand } from "@/lib/charts/horizontal-band";
  * daily, reference-level lines) so existing call sites keep working unchanged.
  */
 
-export type ChartTimeframe =
-  | "1min"
-  | "5min"
-  | "15min"
-  | "30min"
-  | "1hour"
-  | "4hour"
-  | "1day"
-  | "1week";
-
-export type ChartMode = "day" | "swing";
+// Chart timeframe / mode types + tunable fetch/viewport constants now live in
+// the pure, testable `@/lib/charts/chart-config` module. Re-exported here so
+// existing importers (deep-dive, signals-page-client, assistant rail) are
+// unchanged.
+export type { ChartTimeframe, ChartMode } from "@/lib/charts/chart-config";
 
 /** Signal-engine levels overlaid on the chart (all optional). */
 export interface ChartSignalOverlay {
@@ -94,6 +97,7 @@ const COLOR = {
   ema20: "#8b5cf6", // purple
   sma20: "#3b82f6", // blue
   sma50: "#8b5cf6", // purple
+  sma100: "#10b981", // teal (long-term only)
   sma200: "#f59e0b", // orange
   orb: "#f59e0b", // amber dashed (opening range)
   entryFill: "rgba(59,130,246,0.12)",
@@ -118,38 +122,14 @@ const TIMEFRAMES: Record<ChartMode, { id: ChartTimeframe; label: string }[]> = {
     { id: "1hour", label: "1h" },
     { id: "1day", label: "1D" },
     { id: "1week", label: "1W" }
+  ],
+  // Long-term desk: daily / weekly / monthly only (no intraday noise).
+  position: [
+    { id: "1day", label: "1D" },
+    { id: "1week", label: "1W" },
+    { id: "1month", label: "1M" }
   ]
 };
-
-const FETCH_LIMIT: Record<ChartTimeframe, number> = {
-  "1min": 1200,
-  "5min": 600,
-  "15min": 400,
-  "30min": 320,
-  "1hour": 500,
-  "4hour": 300,
-  "1day": 280,
-  "1week": 200
-};
-
-const MIN_VISIBLE: Record<ChartTimeframe, number> = {
-  "1min": 120,
-  "5min": 48,
-  "15min": 24,
-  "30min": 16,
-  "1hour": 14,
-  "4hour": 12,
-  "1day": 30,
-  "1week": 20
-};
-
-function isIntradayTf(tf: ChartTimeframe): boolean {
-  return tf === "1min" || tf === "5min" || tf === "15min" || tf === "30min" || tf === "1hour" || tf === "4hour";
-}
-
-function defaultTimeframe(mode: ChartMode | undefined, explicit: ChartTimeframe | undefined): ChartTimeframe {
-  return explicit ?? (mode === "day" ? "5min" : "1day");
-}
 
 /**
  * Session-scoped bars cache, keyed by `symbol:timeframe`. Lives at MODULE scope
@@ -174,9 +154,9 @@ function cacheSet(key: string, bars: OhlcBar[]): void {
 }
 
 function defaultOverlays(mode: ChartMode): Record<string, boolean> {
-  return mode === "day"
-    ? { vwap: true, ema9: true, ema20: true, levels: true }
-    : { sma20: true, sma50: true, sma200: true, levels: true };
+  if (mode === "day") return { vwap: true, ema9: true, ema20: true, levels: true };
+  if (mode === "position") return { sma50: true, sma100: true, sma200: true, levels: true };
+  return { sma20: true, sma50: true, sma200: true, levels: true };
 }
 
 function levelColor(kind: AssistantChartLevel["kind"], colors: ThemeColors): string {
@@ -220,6 +200,7 @@ interface GridStats {
   sessionLow: number | null;
   sma20: number | null;
   sma50: number | null;
+  sma100: number | null;
   sma200: number | null;
   weekHigh: number | null;
   weekLow: number | null;
@@ -236,6 +217,7 @@ const EMPTY_STATS: GridStats = {
   sessionLow: null,
   sma20: null,
   sma50: null,
+  sma100: null,
   sma200: null,
   weekHigh: null,
   weekLow: null,
@@ -302,7 +284,7 @@ export function FullPriceChart({
   };
 
   const intraday = isIntradayTf(tf);
-  const effectiveLimit = limit ?? FETCH_LIMIT[tf] ?? 300;
+  const effectiveLimit = limit ?? fetchLimitFor(mode, tf);
   const livePrice =
     typeof currentPrice === "number" && Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : null;
 
@@ -468,6 +450,12 @@ export function FullPriceChart({
         if (overlays.sma20) addLine(COLOR.sma20, sma(indicatorBars, 20));
         if (overlays.sma50) addLine(COLOR.sma50, sma(indicatorBars, 50));
         if (overlays.sma200) addLine(COLOR.sma200, sma(indicatorBars, 200));
+      } else if (rich && mode === "position") {
+        // Long-term MAs (50/100/200) in bars of the active timeframe. On a
+        // short-history symbol the longer ones simply don't draw (sma() → []).
+        if (overlays.sma50) addLine(COLOR.sma50, sma(indicatorBars, 50));
+        if (overlays.sma100) addLine(COLOR.sma100, sma(indicatorBars, 100));
+        if (overlays.sma200) addLine(COLOR.sma200, sma(indicatorBars, 200), 2);
       } else if (!rich && !intraday && indicatorBars.length >= 20) {
         // Legacy behaviour: 50-day average on the daily chart.
         addLine("#8b5cf6", sma(indicatorBars, Math.min(50, indicatorBars.length)));
@@ -548,14 +536,14 @@ export function FullPriceChart({
       // ── Visible range ────────────────────────────────────────────────────
       const tScale = chartApi.timeScale();
       tScale.fitContent();
-      if (rich && mode === "swing" && !intraday) {
-        // Show ~6 months (≈126 daily bars) while keeping the full set for 52-week.
+      const wantVisible = rich && !intraday ? visibleBarsFor(mode, tf) : null;
+      if (wantVisible != null) {
+        // Narrow the viewport (swing ≈6mo; long-term multi-year per timeframe)
+        // while keeping the full fetched set — with warmup — loaded so the MAs
+        // and 52-week stat stay valid across the whole visible window.
         const range = tScale.getVisibleLogicalRange();
-        if (range) {
-          const want = 126;
-          if (range.to - range.from > want) {
-            tScale.setVisibleLogicalRange({ from: range.to - want, to: range.to + 1 });
-          }
+        if (range && range.to - range.from > wantVisible) {
+          tScale.setVisibleLogicalRange({ from: range.to - wantVisible, to: range.to + 1 });
         }
       } else if (intraday) {
         const minBars = MIN_VISIBLE[tf] ?? 20;
@@ -571,9 +559,17 @@ export function FullPriceChart({
         const lastVwap = vwapCurve.length ? vwapCurve[vwapCurve.length - 1].value : null;
         const sma20Pts = sma(indicatorBars, 20);
         const sma50Pts = sma(indicatorBars, 50);
+        const sma100Pts = sma(indicatorBars, 100);
         const sma200Pts = sma(indicatorBars, 200);
         const or = mode === "day" ? openingRange(indicatorBars, 30) : null;
-        const week = mode === "swing" ? fiftyTwoWeek(indicatorBars) : null;
+        // 52-week high/low. Daily uses the 252-bar helper; the long-term desk
+        // is timeframe-aware (52 weekly / 12 monthly bars = one year).
+        const week =
+          mode === "swing"
+            ? fiftyTwoWeek(indicatorBars)
+            : mode === "position"
+              ? sessionRange(indicatorBars, tf === "1month" ? 12 : tf === "1week" ? 52 : 252)
+              : null;
         const swingR =
           signal?.swingRange ?? (mode === "swing" ? sessionRange(indicatorBars, 10) : null);
         const sessionHL = highLow(intraday ? lastSessionBars(indicatorBars) : indicatorBars.slice(-1));
@@ -585,6 +581,7 @@ export function FullPriceChart({
           sessionLow: sessionHL?.low ?? null,
           sma20: sma20Pts.length ? sma20Pts[sma20Pts.length - 1].value : null,
           sma50: sma50Pts.length ? sma50Pts[sma50Pts.length - 1].value : null,
+          sma100: sma100Pts.length ? sma100Pts[sma100Pts.length - 1].value : null,
           sma200: sma200Pts.length ? sma200Pts[sma200Pts.length - 1].value : null,
           weekHigh: week?.high ?? null,
           weekLow: week?.low ?? null,
@@ -809,7 +806,19 @@ function ChartHeaderPills({
   candleCount: number;
   colors: ThemeColors;
 }) {
-  const deskColor = mode === "day" ? "#2e8bff" : "#8b5cf6";
+  const deskColor = mode === "day" ? "#2e8bff" : mode === "position" ? "#f59e0b" : "#8b5cf6";
+  const deskName = mode === "day" ? "Day" : mode === "position" ? "Long Term" : "Swing";
+  const deskTag = mode === "day" ? "Day trade" : mode === "position" ? "Long-term hold" : "Swing trade";
+  const lookback =
+    mode === "day"
+      ? "9:30 AM – 4:00 PM ET"
+      : mode === "position"
+        ? tf === "1month"
+          ? "~10-year lookback"
+          : tf === "1week"
+            ? "~3-year lookback"
+            : "~2-year lookback"
+        : "6-month lookback";
   const pill = (text: string) => (
     <span
       style={{
@@ -829,7 +838,7 @@ function ChartHeaderPills({
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: spacing[2], flexWrap: "wrap" }}>
       <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
         <span style={{ fontSize: typography.scale.base, fontWeight: 700, color: colors.text }}>
-          {symbol} — {mode === "day" ? "Day" : "Swing"} desk
+          {symbol} — {deskName} desk
         </span>
         <span
           style={{
@@ -844,11 +853,11 @@ function ChartHeaderPills({
             padding: "2px 8px"
           }}
         >
-          {mode === "day" ? "Day trade" : "Swing trade"}
+          {deskTag}
         </span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: spacing[1], flexWrap: "wrap" }}>
-        {pill(mode === "day" ? "9:30 AM – 4:00 PM ET" : "6-month lookback")}
+        {pill(lookback)}
         {pill(`${candleCount} candles`)}
         {pill("Polygon.io")}
       </div>
@@ -863,6 +872,14 @@ function legendItems(mode: ChartMode): { key: string; label: string; color: stri
       { key: "ema9", label: "EMA 9", color: COLOR.ema9 },
       { key: "ema20", label: "EMA 20", color: COLOR.ema20 },
       { key: "levels", label: "Levels", color: COLOR.entryEdge }
+    ];
+  }
+  if (mode === "position") {
+    return [
+      { key: "sma50", label: "SMA 50", color: COLOR.sma50 },
+      { key: "sma100", label: "SMA 100", color: COLOR.sma100 },
+      { key: "sma200", label: "SMA 200", color: COLOR.sma200 },
+      { key: "levels", label: "Levels", color: COLOR.swingEdge }
     ];
   }
   return [
@@ -893,6 +910,25 @@ function KeyLevelsGrid({
           { label: "Session High", value: fmtMoney(stats.sessionHigh) },
           { label: "Session Low", value: fmtMoney(stats.sessionLow) },
           { label: "Prev Close", value: fmtMoney(signal?.prevClose) },
+          {
+            label: "Entry Zone",
+            value: signal?.entryZone ? fmtRange(signal.entryZone.low, signal.entryZone.high) : "—",
+            tone: COLOR.entryEdge
+          },
+          { label: "Stop", value: fmtMoney(signal?.stop), tone: colors.bearish ?? "#ef4444" },
+          {
+            label: "T1 / T2",
+            value: `${fmtMoney(signal?.target1)} / ${fmtMoney(signal?.target2)}`,
+            tone: colors.bullish
+          }
+        ]
+      : mode === "position"
+      ? [
+          { label: "SMA 50", value: fmtMoney(stats.sma50), tone: COLOR.sma50 },
+          { label: "SMA 100", value: fmtMoney(stats.sma100), tone: COLOR.sma100 },
+          { label: "SMA 200", value: fmtMoney(stats.sma200), tone: COLOR.sma200 },
+          { label: "52W High", value: fmtMoney(stats.weekHigh) },
+          { label: "52W Low", value: fmtMoney(stats.weekLow) },
           {
             label: "Entry Zone",
             value: signal?.entryZone ? fmtRange(signal.entryZone.low, signal.entryZone.high) : "—",

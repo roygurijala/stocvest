@@ -221,7 +221,7 @@ def test_builder_does_not_mutate_body() -> None:
 def test_deterministic_read_is_non_advisory() -> None:
     read = deterministic_investment_read(build_position_thesis_packet(_body()))
     assert read.endswith("Signal data only.")
-    assert "Position desk" in read
+    assert "Long Term desk" in read
     for banned in ("buy", "sell", "should own", "allocate"):
         assert banned not in read.lower()
 

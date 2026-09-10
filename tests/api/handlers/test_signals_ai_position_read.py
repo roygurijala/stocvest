@@ -58,7 +58,7 @@ def test_free_user_gets_deterministic_from_packet(monkeypatch: pytest.MonkeyPatc
     body = json.loads(res["body"])
     assert body["source"] == "deterministic"
     assert body["upgrade_available"] is True
-    assert body["text"].startswith("On the Position desk")
+    assert body["text"].startswith("On the Long Term desk")
     assert "Bull:" in body["text"] and "Watch:" in body["text"]
     assert body["text"].endswith("Signal data only.")
 

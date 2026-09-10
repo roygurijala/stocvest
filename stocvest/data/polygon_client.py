@@ -140,6 +140,7 @@ _TIMEFRAME_MAP: dict[Timeframe, tuple[int, str]] = {
     Timeframe.HOUR_4: (4,  "hour"),
     Timeframe.DAY_1:  (1,  "day"),
     Timeframe.WEEK_1: (1,  "week"),
+    Timeframe.MONTH_1: (1, "month"),
 }
 
 

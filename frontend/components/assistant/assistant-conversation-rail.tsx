@@ -830,13 +830,16 @@ function ChartCard({
             symbol={chart.symbol}
             colors={colors}
             levels={levels}
-            timeframe={fullChartTimeframe}
+            mode={tradingMode === "position" ? "position" : undefined}
+            timeframe={tradingMode === "position" ? undefined : fullChartTimeframe}
             currentPrice={typeof chart.last === "number" ? chart.last : null}
           />
           <span style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.04em" }}>
-            {fullChartTimeframe === "1hour"
-              ? "Hourly candles · reference levels"
-              : "Daily candles · 50-day average · reference levels"}
+            {tradingMode === "position"
+              ? "Weekly candles · long-term moving averages · daily/weekly/monthly switch"
+              : fullChartTimeframe === "1hour"
+                ? "Hourly candles · reference levels"
+                : "Daily candles · 50-day average · reference levels"}
           </span>
         </div>
       ) : null}

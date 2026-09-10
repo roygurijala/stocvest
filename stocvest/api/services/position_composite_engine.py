@@ -24,7 +24,6 @@ from stocvest.api.services.real_composite_engine import (
     _safe_result,
     _snapshot_mark_price,
 )
-from stocvest.api.services.swing_composite_engine import _weekly_pct_from_daily_bars
 from stocvest.api.services.swing_news_source import (
     SWING_NEWS_SOURCE_POLYGON_PRIMARY,
     swing_news_source_bundle,
@@ -96,6 +95,31 @@ def _position_layer_gate(status: str) -> bool:
     """Layers that satisfy the insufficient-data gate (includes partial fundamentals)."""
     st = str(status or "").strip().lower()
     return st in ("available", "as_of_close", "active", "degraded")
+
+
+# Long-horizon sector relative-strength window (~one quarter of weekly bars).
+POSITION_SECTOR_RS_WEEKS = 13
+
+
+def _avg_weekly_pct_from_daily_bars(bars: list[Bar], weeks: int = POSITION_SECTOR_RS_WEEKS) -> float | None:
+    """Average weekly % move over ~``weeks`` weeks, from daily bars.
+
+    The long-horizon sector layer asks "is this sector leading or lagging SPY over
+    the last quarter?" — not "this week". We take the total return over ``weeks*5``
+    sessions (oldest vs newest) and divide by ``weeks`` to get an *average weekly*
+    figure, so the value stays dimensionally comparable to the ~1-week thresholds
+    ``SectorAnalyzer`` already uses (no threshold re-calibration / invented math).
+    """
+    sessions = weeks * 5
+    if len(bars) < sessions + 1:
+        return None
+    ordered = sorted(bars, key=lambda b: b.timestamp)
+    closes = [b.close for b in ordered]
+    old, new = closes[-(sessions + 1)], closes[-1]
+    if old <= 0:
+        return None
+    total_pct = (new / old - 1.0) * 100.0
+    return total_pct / weeks
 
 
 def _position_score_to_layer_signal(layer: str, score: int | None, status: str) -> LayerSignal | None:
@@ -183,15 +207,17 @@ async def build_position_composite_response(
                 )
                 sector_etf_sym = (etf or "").strip().upper()
                 if sector_etf_sym and sector_resolution_state != SectorResolutionState.PENDING_REFRESH:
+                    # ~13 weeks of daily bars (+buffer) for long-horizon sector RS.
+                    _rs_bars = POSITION_SECTOR_RS_WEEKS * 5 + 5
                     sector_snap_r, spy_bars_r = await asyncio.gather(
                         client.get_snapshot(etf),
-                        client.get_bars("SPY", Timeframe.DAY_1, limit=10),
+                        client.get_bars("SPY", Timeframe.DAY_1, limit=_rs_bars),
                         return_exceptions=True,
                     )
                     sector_snap = _safe_result(sector_snap_r, None)
                     spy_week_bars = _safe_result(spy_bars_r, [])
                     if sector_snap is not None:
-                        sb = await client.get_bars(etf, Timeframe.DAY_1, limit=10)
+                        sb = await client.get_bars(etf, Timeframe.DAY_1, limit=_rs_bars)
                         sector_week_bars = _safe_result(sb, [])
             except (PolygonError, Exception) as exc:
                 _LOG.warning("position sector chain failed for %s: %s", sym, exc)
@@ -217,7 +243,8 @@ async def build_position_composite_response(
         sym,
         news_rows,
         params.news,
-        mode="swing",
+        mode="position",
+        lookback_hours=int(params.position_news_lookback_hours),
         benzinga_data=bz_data,
         current_price=_snapshot_mark_price(sym_snap),
     )
@@ -231,8 +258,13 @@ async def build_position_composite_response(
         params.macro,
         events_lookback_days=params.position_macro_events_days,
         macro_context=macro_ctx,
+        mode="position",
     )
 
+    # `sector_momentum` (swing 1d/5d persistence) is still computed for the API
+    # display extras below, but the long-horizon SCORE uses a ~13-week average
+    # weekly relative-strength instead — so we pass `sector_momentum=None` into the
+    # scorer to bypass the short-horizon persistence path.
     all_sector_daily = get_all_cached_sector_data()
     sector_momentum: SectorMomentumScore | None = None
     if sector_resolution_state not in (None, SectorResolutionState.PENDING_REFRESH):
@@ -245,8 +277,8 @@ async def build_position_composite_response(
                 all_sector_daily,
             )
 
-    w_sec = _weekly_pct_from_daily_bars(sector_week_bars) if params.position_sector_use_weekly else None
-    w_spy = _weekly_pct_from_daily_bars(spy_week_bars) if params.position_sector_use_weekly else None
+    w_sec = _avg_weekly_pct_from_daily_bars(sector_week_bars) if params.position_sector_use_weekly else None
+    w_spy = _avg_weekly_pct_from_daily_bars(spy_week_bars) if params.position_sector_use_weekly else None
     sector = SectorAnalyzer().analyze(
         sym,
         sector_snap,
@@ -257,8 +289,8 @@ async def build_position_composite_response(
         weekly_sector_pct=w_sec,
         weekly_spy_pct=w_spy,
         resolution_state=sector_resolution_state,
-        sector_momentum=sector_momentum,
-        mode="swing",
+        sector_momentum=None,
+        mode="position",
     )
     geo = GeoAnalyzer().analyze(
         news_rows,

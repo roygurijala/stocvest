@@ -112,12 +112,12 @@ export const roleAccents: Record<ThemeName, Record<CardRole, RoleAccent>> = {
       borderAccent: "#67e8f9",
       pillLabel: "DAY · INTRADAY"
     },
-    // Position desk — amber/gold rail; distinct from swing violet and day cyan.
+    // Long Term desk — amber/gold rail; distinct from swing violet and day cyan.
     position: {
       accent: "#fbbf24",
       accentStrong: "#fcd34d",
       borderAccent: "#f59e0b",
-      pillLabel: "POSITION · LONG-HORIZON"
+      pillLabel: "LONG TERM · MULTI-YEAR"
     }
   },
   light: {
@@ -143,7 +143,7 @@ export const roleAccents: Record<ThemeName, Record<CardRole, RoleAccent>> = {
       accent: "#d97706",
       accentStrong: "#b45309",
       borderAccent: "#f59e0b",
-      pillLabel: "POSITION · LONG-HORIZON"
+      pillLabel: "LONG TERM · MULTI-YEAR"
     }
   }
 };

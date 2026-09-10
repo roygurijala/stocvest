@@ -29,6 +29,7 @@ class Timeframe(str, Enum):
     HOUR_4 = "4hour"
     DAY_1  = "1day"
     WEEK_1 = "1week"
+    MONTH_1 = "1month"
 
 class AssetType(str, Enum):
     STOCK  = "stock"

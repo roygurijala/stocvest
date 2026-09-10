@@ -5,8 +5,25 @@ from unittest.mock import patch
 from stocvest.config.signal_parameters import NewsParameters
 from stocvest.data.benzinga_client import BenzingaMultiResult, BenzingaRating
 from stocvest.signals.news_analyzer import NewsAnalyzer
+from stocvest.signals.news_sentiment import position_recency_weight, swing_recency_weight
 
 from tests.signals.conftest import make_negative_articles, make_positive_articles, mock_parameter_store
+
+
+def test_position_recency_decay_is_gentler_than_swing() -> None:
+    """The long-horizon decay stretches over ~30 days: a 3-week-old catalyst
+    still carries real weight, where swing has already collapsed it."""
+    now = datetime.now(timezone.utc)
+    three_weeks = now - timedelta(days=21)
+    assert position_recency_weight(now - timedelta(days=3), now) == 1.0
+    assert position_recency_weight(three_weeks, now) == 0.60
+    assert position_recency_weight(now - timedelta(days=29), now) == 0.45
+    # Monotonic non-increasing with age.
+    ages = [1, 8, 15, 22, 29]
+    weights = [position_recency_weight(now - timedelta(days=d), now) for d in ages]
+    assert weights == sorted(weights, reverse=True)
+    # Gentler than swing at the same 3-week age (swing floors at 0.25).
+    assert position_recency_weight(three_weeks, now) > swing_recency_weight(three_weeks, now)
 
 
 def _patch_impact_flag(enabled: bool):
@@ -30,6 +47,34 @@ def _thin_stale_bullish_article() -> list[dict]:
             "publisher": {"name": "Some Random Stock Blog"},
         }
     ]
+
+
+def _bullish_articles_aged(days: float, count: int = 3) -> list[dict]:
+    pub = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    return [
+        {
+            "title": "Company posts record annual revenue and raises full-year guidance",
+            "description": "Broad-based fundamental strength across segments.",
+            "tickers": ["TEST"],
+            "published_utc": pub,
+            "insights": [{"sentiment": "positive"}],
+            "publisher": {"name": "Reuters"},
+        }
+        for _ in range(count)
+    ]
+
+
+def test_position_mode_scores_multi_week_old_news(mock_parameter_store) -> None:
+    """ADR-004 POS-AI-9: a ~15-day-old fundamental headline is dropped by swing
+    (120h cutoff) but scored by the long-horizon position layer (720h window)."""
+    arts = _bullish_articles_aged(15)
+    swing = NewsAnalyzer().analyze("TEST", arts, mock_parameter_store.news, mode="swing")
+    position = NewsAnalyzer().analyze("TEST", arts, mock_parameter_store.news, mode="position")
+    # Swing: outside the 120h window → nothing qualifies → neutral baseline.
+    assert swing.article_count == 0 and swing.score == 50
+    # Position: inside the 720h window → scored and bullish.
+    assert position.article_count >= 1
+    assert position.score is not None and position.score > 50
 
 
 def test_positive_articles_bullish(mock_parameter_store) -> None:

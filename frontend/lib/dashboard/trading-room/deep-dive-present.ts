@@ -334,7 +334,7 @@ export function buildRichBrief(input: {
     input.activeLane === "day"
       ? "day desk"
       : input.activeLane === "position"
-        ? "position desk"
+        ? "long-term desk"
         : "swing desk";
   const variant = stableVariant(`${input.symbol}|${input.setupBias}|${input.pageDecisionState ?? ""}`);
 
@@ -437,7 +437,7 @@ export function buildPlainSummary(input: {
     input.activeLane === "day"
       ? "day-trading"
       : input.activeLane === "position"
-        ? "position"
+        ? "long-term"
         : "swing";
   const dirPhrase =
     input.direction === "long"

@@ -102,7 +102,7 @@ export function InvestPageClient() {
         </div>
         <form onSubmit={submitSymbolSearch} style={{ display: "flex", gap: spacing[2] }} role="search">
           <input
-            aria-label="Look up a symbol for the Position desk"
+            aria-label="Look up a symbol for the Long Term desk"
             placeholder="Look up any symbol…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
@@ -299,7 +299,7 @@ export function InvestPageClient() {
       )}
 
       <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-        {positionGemTierCopy("gem")} Row click opens the full Position deep dive (pillars, geometry, evidence).
+        {positionGemTierCopy("gem")} Row click opens the full Long Term deep dive (pillars, geometry, evidence).
       </p>
       <SignalDisclaimerChip />
     </div>

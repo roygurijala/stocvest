@@ -121,7 +121,7 @@ export function DeepDiveLaneToggle({
       {btn("swing", "Swing", swingState, swingAccent, swingState === null ? `No swing setup for ${symbol} in today's feed` : undefined)}
       {btn(
         "position",
-        "Position",
+        "Long Term",
         "always",
         positionAccent,
         "Long-horizon fundamentals + weekly structure (lookup any symbol)"

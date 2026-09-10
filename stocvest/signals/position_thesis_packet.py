@@ -298,7 +298,7 @@ def _dedupe(bullets: list[ThesisBullet]) -> list[ThesisBullet]:
 def deterministic_investment_read(packet: PositionThesisPacket) -> str:
     """Free-tier / fallback brief woven from the packet — no LLM, non-advisory."""
     sym = packet.symbol or "This name"
-    lead = f"On the Position desk (long-horizon quality), {sym} reads {packet.verdict} on fundamentals."
+    lead = f"On the Long Term desk (long-horizon quality), {sym} reads {packet.verdict} on fundamentals."
     parts = [lead]
     if packet.bull_case:
         parts.append(f"Bull: {packet.bull_case[0].text}")

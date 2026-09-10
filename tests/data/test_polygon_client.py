@@ -60,6 +60,25 @@ class TestGetBars:
 
     @pytest.mark.asyncio
     @respx.mock
+    async def test_weekly_and_monthly_timeframes_map_to_polygon_timespans(self):
+        """Long-horizon chart timeframes must hit the right Polygon aggregate timespan."""
+        t = 1704182400000
+        week_route = respx.get(
+            url__regex=r"https://api\.polygon\.io/v2/aggs/ticker/AAPL/range/1/week/2000-01-01/.+"
+        ).mock(return_value=httpx.Response(200, json={"status": "OK", "results": [agg_bar(t)]}))
+        month_route = respx.get(
+            url__regex=r"https://api\.polygon\.io/v2/aggs/ticker/AAPL/range/1/month/2000-01-01/.+"
+        ).mock(return_value=httpx.Response(200, json={"status": "OK", "results": [agg_bar(t)]}))
+
+        async with PolygonClient(FAKE_KEY) as client:
+            weekly = await client.get_bars("AAPL", Timeframe.WEEK_1, limit=200)
+            monthly = await client.get_bars("AAPL", Timeframe.MONTH_1, limit=200)
+
+        assert week_route.called and len(weekly) == 1
+        assert month_route.called and len(monthly) == 1
+
+    @pytest.mark.asyncio
+    @respx.mock
     async def test_empty_results(self):
         respx.get(
             "https://api.polygon.io/v2/aggs/ticker/FAKE/range/1/day/2000-01-01/2024-01-02"
