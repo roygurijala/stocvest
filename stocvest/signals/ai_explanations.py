@@ -346,6 +346,130 @@ class AIExplanationService:
         await self._cache_write(key, result)
         return result
 
+    async def explain_layer_read(
+        self,
+        *,
+        symbol: str,
+        layer_key: str,
+        layer_name: str,
+        desk: str,
+        bias: str,
+        verdict: str,
+        score: int | None,
+        rationale: str,
+        drivers: list[str],
+        fallback_text: str,
+        user_profile: UserProfile,
+    ) -> ExplanationResult:
+        """Plain-English narration of ONE signal layer's read (deep-dive "Explain this layer").
+
+        Narrates the deterministic per-layer rationale + driver facts the client already renders
+        ("Why this read") into 2-4 sentences. Paid users (``has_ai_explanations``) get a Claude
+        narration keyed by the layer + a driver fingerprint; free users and any failure get the
+        deterministic text verbatim. The AI never changes the score/verdict and never emits
+        buy/sell/advice — it only explains what the deterministic engine already concluded.
+        """
+        sym = symbol.strip().upper()
+        key_layer = (layer_key or "").strip().lower() or "layer"
+        name = (layer_name or key_layer.title()).strip() or key_layer.title()
+        desk_norm = (desk or "").strip().lower()
+        if desk_norm not in ("day", "swing", "position"):
+            desk_norm = "swing"
+        clean_drivers = [str(d).strip() for d in (drivers or []) if str(d).strip()][:8]
+        det = (fallback_text or "").strip() or self._deterministic_layer_read(
+            name, rationale, clean_drivers
+        )
+
+        if not user_profile.has_ai_explanations:
+            return ExplanationResult(
+                text=det, source="deterministic", upgrade_available=True, cached=False
+            )
+
+        ny_date = _ny_calendar_date()
+        fp = self._layer_read_fingerprint(
+            layer=key_layer, verdict=verdict, score=score, drivers=clean_drivers
+        )
+        key = f"stocvest:ai_explain:layer_read:{sym}:{key_layer}:{desk_norm}:{ny_date}:{fp}"
+
+        hit = await self._cache_read(key)
+        if hit is not None:
+            return hit
+
+        text_ai = await self._claude_text_or_none(
+            system=(
+                "You are a sharp, plain-spoken trading-desk analyst explaining ONE signal layer's "
+                "read to a trader. Write 2-4 sentences in a natural, varied voice — never a "
+                "template. Explain WHY this layer landed where it did using ONLY the provided "
+                "rationale and driver facts; do not invent data. Be concrete about the drivers "
+                "that pushed the read one way or the other, and note what would change it. "
+                "Do NOT mention numeric scores, layer scores, composite values, or percentages. "
+                "No investment advice, no buy/sell directives. End with exactly: Signal data only."
+            ),
+            user_prompt=self._build_layer_read_prompt(
+                symbol=sym,
+                layer_name=name,
+                desk=desk_norm,
+                bias=bias,
+                verdict=verdict,
+                rationale=rationale,
+                drivers=clean_drivers,
+            ),
+            max_tokens=240,
+            temperature=0.6,
+        )
+        if text_ai:
+            result = ExplanationResult(
+                text=text_ai.strip(), source="ai", upgrade_available=False, cached=False
+            )
+        else:
+            result = ExplanationResult(
+                text=det, source="deterministic", upgrade_available=False, cached=False
+            )
+        await self._cache_write(key, result)
+        return result
+
+    def _deterministic_layer_read(
+        self, layer_name: str, rationale: str, drivers: list[str]
+    ) -> str:
+        parts: list[str] = []
+        r = (rationale or "").strip()
+        parts.append(r or f"{layer_name} read summary.")
+        if drivers:
+            parts.append("Drivers: " + "; ".join(drivers[:3]) + ".")
+        parts.append("Signal data only.")
+        return " ".join(parts)
+
+    def _layer_read_fingerprint(
+        self, *, layer: str, verdict: str, score: int | None, drivers: list[str]
+    ) -> str:
+        joined = (
+            f"{layer.strip().lower()}#{(verdict or '').strip().lower()}"
+            f"#{score if score is not None else 'na'}#" + "|".join(drivers)
+        )
+        return str(hash(joined) % (10**12))
+
+    def _build_layer_read_prompt(
+        self,
+        *,
+        symbol: str,
+        layer_name: str,
+        desk: str,
+        bias: str,
+        verdict: str,
+        rationale: str,
+        drivers: list[str],
+    ) -> str:
+        lines = [
+            f"symbol={symbol}",
+            f"desk={desk}",
+            f"setup_bias={(bias or 'neutral').strip().lower()}",
+            f"layer={layer_name}",
+            f"layer_read={(verdict or 'neutral').strip().lower()}",
+            f"rationale={rationale.strip()[:240]}",
+            f"drivers={json.dumps(drivers)}",
+        ]
+        return "\n".join(lines)
+
     def _deterministic_position_read(
         self,
         symbol: str,

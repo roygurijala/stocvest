@@ -47,6 +47,8 @@ import {
 import {
   articlesForDrawer,
   buildLayerAlignmentLine,
+  buildLayerDrivers,
+  buildLayerScoreRationale,
   filterDisplayChips,
   indicatorHighlights,
   layerAlignmentTextColor,
@@ -59,6 +61,9 @@ import {
 import { catalystPublishedAgo } from "@/lib/signal-evidence";
 import { layerStatusColor, polarityTrendIconKind } from "@/lib/signal-direction-colors";
 import { useTheme } from "@/lib/theme-provider";
+import { PositionFundamentalsGrid } from "@/components/dashboard/trading-room/position-fundamentals-grid";
+import { LayerAiExplain } from "@/components/signals/layer-ai-explain";
+import type { PositionFundamentalsSummary } from "@/lib/dashboard/trading-room/position-fundamentals-present";
 
 // Layer icon mapping
 const LAYER_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -83,6 +88,8 @@ type Props = {
   /** Layers tab: show all rows without collapse affordance. */
   defaultExpanded?: boolean;
   causalNarrative?: CausalNarrative | null;
+  /** Position desk F1–F5 pillar breakdown — powers the Fundamentals layer drawer detail. */
+  positionFundamentals?: PositionFundamentalsSummary | null;
 };
 
 export function SignalsLayerBreakdown({
@@ -96,7 +103,8 @@ export function SignalsLayerBreakdown({
   maturationState,
   alignmentRatio,
   defaultExpanded = false,
-  causalNarrative = null
+  causalNarrative = null,
+  positionFundamentals = null
 }: Props) {
   const { colors } = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -267,6 +275,8 @@ export function SignalsLayerBreakdown({
       bias={bias}
       colors={colors}
       symbol={symbol}
+      tradingMode={tradingMode}
+      positionFundamentals={positionFundamentals}
     />
     </>
   );
@@ -787,7 +797,9 @@ function LayerDetailDrawer({
   layer,
   bias,
   colors,
-  symbol
+  symbol,
+  tradingMode,
+  positionFundamentals
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -795,6 +807,8 @@ function LayerDetailDrawer({
   bias: SignalsSetupBias;
   colors: ReturnType<typeof useTheme>["colors"];
   symbol: string;
+  tradingMode: "day" | "swing" | "position";
+  positionFundamentals?: PositionFundamentalsSummary | null;
 }) {
   const [evidenceExpanded, setEvidenceExpanded] = useState(false);
   useEffect(() => {
@@ -814,6 +828,19 @@ function LayerDetailDrawer({
   
   const displayChips = filterDisplayChips(layer);
   const alignmentLine = buildLayerAlignmentLine(layer, bias, polarity, levelLabel);
+  const scoreRationale = buildLayerScoreRationale(layer);
+  const reasoningText = layer.reasoning ?? layer.explanation;
+  const layerDrivers = (() => {
+    const base = buildLayerDrivers(layer);
+    if (layer.key === "fundamentals" && positionFundamentals) {
+      const pillarDrivers = positionFundamentals.pillars
+        .filter((p) => p.reasoning)
+        .slice(0, 4)
+        .map((p) => `${p.pillarId} ${p.label}: ${p.reasoning}`);
+      return [...base, ...pillarDrivers].slice(0, 8);
+    }
+    return base;
+  })();
   const articlePack = articlesForDrawer(layer.catalystArticles, evidenceExpanded);
   const ratingPack = ratingsForDrawer(layer.recentRatings, evidenceExpanded);
   const indicatorRows = indicatorHighlights(layer.indicatorSnapshot);
@@ -988,14 +1015,54 @@ function LayerDetailDrawer({
                 {alignmentLine}
               </p>
 
-              {(layer.reasoning ?? layer.explanation) ? (
+              {scoreRationale || reasoningText ? (
                 <div
-                  className="rounded-xl p-4"
+                  data-testid="layer-drawer-why"
+                  className="rounded-xl p-4 space-y-2"
                   style={{ background: `${colors.surfaceMuted}50`, border: `1px solid ${colors.border}` }}
                 >
-                  <p className="m-0 text-sm leading-relaxed" style={{ color: colors.text }}>
-                    {layer.reasoning ?? layer.explanation}
+                  <p
+                    className="m-0 text-[11px] font-semibold uppercase tracking-wider"
+                    style={{ color: colors.textMuted }}
+                  >
+                    Why this read
                   </p>
+                  {scoreRationale ? (
+                    <p className="m-0 text-sm font-medium leading-relaxed" style={{ color: colors.text }}>
+                      {scoreRationale}
+                    </p>
+                  ) : null}
+                  {reasoningText ? (
+                    <p className="m-0 text-sm leading-relaxed" style={{ color: colors.textMuted }}>
+                      {reasoningText}
+                    </p>
+                  ) : null}
+                  <LayerAiExplain
+                    symbol={symbol}
+                    desk={tradingMode}
+                    bias={bias}
+                    layerKey={layer.key}
+                    layerName={layer.name}
+                    verdict={String(layer.verdict ?? layer.status ?? "neutral")}
+                    score={layer.score}
+                    rationale={scoreRationale ?? ""}
+                    drivers={layerDrivers}
+                    colors={colors}
+                  />
+                </div>
+              ) : null}
+
+              {layer.key === "fundamentals" &&
+              positionFundamentals &&
+              positionFundamentals.pillars.length > 0 ? (
+                <div data-testid="layer-drawer-fundamentals-pillars">
+                  <p
+                    className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wider"
+                    style={{ color: colors.textMuted }}
+                  >
+                    Why this score — F1–F5 pillars
+                  </p>
+                  <PositionFundamentalsGrid summary={positionFundamentals} colors={colors} />
                 </div>
               ) : null}
 
@@ -1078,6 +1145,17 @@ function LayerDetailDrawer({
 
               {layer.key === "sector" && layer.sectorInterpretation ? (
                 <LayerFactLine label="Sector read" value={layer.sectorInterpretation} colors={colors} />
+              ) : null}
+
+              {layer.key === "internals" && (layer.breadthSignal || layer.participationSignal) ? (
+                <div className="space-y-1.5" data-testid="layer-drawer-internals">
+                  {layer.breadthSignal ? (
+                    <LayerFactLine label="Breadth" value={layer.breadthSignal} colors={colors} />
+                  ) : null}
+                  {layer.participationSignal ? (
+                    <LayerFactLine label="Participation" value={layer.participationSignal} colors={colors} />
+                  ) : null}
+                </div>
               ) : null}
 
               {displayChips.length > 0 ? (
