@@ -1292,9 +1292,46 @@ def ai_explanations_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     user_profile=profile,
                 )
             )
+        elif typ == "layer_read":
+            symbol = str(body.get("symbol") or "").strip().upper()
+            if not symbol:
+                return bad_request("symbol is required.")
+            layer_obj = body.get("layer")
+            layer_obj = layer_obj if isinstance(layer_obj, dict) else {}
+            layer_key = str(layer_obj.get("key") or "").strip()
+            if not layer_key:
+                return bad_request("layer.key is required.")
+
+            def _driver_list(value: object) -> list[str]:
+                if not isinstance(value, list):
+                    return []
+                return [str(x).strip() for x in value if str(x).strip()][:8]
+
+            raw_score = layer_obj.get("score")
+            try:
+                score_val = int(raw_score) if raw_score is not None else None
+            except (TypeError, ValueError):
+                score_val = None
+
+            result = asyncio.run(
+                svc.explain_layer_read(
+                    symbol=symbol,
+                    layer_key=layer_key,
+                    layer_name=str(layer_obj.get("name") or layer_key),
+                    desk=str(body.get("desk") or "swing"),
+                    bias=str(body.get("bias") or "neutral"),
+                    verdict=str(layer_obj.get("verdict") or layer_obj.get("status") or "neutral"),
+                    score=score_val,
+                    rationale=str(layer_obj.get("rationale") or ""),
+                    drivers=_driver_list(layer_obj.get("drivers")),
+                    fallback_text=str(body.get("fallback_text") or ""),
+                    user_profile=profile,
+                )
+            )
         else:
             return bad_request(
-                "type must be signal_capture, news_synthesis, setup_read, or position_setup_read."
+                "type must be signal_capture, news_synthesis, setup_read, "
+                "position_setup_read, or layer_read."
             )
     except (TypeError, ValueError) as exc:
         return bad_request(f"Invalid explanation request: {exc}")

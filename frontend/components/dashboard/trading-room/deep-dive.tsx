@@ -2302,6 +2302,7 @@ export function DeepDive({
             defaultExpanded
             causalNarrative={causalNarrative}
             alignmentRatio={compositeAlignmentRatio}
+            positionFundamentals={isPositionLane ? positionFundamentals : null}
           />
           </div>
         ) : null}

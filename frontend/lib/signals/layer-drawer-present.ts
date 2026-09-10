@@ -133,6 +133,82 @@ export function buildLayerAlignmentLine(
   return `Neutral to your ${bias.toLowerCase()} setup.`;
 }
 
+/**
+ * Deterministic "why the score → this read" sentence. Explains how the 0–100 layer score
+ * maps to the bullish/bearish/neutral conclusion using the layer's own verdict band, so the
+ * drawer answers "why did this layer conclude X" without any AI. Glass-box: no model calls.
+ */
+export function buildLayerScoreRationale(layer: SignalsLayerRowInput): string | null {
+  const score = layer.score;
+  if (score == null) {
+    return layer.status === "Unavailable"
+      ? "No live score for this layer right now, so it isn't contributing a directional read."
+      : null;
+  }
+  const s = Math.round(score);
+  const bull = typeof layer.bullishThreshold === "number" ? Math.round(layer.bullishThreshold) : null;
+  const bear = typeof layer.bearishThreshold === "number" ? Math.round(layer.bearishThreshold) : null;
+  if (bull != null && s >= bull) {
+    return `At ${s}/100 the layer clears its ≥${bull} bullish cutoff, so it reads bullish.`;
+  }
+  if (bear != null && s <= bear) {
+    return `At ${s}/100 the layer is at or below its ≤${bear} bearish cutoff, so it reads bearish.`;
+  }
+  if (bull != null && bear != null) {
+    return `At ${s}/100 the layer sits inside its neutral band (${bear}–${bull}), so it adds no directional edge on its own.`;
+  }
+  const st = String(layer.status ?? "").toLowerCase();
+  if (st === "bullish") return `The layer reads bullish at ${s}/100.`;
+  if (st === "bearish") return `The layer reads bearish at ${s}/100.`;
+  return `The layer reads neutral at ${s}/100 — no strong directional tilt.`;
+}
+
+/**
+ * Compact, deterministic driver facts for a layer — the material fed to the on-demand AI
+ * "Explain this layer" narration (and its deterministic fallback). Pure; reuses the same
+ * evidence the drawer renders so the narration can never introduce data the engine didn't.
+ */
+export function buildLayerDrivers(layer: SignalsLayerRowInput): string[] {
+  const out: string[] = [];
+  const push = (s: string | null | undefined) => {
+    const t = (s ?? "").toString().trim();
+    if (t && !out.includes(t)) out.push(t);
+  };
+  push(layer.reasoning ?? layer.explanation);
+  switch (layer.key) {
+    case "news":
+      for (const a of (layer.catalystArticles ?? []).slice(0, 3)) push(a.text);
+      if (layer.latestGuidance) push(`Guidance: ${layer.latestGuidance}`);
+      if (layer.earningsResult) push(`Earnings: ${layer.earningsResult}`);
+      break;
+    case "technical":
+      for (const [k, v] of indicatorHighlights(layer.indicatorSnapshot).slice(0, 4)) {
+        push(`${k.replace(/_/g, " ")}: ${String(v)}`);
+      }
+      break;
+    case "sector":
+      push(layer.sectorInterpretation);
+      break;
+    case "macro":
+      for (const e of (layer.upcomingEvents ?? []).slice(0, 2)) {
+        push(`${e.event}${e.date ? ` (${e.date})` : ""}`);
+      }
+      break;
+    case "geopolitical":
+      push(layer.geoExposureSummary);
+      for (const e of (layer.geoActiveEvents ?? []).slice(0, 2)) push(e.title);
+      break;
+    case "internals":
+      if (layer.breadthSignal) push(`Breadth: ${layer.breadthSignal}`);
+      if (layer.participationSignal) push(`Participation: ${layer.participationSignal}`);
+      break;
+    default:
+      break;
+  }
+  for (const chip of filterDisplayChips(layer)) push(chip);
+  return out.slice(0, 8);
+}
+
 /** Data coverage confidence — not the same as directional layer score. */
 export function layerDataConfidenceTier(layer: SignalsLayerRowInput): "High" | "Medium" | "Low" {
   if (layer.status === "Unavailable") return "Low";
