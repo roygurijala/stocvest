@@ -106,7 +106,9 @@ def _persist_body(body: dict[str, Any], *, user_id: str, params: Any) -> tuple[s
         signal_strength=_signal_strength(body),
         pattern="position_composite",
         params=params,
-        snapshot_blobs={},
+        # POS-AI-9: dated news snapshot (published_at + sentiment) for offline
+        # decay tuning; built by the composite engine, behaviour-neutral.
+        snapshot_blobs={"news_snapshot_json": body.get("news_snapshot_json")},
         layer_scores_json=None,
         stop_level=_f(body.get("reference_stop_level")),
         reference_structure_level=_f(body.get("reference_target_1")),

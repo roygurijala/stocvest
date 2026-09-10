@@ -121,6 +121,48 @@ def _verdict_from_raw(raw: float | None) -> str | None:
     return "neutral"
 
 
+def news_snapshot_from_quality_articles(
+    *,
+    article_count: int,
+    weighted_sentiment: float | None,
+    catalyst_type: str | None,
+    catalyst_headline: str | None,
+    quality_articles: list[dict[str, Any]],
+    top_n: int = 12,
+) -> NewsSnapshot:
+    """Build a :class:`NewsSnapshot` (with dated ``top_events``) from a news layer's
+    ``quality_articles`` wire rows (ADR-004 POS-AI-9 capture).
+
+    The Position ledger previously stored no news snapshot, so there was no way to
+    join each headline's ``published_at`` to the signal's realized outcome and tune
+    the long-horizon recency decay. This captures the same public-market-news
+    metadata swing/day already persist (title/source/``published_at``/sentiment) so
+    the offline decay-tuning study has data to work with. No prices/PII.
+    """
+    events: list[NewsEventCapture] = []
+    for a in quality_articles[: max(0, int(top_n))]:
+        if not isinstance(a, dict):
+            continue
+        raw_score = a.get("sentiment_score")
+        score = float(raw_score) if isinstance(raw_score, (int, float)) else None
+        events.append(
+            NewsEventCapture(
+                title=(str(a["text"]) if a.get("text") else None),
+                source=(str(a["source"]) if a.get("source") else None),
+                published_at=(str(a["published_at"]) if a.get("published_at") else None),
+                sentiment_score=score,
+            )
+        )
+    return NewsSnapshot(
+        article_count=int(article_count or 0),
+        weighted_sentiment=weighted_sentiment,
+        catalyst_type=catalyst_type,
+        catalyst_headline=catalyst_headline,
+        top_sources=[],
+        top_events=events,
+    )
+
+
 def layer_scores_snapshot_from_layer_scores(
     layer_scores: dict[str, float],
     *,
