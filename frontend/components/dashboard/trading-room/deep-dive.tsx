@@ -16,7 +16,7 @@
  * one composite fetch so the deep dive never contradicts the signal card.
  */
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { borderRadius, roleAccents, spacing, typography, animationDurations } from "@/lib/design-system";
 import { DeepDiveEvidenceTabs } from "@/components/dashboard/trading-room/deep-dive-evidence-tabs";
@@ -679,18 +679,33 @@ export function DeepDive({
   const feedLane: FeedLane = activeLane === "day" ? "day" : "swing";
   const isPositionLane = activeLane === "position";
 
+  // Set when the user picks a lane via the in-panel toggle. `applyDeepDiveLane`
+  // re-keys the selected card (`${lane}:SYMBOL`), which retriggers the sync effect
+  // below. Without this guard that effect would re-resolve the lane from a STALE
+  // `urlIntent` — the address bar is updated via `history.replaceState`, which does
+  // not refresh Next's `useSearchParams()` — and a `?lane=position` deep-link would
+  // snap every Day/Swing click back to Long Term. The toggle is the user's current
+  // intent, so skip the re-resolve exactly once for toggle-driven card changes.
+  const laneToggleRef = useRef(false);
   const handleLaneChange = useCallback(
     (lane: DeepDiveLane) => {
+      if (lane !== activeLane) laneToggleRef.current = true;
       setActiveLane(lane);
       stashDeepDiveLanePreference(card.symbol, lane);
       onLaneChange?.(lane);
     },
-    [card.symbol, onLaneChange]
+    [activeLane, card.symbol, onLaneChange]
   );
 
   // Sync activeLane when card changes (fixes loading issue when clicking different signals)
   useEffect(() => {
-    setActiveLane(resolveDeepDiveLaneForCard(card, urlIntent));
+    if (laneToggleRef.current) {
+      // In-panel lane toggle: activeLane is already set by handleLaneChange; do not
+      // clobber it with a stale URL intent. Still reset per-signal UI below.
+      laneToggleRef.current = false;
+    } else {
+      setActiveLane(resolveDeepDiveLaneForCard(card, urlIntent));
+    }
     setEvidenceTab(DEFAULT_DEEP_DIVE_EVIDENCE_TAB);
     setShowBriefDetails(false);
   }, [card.symbol, card.id, card.lane, urlIntent]);
