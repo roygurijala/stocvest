@@ -652,7 +652,19 @@ layers produce the score.** Nothing below turns the number into a black box.
   dependency.
 - **POS-AI-10 v2 SEC↔FMP cross-check** — `fundamentals_crosscheck.py` flags where the provider
   disagrees with the SEC XBRL figure for the same fiscal year (revenue / net income / diluted EPS),
-  `scored:false`, never overrides. RAG over full filings/transcripts still pending.
+  `scored:false`, never overrides.
+- **POS-AI-10 RAG retrieval** — `edgar_10k.py` now pulls Item 1 / 1A / 7 from a *single* shared
+  10-K fetch; pure `filings_rag.py` does deterministic lexical retrieval and surfaces the top
+  **verbatim** cited passages (`scored:false`, no LLM generation → nothing to hallucinate) in the
+  Research bundle + `PositionResearchPanel`. Generative cited synthesis + 10-Q / earnings-call
+  transcripts + embedding retrieval are the pending v2.
+- **POS-D15 full (code)** — `position_universe.py` (FMP company-screener pre-filter → ~500-name
+  investable universe, curated fallback) + `position_scan_batch.py` weekly worker
+  (`scan_type=position_scan_batch`) + cross-instance snapshot store (`position_scan_store.py`,
+  Dynamo gated by `STOCVEST_POSITION_SCAN_TABLE`, in-memory default) + var-gated Sunday schedule.
+  Ships dark; pending ops = provision the table + IAM, set the env, flip `position_scan_batch_enabled`.
+- **POS-AI-12 (done)** — `STOCVEST_POSITION_READ_STRONG_MODEL_ENABLED` (default OFF) flips ONLY the
+  Position Investment Read to Sonnet; fallback + copy guard unchanged.
 
 ### Known soak-tuning item (do NOT invent constants pre-data)
 - **News layer runs `mode="swing"`** inside `NewsAnalyzer` (position uses extended lookback +
@@ -665,6 +677,52 @@ layers produce the score.** Nothing below turns the number into a black box.
 |----|------|-------------|-----------|
 | **POS-AI-8** | **Calibrated empirical probability** — surface `P(outperform over N months)` per tier from the ledger (hit-rate by score-bucket × regime, Wilson CIs) | Beats black-box "AI rating" apps with an *auditable* probability; the strongest "prediction" differentiator | Empirical from our own resolved signals only; shown with sample size + CI; never a model guess |
 | **POS-AI-9** | Position-tuned News recency + turn ON Claude sentiment/impact for Position; embedding-based event dedup | Stops one story = five signals; sharper structural news read | Validate on ledger before flags flip; sentiment stays inside the deterministic News layer math |
-| **POS-AI-10** | Deepen Research: RAG over full 10-K/10-Q + earnings-call transcripts; cross-check FMP fundamentals vs SEC **XBRL companyfacts** _(XBRL financials block + SEC↔FMP cross-check **DONE 2026-09-09**; RAG pending)_ | Higher-fidelity, free primary-source fundamentals; richer (still `scored:false`) research | External content stays `scored:false`; XBRL only *flags* FMP disagreements, never silently overrides |
+| **POS-AI-10** | Deepen Research: RAG over full 10-K/10-Q + earnings-call transcripts; cross-check FMP fundamentals vs SEC **XBRL companyfacts** _(XBRL financials + SEC↔FMP cross-check + **10-K multi-section RAG retrieval DONE 2026-09-09**; generative synthesis + 10-Q/transcripts pending)_ | Higher-fidelity, free primary-source fundamentals; richer (still `scored:false`) research | External content stays `scored:false`; XBRL only *flags* FMP disagreements, never silently overrides |
 | **POS-AI-11** | Position-specific **walk-forward weight optimizer** once the ledger has depth | Learn the 7 weights from outcomes instead of hand-set defaults | Reuse D10 admin-proposal pipeline; human-approved, versioned |
-| **POS-AI-12** | Stronger model tier (Sonnet/Opus) for the **Investment Read** only | Low call volume, high value → depth without day/swing budget blowup | Paid-gated; deterministic fallback + copy guard unchanged |
+| **POS-AI-12** | Stronger model tier (Sonnet/Opus) for the **Investment Read** only _(**DONE 2026-09-09**)_ | Low call volume, high value → depth without day/swing budget blowup | Paid-gated; deterministic fallback + copy guard unchanged |
+
+---
+
+## Pending tasks — remaining to full go-live (as of 2026-09-09, PR #246 merged)
+
+The MLIP is **code-complete and shipping dark**. Everything below is what stands between "merged"
+and "position desk live for users with validated conviction + alerts." Grouped by what unblocks it.
+`docs/BACKLOG.md` is the row-level source of truth; this is the consolidated ADR view.
+
+### A. Ops / enablement gates (no code — flip when ready)
+1. **Merge PR #246 → `main`** ✅ (triggers the VAL-POS soak on the next infra `apply` —
+   `var.position_ledger_capture_enabled` defaults `true`).
+2. **VAL-POS shadow soak** — ≥4 weeks of Friday captures + the weekly review in
+   `docs/runbooks/VAL-POS-soak.md`, then **sign-off**. Nothing user-facing; no alerts fire.
+3. **POS-D12 — counsel sign-off** on the "gem" tier / marketing copy before any research/discovery
+   flag flips ON (the deterministic copy guard is already wired as a runtime backstop).
+4. **Flip user-facing flags** (after 2 + 3): POS-AI-4 Research (`STOCVEST_POSITION_RESEARCH_ENABLED`
+   + FE `POSITION_RESEARCH`), POS-D8 gem rail (`positionFeed`), POS-AI-12 strong Read
+   (`STOCVEST_POSITION_READ_STRONG_MODEL_ENABLED`).
+5. **POS-D15 full — provision + enable**: create the snapshot DynamoDB table + IAM grant, set
+   `STOCVEST_POSITION_SCAN_TABLE`, then flip `position_scan_batch_enabled` ON (weekly Sunday batch
+   warms the cross-instance gem list). Until then the batch only warms its own instance.
+6. **POS-D10 — position alerts/emails**: enable **only** after the VAL-POS sign-off (2).
+
+### B. Validation-gated engineering (needs VAL-POS ledger depth)
+- **POS-AI-8** — calibrated empirical `P(outperform over N months)` per tier from resolved ledger
+  rows (hit-rate × regime, Wilson CIs; shown with sample size). Our auditable answer to black-box
+  "AI rating" apps.
+- **POS-AI-9** — position-tuned News recency/decay profile + turn ON Claude sentiment/impact for
+  Position + embedding-based event dedup. **Tune from the ledger — do not hand-set constants.**
+- **POS-AI-11** — position-specific walk-forward weight optimizer for the 7 layer weights (reuse the
+  D10 admin-proposal pipeline; human-approved, versioned).
+- **POS-D9** — add the setup-evolution mode dimension to the ledger report.
+- **POS-D16** — optional Market Brief "top-3 gems" tile (after the soak proves the list).
+
+### C. Dependency-gated engineering
+- **POS-AI-7 (second half)** — broker-portfolio overlap / holdings-aware context. Blocked on the
+  broker holdings feed (thesis-drift half already shipped).
+- **POS-AI-5 v2** — data-backed sector fundamentals behind `STOCVEST_POSITION_FUNDAMENTALS_V2_ENABLED`,
+  pending **verified FMP fields**: bank CET1 / NPL + P/TBV; REIT P/FFO recompute + REIT-debt metrics;
+  energy mid-cycle chip; and the **F7 (moat)** / **F8 (capital allocation)** pillars (coordinated
+  pillar-set change). Deferred to avoid inventing financial thresholds (repo rule §8).
+
+### D. Deferred / optional
+- **POS-AI-10 v2** — generative cited synthesis (Claude over the retrieved passages) + 10-Q /
+  earnings-call transcripts + embedding-based retrieval (the retrieval layer shipped 2026-09-09).
