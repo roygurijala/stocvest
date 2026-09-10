@@ -38,6 +38,7 @@ from stocvest.data.fundamentals_provider import (
     get_fundamentals_provider,
 )
 from stocvest.data.models import Bar, Snapshot, Timeframe
+from stocvest.data.signal_snapshots import news_snapshot_from_quality_articles
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.data.symbol_normalize import to_polygon_symbol
 from stocvest.data.ticker_reference_cache import get_ticker_reference
@@ -440,6 +441,16 @@ async def build_position_composite_response(
     }
     response_body.update(composite_layers_meta(layer_results, layer_ids, mode="position"))
     response_body.update(composite_direction_fields(response_body))
+    # POS-AI-9 capture: persist a dated news snapshot (article published_at + sentiment)
+    # so the offline decay-tuning study can join each headline's age to the realized
+    # ledger outcome. Behaviour-neutral — the composite score is already computed above.
+    response_body["news_snapshot_json"] = news_snapshot_from_quality_articles(
+        article_count=int(getattr(news, "article_count", 0) or 0),
+        weighted_sentiment=getattr(news, "weighted_sentiment", None),
+        catalyst_type=getattr(news, "catalyst_type", None),
+        catalyst_headline=getattr(news, "catalyst_headline", None),
+        quality_articles=list(getattr(news, "quality_articles", []) or []),
+    ).model_dump_json()
     response_body["causal_narrative"] = build_causal_narrative(
         signal_summary=str(composite.verdict.value),
         layers=layers_out,
