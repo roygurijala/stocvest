@@ -32,6 +32,9 @@ class PositionFundamentalsContext:
     quarters_beating: int = 0
     quarters_missing: int = 0
     sector_bucket: str | None = None
+    #: Fundamentals v2 (EV/Sales TTM + bank FCF/current-ratio suppression). Ship-dark flag;
+    #: when False the F1/F3/F4 scorers are byte-identical to v1.
+    fundamentals_v2: bool = False
 
 
 def prepare_snapshot(snapshot: PositionFundamentalsSnapshot) -> PositionFundamentalsSnapshot:
@@ -107,14 +110,15 @@ class PositionFundamentalsAnalyzer:
             revenue_trend=ctx.revenue_trend,
         )
         pillars: list[PositionPillarResult] = [
-            score_f1_profitability(snap, sector_flags=flags),
+            score_f1_profitability(snap, sector_flags=flags, fundamentals_v2=ctx.fundamentals_v2),
             f2,
-            score_f3_balance_sheet(snap, sector_flags=flags),
+            score_f3_balance_sheet(snap, sector_flags=flags, fundamentals_v2=ctx.fundamentals_v2),
             score_f4_valuation(
                 snap,
                 sector_flags=flags,
                 f2_verdict=f2.verdict,
                 f2_score=f2.score,
+                fundamentals_v2=ctx.fundamentals_v2,
             ),
             score_f5_earnings_quality(
                 snap,

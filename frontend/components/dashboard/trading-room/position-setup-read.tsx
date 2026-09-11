@@ -22,6 +22,7 @@ type Props = {
   signalBasisLabel?: string | null;
   layerAlignmentLine?: string | null;
   signalValidDays?: number | null;
+  signalStructureBroken?: boolean | null;
   colors: Colors;
 };
 
@@ -39,6 +40,7 @@ export function PositionSetupRead({
   signalBasisLabel,
   layerAlignmentLine,
   signalValidDays,
+  signalStructureBroken,
   colors
 }: Props) {
   const aggScore = fundamentals.score != null ? `${fundamentals.score}/100` : "—";
@@ -76,7 +78,14 @@ export function PositionSetupRead({
           <span style={{ fontSize: typography.scale.lg, fontWeight: 700, color: biasColor(bias, colors) }}>
             {bias} · {aggScore} fundamentals
           </span>
-          {signalValidDays != null && signalValidDays > 0 ? (
+          {signalStructureBroken ? (
+            <span
+              data-testid="position-structure-broken"
+              style={{ fontSize: typography.scale.xs, color: colors.caution, fontWeight: 600 }}
+            >
+              Weekly structure broken — thesis at risk; watch for stabilization above trend
+            </span>
+          ) : signalValidDays != null && signalValidDays > 0 ? (
             <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
               Valid ~{signalValidDays} days (weekly structure)
             </span>

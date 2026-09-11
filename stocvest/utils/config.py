@@ -373,6 +373,28 @@ class Settings(BaseSettings):
         False,
         alias="STOCVEST_POSITION_VOLUME_CONFIRM_ENABLED",
     )
+    # Position fundamentals v2 (ship dark; default OFF → F1/F3/F4 byte-identical when off).
+    # Fixes two fundamentals-accuracy defects surfaced on SOFI:
+    #   (1) F4 EV/Sales used FMP's *quarterly* evToSales (EV ÷ single-quarter revenue),
+    #       overstating the multiple ~4x (SOFI 14.8 vs TTM 4.2) and over-penalizing growth;
+    #       v2 derives EV/Sales from enterprise value ÷ trailing-4Q revenue.
+    #   (2) F1 "Negative FCF" and F3 "current ratio" penalties fire for banks/lenders where
+    #       FCF (loan originations) and current ratio are structurally non-meaningful; v2
+    #       suppresses those generic penalties for bank buckets (surfaced as context chips).
+    stocvest_position_fundamentals_v2_enabled: bool = Field(
+        False,
+        alias="STOCVEST_POSITION_FUNDAMENTALS_V2_ENABLED",
+    )
+    # Position holder / position-management read (ship dark; default OFF). Adds an
+    # OWNER-oriented read ("if you already hold this") with explicit management actions
+    # (tighten stop, reduce, add-only-on-pullback) derived deterministically from the
+    # desk's own signals (structure-broken, risk/reward vs desk minimum). This intentionally
+    # emits action-oriented language the standard Position copy guard bans, so it is gated
+    # OFF and MUST stay off in production until legal/compliance signs off on holder advice.
+    stocvest_position_holder_read_enabled: bool = Field(
+        False,
+        alias="STOCVEST_POSITION_HOLDER_READ_ENABLED",
+    )
     # B76 — swing/day target geometry v2. Fixes two defects that produce misleading
     # risk/reward in the deep-dive "what-if" planner:
     #   (A) analyst price targets (Benzinga/Perplexity, ~12-month fundamental PTs) reach

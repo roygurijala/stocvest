@@ -133,6 +133,43 @@ export function parsePositionThesisPacket(
   return packet;
 }
 
+export type PositionHolderStance = "defensive" | "caution" | "constructive";
+
+export type PositionHolderRead = {
+  stance: PositionHolderStance;
+  headline: string;
+  actions: string[];
+  context: string[];
+  disclaimer: string;
+};
+
+const HOLDER_STANCES: PositionHolderStance[] = ["defensive", "caution", "constructive"];
+
+/**
+ * Parse the ship-dark owner-oriented holder read (`position_holder_read`). Present only when
+ * the backend flag is on; returns null otherwise so the UI renders nothing.
+ */
+export function parsePositionHolderRead(
+  body: Record<string, unknown> | null | undefined
+): PositionHolderRead | null {
+  const raw = body?.position_holder_read;
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const stance = str(o.stance).toLowerCase() as PositionHolderStance;
+  if (!HOLDER_STANCES.includes(stance)) return null;
+  const strList = (v: unknown): string[] =>
+    Array.isArray(v) ? v.map((x) => str(x)).filter(Boolean) : [];
+  const actions = strList(o.actions);
+  if (!actions.length) return null;
+  return {
+    stance,
+    headline: str(o.headline),
+    actions,
+    context: strList(o.context),
+    disclaimer: str(o.disclaimer)
+  };
+}
+
 export function pillarVerdictTone(verdict: string): "bullish" | "bearish" | "neutral" | "muted" {
   const v = verdict.toLowerCase();
   if (v === "bullish") return "bullish";

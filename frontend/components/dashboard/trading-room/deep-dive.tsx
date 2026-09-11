@@ -22,9 +22,11 @@ import { borderRadius, roleAccents, spacing, typography, animationDurations } fr
 import { DeepDiveEvidenceTabs } from "@/components/dashboard/trading-room/deep-dive-evidence-tabs";
 import { DeepDiveLaneToggle } from "@/components/dashboard/trading-room/deep-dive-lane-toggle";
 import { PositionSetupRead } from "@/components/dashboard/trading-room/position-setup-read";
+import { PositionHolderRead } from "@/components/dashboard/trading-room/position-holder-read";
 import {
   buildPositionThesisSummary,
   parsePositionFundamentals,
+  parsePositionHolderRead,
   parsePositionThesisPacket
 } from "@/lib/dashboard/trading-room/position-fundamentals-present";
 import type { DeepDiveLane, FeedLane } from "@/lib/dashboard/trading-room/feed-model";
@@ -1512,6 +1514,14 @@ export function DeepDive({
     [activeLane, composite]
   );
 
+  const positionHolderRead = useMemo(
+    () =>
+      activeLane === "position" && composite
+        ? parsePositionHolderRead(composite as Record<string, unknown>)
+        : null,
+    [activeLane, composite]
+  );
+
   const signalValidDays = useMemo(() => {
     if (!composite || isInsufficient) return null;
     const raw = (composite as Record<string, unknown>).signal_valid_days;
@@ -1522,6 +1532,11 @@ export function DeepDive({
     if (!composite || isInsufficient) return null;
     const raw = (composite as Record<string, unknown>).signal_basis_label;
     return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  }, [composite, isInsufficient]);
+
+  const signalStructureBroken = useMemo(() => {
+    if (!composite || isInsufficient) return false;
+    return (composite as Record<string, unknown>).signal_structure_broken === true;
   }, [composite, isInsufficient]);
 
   const laneAccent =
@@ -1835,7 +1850,10 @@ export function DeepDive({
             style={{ margin: 0, fontSize: typography.scale.sm, lineHeight: 1.5, color: colors.caution, fontWeight: 600 }}
           >
             Not tradable at current structure
-            {geometryBlockReason ? ` (${geometryBlockReason.replace(/_/g, " ")})` : ""} — wait for a pullback that clears desk geometry.
+            {geometryBlockReason ? ` (${geometryBlockReason.replace(/_/g, " ")})` : ""}
+            {isPositionLane && signalStructureBroken
+              ? " — weekly structure is broken; wait for it to stabilize above the weekly trend before considering entry."
+              : " — wait for a pullback that clears desk geometry."}
           </p>
         ) : null}
         {briefMeta ? (
@@ -1930,6 +1948,7 @@ export function DeepDive({
                       signalBasisLabel={signalBasisLabel}
                       layerAlignmentLine={layerAlignmentLine}
                       signalValidDays={signalValidDays}
+                      signalStructureBroken={signalStructureBroken}
                       colors={colors}
                     />
                   ) : (
@@ -1941,6 +1960,9 @@ export function DeepDive({
                       be loading degraded data or this symbol lacks full FMP coverage.
                     </p>
                   )
+                ) : null}
+                {isPositionLane && positionHolderRead ? (
+                  <PositionHolderRead read={positionHolderRead} colors={colors} />
                 ) : null}
                 {!isPositionLane && pageDecision ? (
                   <SignalsSetupRead
