@@ -342,10 +342,20 @@ class PolygonClient(_StreamingMixin):
         if from_date is None:
             from_date = "2000-01-01"
 
+        # Polygon's aggregate ``limit`` bounds the number of BASE (daily) aggregates
+        # scanned to BUILD the buckets — NOT the number of week/month buckets
+        # returned. So a recent-mode request for N weekly bars would only walk back
+        # ~N daily sessions (≈ N/5 weeks); monthly ≈ N/21. Over-fetch the base window
+        # by the trading-days-per-bucket factor (padded for holidays), then slice to
+        # the caller's requested count after ordering. Daily/intraday are 1:1 (base ==
+        # target), so their behavior is unchanged.
+        base_per_bucket = {"week": 7, "month": 31}.get(timespan, 1)
+        polygon_limit = min(limit * base_per_bucket, 50000) if recent_mode else limit
+
         params = {
             "adjusted": str(adjusted).lower(),
             "sort":     "desc" if recent_mode else "asc",
-            "limit":    str(limit),
+            "limit":    str(polygon_limit),
         }
 
         path = f"/v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan}/{from_date}/{to_date}"
@@ -357,6 +367,10 @@ class PolygonClient(_StreamingMixin):
             # contract every caller expects (and every downstream analyzer
             # assumes — SMA windows, RSI seed, MACD seed, etc.).
             results = list(reversed(results))
+            # Keep only the most-recent ``limit`` target buckets (we over-fetched the
+            # base window above for week/month so SMA-200 etc. have enough history).
+            if base_per_bucket > 1 and len(results) > limit:
+                results = results[-limit:]
 
         bars: list[Bar] = []
         for r in results:
