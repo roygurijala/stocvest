@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPositionThesisSummary,
   parsePositionFundamentals,
+  parsePositionHolderRead,
   parsePositionThesisPacket
 } from "@/lib/dashboard/trading-room/position-fundamentals-present";
 
@@ -140,5 +141,31 @@ describe("buildPositionThesisSummary (POS-AI-3)", () => {
     });
     expect(buildPositionThesisSummary(packet)).toBe("Bull: Only a bull point");
     expect(buildPositionThesisSummary(null)).toBe("");
+  });
+});
+
+describe("parsePositionHolderRead (ship-dark)", () => {
+  it("parses a well-formed holder read", () => {
+    const read = parsePositionHolderRead({
+      position_holder_read: {
+        stance: "defensive",
+        headline: "Structure has broken and reward-to-risk is unfavorable.",
+        actions: ["Tighten your stop toward the weekly trend.", "Consider reducing exposure."],
+        context: ["Reward-to-risk is 0.40 vs the desk minimum of 1.50 at this price."],
+        disclaimer: "Informational position context — not personalized investment advice."
+      }
+    });
+    expect(read).not.toBeNull();
+    expect(read?.stance).toBe("defensive");
+    expect(read?.actions).toHaveLength(2);
+    expect(read?.context[0]).toContain("0.40");
+  });
+
+  it("returns null when absent (flag off), malformed, or has no actions", () => {
+    expect(parsePositionHolderRead({})).toBeNull();
+    expect(parsePositionHolderRead({ position_holder_read: { stance: "bogus", actions: ["x"] } })).toBeNull();
+    expect(
+      parsePositionHolderRead({ position_holder_read: { stance: "caution", actions: [] } })
+    ).toBeNull();
   });
 });

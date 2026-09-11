@@ -42,6 +42,14 @@ class SectorOverrideFlags:
     #: (banks fund with deposits; REITs with mortgage debt), so a high D/E is not a
     #: solvency red flag. Interest-coverage / liquidity checks still apply.
     structural_high_leverage: bool = False
+    #: F1 — do not penalize negative free cash flow: for lenders (banks/consumer finance)
+    #: FCF is dominated by loan originations held on balance sheet, so it is structurally
+    #: negative even when the business is GAAP-profitable. Gated behind fundamentals-v2.
+    suppress_fcf_penalty: bool = False
+    #: F3 — do not score the classic current ratio: banks/insurers do not have an
+    #: industrial current-asset/liability structure, so a sub-1.0 ratio is not a liquidity
+    #: red flag. Gated behind fundamentals-v2.
+    suppress_current_ratio: bool = False
     #: F4 — optional chip text explaining the sector-appropriate valuation lens; when set it
     #: replaces the default de-weight chip.
     valuation_note: str | None = None
@@ -62,9 +70,13 @@ def _build_sector_override_table() -> dict[str, SectorOverrideFlags]:
     table: dict[str, SectorOverrideFlags] = {}
     for bucket in _BANK_BUCKETS:
         # Banks/insurers: ROA over ROIC, and leverage is structural (deposits/float).
+        # FCF (loan originations) and the classic current ratio are non-meaningful for
+        # lenders, so v2 suppresses those generic penalties.
         table[bucket] = SectorOverrideFlags(
             use_roa_not_roic=True,
             structural_high_leverage=True,
+            suppress_fcf_penalty=True,
+            suppress_current_ratio=True,
             sector_label=bucket,
         )
     for bucket in _REIT_BUCKETS:

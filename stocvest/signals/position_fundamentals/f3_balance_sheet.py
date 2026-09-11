@@ -24,6 +24,7 @@ def score_f3_balance_sheet(
     snapshot: PositionFundamentalsSnapshot,
     *,
     sector_flags: SectorOverrideFlags | None = None,
+    fundamentals_v2: bool = False,
 ) -> PositionPillarResult:
     flags = sector_flags or SectorOverrideFlags()
     ratios = snapshot.ratios
@@ -36,10 +37,15 @@ def score_f3_balance_sheet(
     chips: list[str] = []
     red_flags: list[str] = []
 
+    suppress_current = fundamentals_v2 and flags.suppress_current_ratio
     latest_ratio = ratios[0] if ratios else None
     if latest_ratio is not None:
         current = latest_ratio.current_ratio
-        if current is not None:
+        if current is not None and suppress_current:
+            # Banks/insurers have no industrial current-asset/liability structure, so a
+            # sub-1.0 current ratio is not a liquidity red flag — surface as context only.
+            chips.append(f"Current ratio {current:.1f} — not a solvency metric for this sector")
+        elif current is not None:
             if current >= 1.5:
                 base = apply_score_delta(base, 8)
                 chips.append(f"Current ratio {current:.1f}")

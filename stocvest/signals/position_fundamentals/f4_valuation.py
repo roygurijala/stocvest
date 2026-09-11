@@ -88,12 +88,27 @@ def apply_value_trap_guard(
     )
 
 
+def _ttm_revenue(snapshot: PositionFundamentalsSnapshot) -> float | None:
+    """Trailing-twelve-month revenue = sum of the latest 4 quarterly revenues.
+
+    Returns None when fewer than 4 quarters or the sum is not positive, so callers can
+    skip an EV/Sales read rather than fall back to a misleading single-quarter multiple.
+    """
+    income = sorted(snapshot.income_statements, key=lambda r: r.as_of_date, reverse=True)
+    revs = [i.revenue for i in income[:4] if i.revenue is not None]
+    if len(revs) < 4:
+        return None
+    total = sum(revs)
+    return float(total) if total > 0 else None
+
+
 def score_f4_valuation(
     snapshot: PositionFundamentalsSnapshot,
     *,
     sector_flags: SectorOverrideFlags | None = None,
     f2_verdict: str = "neutral",
     f2_score: int | None = None,
+    fundamentals_v2: bool = False,
 ) -> PositionPillarResult:
     flags = sector_flags or SectorOverrideFlags()
     ratios = sorted(snapshot.ratios, key=lambda r: r.as_of_date, reverse=True)
@@ -132,14 +147,30 @@ def score_f4_valuation(
     chips.extend(pfcf_chips)
 
     if metrics:
-        ev_metric = normalize_positive_multiple(metrics[0].ev_to_sales)
+        ev_metric: float | None
+        ev_suffix = ""
+        if fundamentals_v2:
+            # v2: derive EV/Sales from enterprise value ÷ TTM revenue. FMP's quarterly
+            # `evToSales` is EV ÷ a single quarter's revenue (~4x the annual multiple), which
+            # over-penalizes growth names (e.g. SOFI showed 14.8 vs a true TTM 4.2). Skip the
+            # read entirely when TTM revenue / EV are unavailable rather than use that value.
+            ttm_rev = _ttm_revenue(snapshot)
+            ev_value = metrics[0].enterprise_value
+            ev_metric = (
+                float(ev_value) / ttm_rev
+                if ev_value is not None and ev_value > 0 and ttm_rev
+                else None
+            )
+            ev_suffix = " (TTM)"
+        else:
+            ev_metric = normalize_positive_multiple(metrics[0].ev_to_sales)
         if ev_metric is not None:
             if ev_metric <= 3.0:
                 base = apply_score_delta(base, 6)
-                chips.append(f"EV/Sales {ev_metric:.1f}")
+                chips.append(f"EV/Sales {ev_metric:.1f}{ev_suffix}")
             elif ev_metric >= 8.0:
                 base = apply_score_delta(base, -6)
-                chips.append(f"EV/Sales {ev_metric:.1f} — rich")
+                chips.append(f"EV/Sales {ev_metric:.1f}{ev_suffix} — rich")
 
     score, verdict = finalize_pillar_score(base)
     pillar = PositionPillarResult(

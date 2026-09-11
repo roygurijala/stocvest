@@ -29,6 +29,7 @@ def score_f1_profitability(
     snapshot: PositionFundamentalsSnapshot,
     *,
     sector_flags: SectorOverrideFlags | None = None,
+    fundamentals_v2: bool = False,
 ) -> PositionPillarResult:
     flags = sector_flags or SectorOverrideFlags()
     ratios = snapshot.ratios
@@ -81,7 +82,12 @@ def score_f1_profitability(
                 base = apply_score_delta(base, 4)
                 chips.append(f"{name} {margin:.0%}")
 
-    if income and cash:
+    if fundamentals_v2 and flags.suppress_fcf_penalty:
+        # Lenders (banks/consumer finance): FCF is dominated by loan originations held on
+        # balance sheet, so it is structurally negative even when GAAP-profitable. Do not
+        # score it — surface as context so the glass-box read explains why.
+        chips.append("FCF not scored — lender (loan book drives cash flow)")
+    elif income and cash:
         rev = income[0].revenue
         fcf = cash[0].free_cash_flow
         if rev and rev > 0 and fcf is not None:

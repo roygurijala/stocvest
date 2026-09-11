@@ -71,6 +71,7 @@ from stocvest.signals.position_technical_analyzer import (
     PositionTechnicalAnalyzer,
     aggregate_daily_to_weekly_bars,
 )
+from stocvest.signals.position_holder_read import build_position_holder_read
 from stocvest.signals.position_thesis_packet import build_position_thesis_packet
 from stocvest.signals.sector_analyzer import SectorAnalyzer
 from stocvest.signals.sector_mapper import SectorMapper, SectorResolutionState
@@ -97,6 +98,30 @@ def _position_layer_gate(status: str) -> bool:
     """Layers that satisfy the insufficient-data gate (includes partial fundamentals)."""
     st = str(status or "").strip().lower()
     return st in ("available", "as_of_close", "active", "degraded")
+
+
+def resolve_position_signal_basis(
+    tech_available: bool, tech_verdict: str
+) -> tuple[str, bool]:
+    """Honest headline basis label + structure-broken flag for the Long Term read.
+
+    The weekly technical layer can read bearish (price below SMA50/SMA200) even when the
+    fundamentals pillars are strong. The old static "Derived from weekly structural trend"
+    label claimed an uptrend that may not exist; this reflects the actual technical state so
+    the copy and the validity caveat stay honest. Pure/testable.
+    """
+    verdict = str(tech_verdict or "").strip().lower()
+    if not tech_available:
+        return "Fundamentals-led read — weekly trend unavailable.", False
+    if verdict == "bearish":
+        return (
+            "Weekly structure is broken (price below its weekly trend) — "
+            "fundamentals-led read, not a confirmed uptrend.",
+            True,
+        )
+    if verdict == "neutral":
+        return "Weekly structure is mixed — fundamentals-led read with a neutral trend.", False
+    return "Derived from weekly structural trend + fundamentals.", False
 
 
 # Long-horizon sector relative-strength window (~one quarter of weekly bars).
@@ -244,7 +269,10 @@ async def build_position_composite_response(
 
     prov = fundamentals_provider if fundamentals_provider is not None else get_fundamentals_provider()
     fund_snapshot = await fetch_position_fundamentals_snapshot(sym, provider=prov)
-    fund_ctx = PositionFundamentalsContext(sector_bucket=sic_bucket_for_geo)
+    fund_ctx = PositionFundamentalsContext(
+        sector_bucket=sic_bucket_for_geo,
+        fundamentals_v2=settings.stocvest_position_fundamentals_v2_enabled,
+    )
     fundamentals = PositionFundamentalsAnalyzer().analyze(fund_snapshot, context=fund_ctx)
 
     news = NewsAnalyzer().analyze(
@@ -426,6 +454,14 @@ async def build_position_composite_response(
     valid_days = int(params.position_signal_valid_days)
     expires_at = datetime.now(timezone.utc) + timedelta(days=valid_days)
 
+    # Honest basis label + structure-broken flag: the weekly technical layer can be bearish
+    # (price below SMA50/SMA200) even while fundamentals read well, so the headline must not
+    # claim a "structural trend" that isn't there, and the validity window must be caveated.
+    basis_label, structure_broken = resolve_position_signal_basis(
+        _position_layer_gate(getattr(tech, "status", "")),
+        str(getattr(tech, "verdict", "") or ""),
+    )
+
     response_body: dict[str, Any] = {
         "symbol": sym,
         "score": composite.score,
@@ -438,7 +474,8 @@ async def build_position_composite_response(
         "disclaimer": API_SIGNAL_DISCLAIMER,
         "mode": "position",
         "signal_basis": "weekly_bars_structural",
-        "signal_basis_label": "Derived from weekly structural trend + fundamentals",
+        "signal_basis_label": basis_label,
+        "signal_structure_broken": structure_broken,
         "signal_valid_days": valid_days,
         "signal_expires": expires_at.replace(microsecond=0).isoformat(),
         "alignment_ratio": composite.alignment_ratio,
@@ -518,6 +555,13 @@ async def build_position_composite_response(
 
     # POS-AI-1/AI-2: glass-box thesis packet from the fully-populated body (pillars + layers + verdict).
     response_body["position_thesis_packet"] = build_position_thesis_packet(response_body).to_api_dict()
+
+    # Holder / position-management read (ship dark; OFF until legal sign-off). Owner-oriented
+    # guidance derived from the desk's own signals; omitted entirely when the flag is off.
+    if settings.stocvest_position_holder_read_enabled:
+        holder_read = build_position_holder_read(response_body)
+        if holder_read is not None:
+            response_body["position_holder_read"] = holder_read
 
     return response_body
 

@@ -138,6 +138,32 @@ async def test_position_composite_mode_and_fundamentals(_mute_side_effects: None
     assert out.get("signal_valid_days") == 90
     assert "signal_expires" in out
     assert out.get("signal_basis") == "weekly_bars_structural"
+    # A1/A2: honest basis label reflects the technical state; structure-broken flag present.
+    assert isinstance(out.get("signal_basis_label"), str) and out["signal_basis_label"].strip()
+    assert isinstance(out.get("signal_structure_broken"), bool)
+    # Holder read is ship-dark: absent unless the flag is flipped on.
+    assert "position_holder_read" not in out
+
+    # Flag ON → owner-oriented holder read attached (reuses the same mocks/fixture).
+    from stocvest.utils.config import get_settings
+
+    monkeypatch.setenv("STOCVEST_POSITION_HOLDER_READ_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        out_holder = await build_position_composite_response(
+            symbol="AAPL",
+            user_id=None,
+            user_email=None,
+            params=default_signal_parameters(),
+            fundamentals_provider=_fundamentals_mock(),
+        )
+        holder = out_holder.get("position_holder_read")
+        assert isinstance(holder, dict)
+        assert holder.get("stance") in ("defensive", "caution", "constructive")
+        assert isinstance(holder.get("actions"), list) and holder["actions"]
+    finally:
+        monkeypatch.delenv("STOCVEST_POSITION_HOLDER_READ_ENABLED", raising=False)
+        get_settings.cache_clear()
     pf = out.get("position_fundamentals") or {}
     assert isinstance(pf.get("pillars"), list)
     assert len(pf["pillars"]) == 5
