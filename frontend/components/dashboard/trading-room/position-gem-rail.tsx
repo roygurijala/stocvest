@@ -18,7 +18,7 @@ import { useTheme } from "@/lib/theme-provider";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { positionFeedEnabled } from "@/lib/nav-features";
 import { usePositionCandidates } from "@/lib/hooks/use-position-candidates";
-import { buildPositionGemRailItems } from "@/lib/dashboard/position-ranked-home-present";
+import { buildPositionGemRailItems, positionActionColor } from "@/lib/dashboard/position-ranked-home-present";
 import { watchlistQualityDotColor } from "@/lib/dashboard/trading-room/watchlist-rail-present";
 
 const INVEST_HREF = "/dashboard/invest";
@@ -83,6 +83,7 @@ export function PositionGemRail() {
       <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2] }}>
         {items.map((item) => {
           const dot = watchlistQualityDotColor(item.tier, colors);
+          const actionColor = positionActionColor(item.action, colors);
           const tooltip = item.weakestLabel
             ? `${item.tierShort} — weakest pillar: ${item.weakestLabel}`
             : item.tierShort;
@@ -114,6 +115,15 @@ export function PositionGemRail() {
               />
               {item.symbol}
               <span style={{ color: colors.textMuted, fontWeight: 600 }}>{item.tierShort}</span>
+              {/* PERSONAL-MODE: explicit Buy / Watch / Don't-buy stance (personal-mode only). */}
+              {item.actionLabel ? (
+                <span
+                  data-testid={`trading-room-position-gem-action-${item.symbol}`}
+                  style={{ color: actionColor, fontWeight: 800 }}
+                >
+                  {item.actionLabel}
+                </span>
+              ) : null}
             </Link>
           );
         })}

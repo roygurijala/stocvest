@@ -299,6 +299,24 @@ class AIExplanationService:
         if hit is not None:
             return hit
 
+        # PERSONAL-MODE: allow a plain buy/watch/avoid stance for the operator's private tool
+        # (still no hype, no return guarantees, no price targets/sizing). Product mode keeps
+        # the strict POS-D12 "never give investment advice" instruction.
+        personal_mode = bool(get_settings().stocvest_personal_advice_mode_enabled)
+        advice_clause = (
+            (
+                "This is a private tool for a single operator, so you MAY end with a clear "
+                "personal stance (buy / watch / avoid) grounded strictly in the points above — "
+                "but never hype, never guarantee returns, and give no price targets or "
+                "position-sizing. "
+            )
+            if personal_mode
+            else (
+                "Never give investment advice: no buy/sell/hold, no price targets, no "
+                "allocation or position-sizing guidance. "
+            )
+        )
+
         text_ai = await self._claude_text_or_none(
             system=(
                 "You are a long-horizon investment research analyst writing a short Investment "
@@ -309,9 +327,8 @@ class AIExplanationService:
                 "F3 balance sheet, F4 valuation, F5 earnings quality) or supporting layers when "
                 "citing a point. Lead with what actually stands out for THIS company, name the key "
                 "risk or open question, and surface uncertainty where data quality is limited. "
-                "Do NOT mention numeric scores or percentages. Never give investment advice: no "
-                "buy/sell/hold, no price targets, no allocation or position-sizing guidance. "
-                "End with exactly: Signal data only."
+                "Do NOT mention numeric scores or percentages. " + advice_clause
+                + "End with exactly: Signal data only."
             ),
             user_prompt=self._build_position_read_prompt(
                 symbol=sym,

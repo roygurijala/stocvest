@@ -406,6 +406,20 @@ class Settings(BaseSettings):
         False,
         alias="STOCVEST_POSITION_COMPOSITE_ANALYST_ENABLED",
     )
+    # PERSONAL-MODE (single-operator tool — NOT a public product). When ON, STOCVEST is
+    # treated as a private tool for the operator only, so the Position-desk copy compliance
+    # guard (ADR-004 POS-D12) relaxes its ADVICE/recommendation/valuation-conclusion bans
+    # and the desk surfaces an explicit Buy / Watch / Don't-buy action derived deterministically
+    # from the gem tier (gem/strong -> Buy, monitor -> Watch, insufficient -> Don't buy). The
+    # HYPE / return-guarantee bans (e.g. "back up the truck", "screaming buy", "guaranteed
+    # gains") stay enforced in ALL modes so the AI read can never hype the operator. Defaults
+    # ON per the operator's decision to abandon the external-product path. **This MUST be set
+    # OFF (product mode) before any external release / distribution** — advice language to
+    # third parties without registration/disclaimers is a compliance risk.
+    stocvest_personal_advice_mode_enabled: bool = Field(
+        True,
+        alias="STOCVEST_PERSONAL_ADVICE_MODE_ENABLED",
+    )
     # B76 — swing/day target geometry v2. Fixes two defects that produce misleading
     # risk/reward in the deep-dive "what-if" planner:
     #   (A) analyst price targets (Benzinga/Perplexity, ~12-month fundamental PTs) reach

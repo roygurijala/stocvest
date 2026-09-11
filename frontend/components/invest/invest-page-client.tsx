@@ -13,6 +13,7 @@ import {
   buildPositionGemDisplayRows,
   DEFAULT_POSITION_GEM_FILTER,
   POSITION_COMPARE_MAX,
+  positionActionColor,
   positionGemTierCopy,
   togglePositionCompareSelection,
   type PositionGemDisplayRow,
@@ -50,6 +51,10 @@ export function InvestPageClient() {
     const filtered = applyPositionGemFilter(response.candidates, filter);
     return buildPositionGemDisplayRows(filtered);
   }, [response, filter]);
+
+  // PERSONAL-MODE: show the Buy / Watch / Don't-buy column only when the backend attaches an
+  // action (personal-mode flag on). In product mode no row carries one, so the column hides.
+  const showAction = useMemo(() => rows.some((r) => !!r.actionLabel), [rows]);
 
   const compareMatrix = useMemo(
     () => buildPositionCompareMatrix(response?.candidates, compareSelected),
@@ -247,6 +252,7 @@ export function InvestPageClient() {
                 <th style={{ padding: spacing[2] }}>Compare</th>
                 <th style={{ padding: spacing[2] }}>Symbol</th>
                 <th style={{ padding: spacing[2] }}>Quality</th>
+                {showAction ? <th style={{ padding: spacing[2] }}>Action</th> : null}
                 <th style={{ padding: spacing[2] }}>Fundamentals</th>
                 <th style={{ padding: spacing[2] }}>Trend</th>
                 <th style={{ padding: spacing[2] }}>Sector</th>
@@ -282,6 +288,14 @@ export function InvestPageClient() {
                   <td style={{ padding: spacing[2] }} title={row.tierCopy}>
                     {row.tierLabel}
                   </td>
+                  {showAction ? (
+                    <td
+                      style={{ padding: spacing[2], fontWeight: 700, color: positionActionColor(row.action, colors) }}
+                      data-testid={`invest-action-${row.symbol}`}
+                    >
+                      {row.actionLabel ?? "—"}
+                    </td>
+                  ) : null}
                   <td style={{ padding: spacing[2], color: colors.text }}>
                     {scoreLabel(row.fundamentalsScore)} · {row.fundamentalsLabel}
                   </td>

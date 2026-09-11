@@ -14,6 +14,13 @@ import { dashboardTradingRoomHref } from "@/lib/nav/dashboard-trading-room-deepl
 export type PositionGemTier = "gem" | "strong" | "monitor" | "insufficient";
 export type PositionGemTierFilter = PositionGemTier | "all";
 
+/**
+ * PERSONAL-MODE action derived deterministically from the tier by the backend
+ * (gem/strong -> buy, monitor -> watch, insufficient -> avoid). Present only when the
+ * operator's `stocvest_personal_advice_mode_enabled` flag is on; `null` in product mode.
+ */
+export type PositionGemAction = "buy" | "watch" | "avoid";
+
 export type GemPillar = {
   pillarId: string;
   label: string;
@@ -41,6 +48,9 @@ export type PositionGemCandidate = {
   why: string;
   pillars: GemPillar[];
   failingGates: string[];
+  /** Personal-mode buy/watch/avoid stance (null in product mode). */
+  action: PositionGemAction | null;
+  actionLabel: string | null;
 };
 
 export type PositionCandidatesResponse = {
@@ -66,6 +76,9 @@ export type PositionGemDisplayRow = {
   tier: PositionGemTier;
   tierLabel: string;
   tierCopy: string;
+  /** Personal-mode buy/watch/avoid stance (null in product mode). */
+  action: PositionGemAction | null;
+  actionLabel: string | null;
   rank: number;
   fundamentalsScore: number | null;
   fundamentalsLabel: string;
@@ -118,6 +131,12 @@ function normalizeTier(raw: unknown): PositionGemTier {
   return "monitor";
 }
 
+function normalizeAction(raw: unknown): PositionGemAction | null {
+  const a = String(raw ?? "").trim().toLowerCase();
+  if (a === "buy" || a === "watch" || a === "avoid") return a;
+  return null;
+}
+
 function numberOrNull(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const n = Number(value);
@@ -167,7 +186,9 @@ function parseCandidate(raw: unknown): PositionGemCandidate | null {
     signalValidDays: numberOrNull(r.signal_valid_days),
     why: String(r.why ?? ""),
     pillars,
-    failingGates
+    failingGates,
+    action: normalizeAction(r.action),
+    actionLabel: r.action_label ? String(r.action_label) : null
   };
 }
 
@@ -222,6 +243,8 @@ export function buildPositionGemDisplayRows(
     tier: c.tier,
     tierLabel: positionGemTierLabel(c.tier),
     tierCopy: positionGemTierCopy(c.tier),
+    action: c.action,
+    actionLabel: c.actionLabel,
     rank: c.rank,
     fundamentalsScore: c.fundamentalsScore,
     fundamentalsLabel: verdictLabel(c.fundamentalsVerdict),
@@ -278,6 +301,20 @@ export function buildWatchlistQualityBadge(
   };
 }
 
+/**
+ * PERSONAL-MODE — semantic color for the Buy / Watch / Don't-buy action badge.
+ * buy → bullish, watch → caution, avoid → bearish; null → muted (never shown).
+ */
+export function positionActionColor(
+  action: PositionGemAction | null,
+  colors: { bullish: string; caution: string; bearish: string; textMuted: string }
+): string {
+  if (action === "buy") return colors.bullish;
+  if (action === "watch") return colors.caution;
+  if (action === "avoid") return colors.bearish;
+  return colors.textMuted;
+}
+
 // --------------------------------------------------------------- POS-D8 Trading Room gem rail
 
 /** A single chip in the optional Trading Room "Gem candidates" strip (gem/strong only). */
@@ -288,6 +325,9 @@ export type PositionGemRailItem = {
   tier: "gem" | "strong";
   tierShort: string;
   weakestLabel: string | null;
+  /** Personal-mode buy/watch/avoid stance (null in product mode). */
+  action: PositionGemAction | null;
+  actionLabel: string | null;
 };
 
 /**
@@ -311,7 +351,9 @@ export function buildPositionGemRailItems(
     weakestLabel:
       c.weakestPillarId && c.weakestPillarLabel
         ? `${c.weakestPillarId} · ${c.weakestPillarLabel}`
-        : c.weakestPillarLabel || null
+        : c.weakestPillarLabel || null,
+    action: c.action,
+    actionLabel: c.actionLabel
   }));
 }
 
