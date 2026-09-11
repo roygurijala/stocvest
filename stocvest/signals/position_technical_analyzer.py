@@ -12,7 +12,60 @@ from typing import Optional
 
 from stocvest.config.signal_parameters import PositionTechnicalParameters
 from stocvest.data.models import Bar, Snapshot, Timeframe
+from stocvest.indicators.core import macd as _macd_series
+from stocvest.indicators.core import volume_sma as _volume_sma_series
 from stocvest.signals.swing_technical_analyzer import _higher_highs_lows, _lower_highs_lows, _sma
+
+
+def _last_not_none(series: list[Optional[float]]) -> Optional[float]:
+    for value in reversed(series):
+        if value is not None:
+            return float(value)
+    return None
+
+
+def _weekly_macd_state(
+    weekly_closes: list[float], params: PositionTechnicalParameters
+) -> Optional[str]:
+    """Direction of weekly MACD vs its signal line.
+
+    Returns ``"up"`` (MACD above signal AND histogram non-negative → momentum
+    supports an uptrend), ``"down"`` (below signal AND histogram negative →
+    deteriorating), or ``None`` when it is mixed / insufficient history. Pure reuse
+    of the shared MACD math (no new indicator invented).
+    """
+    if len(weekly_closes) < params.weekly_macd_slow + params.weekly_macd_signal:
+        return None
+    res = _macd_series(
+        weekly_closes,
+        fast=params.weekly_macd_fast,
+        slow=params.weekly_macd_slow,
+        signal_period=params.weekly_macd_signal,
+    )
+    # Histogram = MACD − signal. Its sign is the standard MACD momentum read:
+    # > 0 → momentum leaning up, < 0 → leaning down, 0/None → mixed.
+    hist_v = _last_not_none(res.histogram)
+    if hist_v is None:
+        return None
+    if hist_v > 0:
+        return "up"
+    if hist_v < 0:
+        return "down"
+    return None
+
+
+def _weekly_relative_volume(
+    weekly_bars: list[Bar], params: PositionTechnicalParameters
+) -> Optional[float]:
+    """Latest weekly volume divided by its trailing average (reuses ``volume_sma``)."""
+    if len(weekly_bars) < params.volume_lookback_weeks + 1:
+        return None
+    avg_series = _volume_sma_series(weekly_bars, params.volume_lookback_weeks)
+    avg = _last_not_none(avg_series)
+    if avg is None or avg <= 0:
+        return None
+    last_vol = float(weekly_bars[-1].volume)
+    return last_vol / avg
 
 
 def _iso_week_key(ts: datetime | date | None) -> tuple[int, int] | None:
@@ -246,6 +299,30 @@ class PositionTechnicalAnalyzer:
         if daily_confirm and sma50 is not None and last <= sma50:
             score += params.daily_confirm_score
 
+        # ── Weekly momentum confirmation (flag-gated; default OFF = byte-identical) ──
+        momentum_state: Optional[str] = None
+        if params.weekly_momentum_confirm_enabled:
+            momentum_state = _weekly_macd_state(w_closes, params)
+            structurally_up = sma50 is not None and sma200 is not None and last > sma50 and last > sma200
+            structurally_down = sma50 is not None and sma200 is not None and last < sma50 and last < sma200
+            if momentum_state == "up" and not structurally_down:
+                score += params.weekly_momentum_confirm_score
+            elif momentum_state == "down" and structurally_up:
+                # Trend still structurally up but momentum is rolling over — early warning.
+                score -= params.weekly_momentum_confirm_score
+
+        # ── Volume / breakout confirmation (flag-gated; default OFF = byte-identical) ──
+        weekly_rvol: Optional[float] = None
+        if params.volume_confirm_enabled:
+            weekly_rvol = _weekly_relative_volume(weekly_sorted, params)
+            near_high = pct_from_high is not None and pct_from_high >= -5.0
+            breaking_out = near_high or (in_base and hh)
+            if weekly_rvol is not None and breaking_out:
+                if weekly_rvol >= params.volume_breakout_surge_mult:
+                    score += params.volume_confirm_score
+                elif weekly_rvol <= params.volume_weak_mult:
+                    score -= params.volume_confirm_score
+
         score = int(max(0, min(100, score)))
 
         if score >= params.bullish_threshold:
@@ -276,6 +353,15 @@ class PositionTechnicalAnalyzer:
             chips.append(f"Base {base_weeks}w")
         if daily_confirm:
             chips.append("Daily trend confirm")
+        if momentum_state == "up":
+            chips.append("Weekly MACD momentum up")
+        elif momentum_state == "down":
+            chips.append("Weekly MACD momentum rolling over")
+        if weekly_rvol is not None:
+            if weekly_rvol >= params.volume_breakout_surge_mult:
+                chips.append(f"Breakout vol {weekly_rvol:.1f}x")
+            elif weekly_rvol <= params.volume_weak_mult:
+                chips.append(f"Weak vol {weekly_rvol:.1f}x")
         if status == "as_of_close":
             chips.append("Limited weekly history")
 
@@ -295,6 +381,14 @@ class PositionTechnicalAnalyzer:
             parts.append(f"Weekly base ~{base_weeks} weeks ({base_rng * 100:.1f}% range).")
         if daily_confirm:
             parts.append("Daily SMA50/200 confirm long-term trend alignment.")
+        if momentum_state == "up":
+            parts.append("Weekly MACD momentum confirms the trend.")
+        elif momentum_state == "down":
+            parts.append("Weekly MACD momentum is rolling over — watch for the trend losing steam.")
+        if weekly_rvol is not None and weekly_rvol >= params.volume_breakout_surge_mult:
+            parts.append(f"Breakout backed by {weekly_rvol:.1f}x average weekly volume.")
+        elif weekly_rvol is not None and weekly_rvol <= params.volume_weak_mult:
+            parts.append(f"Move on light volume ({weekly_rvol:.1f}x average) — weak confirmation.")
         if status == "as_of_close":
             parts.append(
                 f"Degraded read — fewer than {params.min_weekly_bars_full} weekly bars; "
