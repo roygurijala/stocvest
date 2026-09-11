@@ -545,22 +545,29 @@ export function FullPriceChart({
 
       // ── Visible range ────────────────────────────────────────────────────
       const tScale = chartApi.timeScale();
-      tScale.fitContent();
       const wantVisible = rich && !intraday ? visibleBarsFor(mode, tf) : null;
       if (wantVisible != null) {
         // Narrow the viewport (swing ≈6mo; long-term multi-year per timeframe)
         // while keeping the full fetched set — with warmup — loaded so the MAs
-        // and 52-week stat stay valid across the whole visible window.
-        const range = tScale.getVisibleLogicalRange();
-        if (range && range.to - range.from > wantVisible) {
-          tScale.setVisibleLogicalRange({ from: range.to - wantVisible, to: range.to + 1 });
+        // and 52-week stat stay valid across the whole visible window. Derive the
+        // range from the KNOWN bar count rather than getVisibleLogicalRange() after
+        // fitContent(): that call can return null / a stale range on first paint,
+        // which left the warmup bars on-screen so SMAs started partway in (esp. 1D).
+        const n = bars.length;
+        if (n > wantVisible) {
+          tScale.setVisibleLogicalRange({ from: n - wantVisible, to: n + 1 });
+        } else {
+          tScale.fitContent();
         }
       } else if (intraday) {
+        tScale.fitContent();
         const minBars = MIN_VISIBLE[tf] ?? 20;
         const range = tScale.getVisibleLogicalRange();
         if (range && range.to - range.from < minBars) {
           tScale.setVisibleLogicalRange({ from: range.to - minBars, to: range.to + 1 });
         }
+      } else {
+        tScale.fitContent();
       }
 
       // ── Key-levels grid stats ────────────────────────────────────────────

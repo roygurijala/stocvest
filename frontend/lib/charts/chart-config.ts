@@ -44,9 +44,9 @@ export const SWING_DAILY_VISIBLE_BARS = 126;
  * multi-year holding without drowning the recent structure.
  */
 export const POSITION_VISIBLE_BARS: Record<"1day" | "1week" | "1month", number> = {
-  "1day": 252,
-  "1week": 156,
-  "1month": 120
+  "1day": 504, // ~2y of trading days (matches the "~2-year lookback" header)
+  "1week": 156, // ~3y of weeks
+  "1month": 120 // ~10y of months
 };
 
 /** SMA periods drawn per mode (in bars of the active timeframe). */
