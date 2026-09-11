@@ -30,9 +30,11 @@ from stocvest.signals.position_gem_gates import (
     evaluate_gem_gates,
     extract_candidate_features,
     failing_gates,
+    resolve_gem_action,
     resolve_gem_tier,
     tier_sort_key,
 )
+from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -90,7 +92,7 @@ class GemCandidate:
     failing_gates: list[str]
 
     def to_api_dict(self) -> dict[str, Any]:
-        return {
+        body: dict[str, Any] = {
             "symbol": self.symbol,
             "tier": self.tier,
             "rank": self.rank,
@@ -110,6 +112,14 @@ class GemCandidate:
             "pillars": list(self.pillars),
             "failing_gates": list(self.failing_gates),
         }
+        # PERSONAL-MODE: attach an explicit Buy / Watch / Don't-buy action derived
+        # deterministically from the tier. Omitted entirely in product mode so the API
+        # response is byte-identical to the stricter POS-D12 contract when the flag is off.
+        if get_settings().stocvest_personal_advice_mode_enabled:
+            action_key, action_label = resolve_gem_action(self.tier)
+            body["action"] = action_key
+            body["action_label"] = action_label
+        return body
 
     @classmethod
     def from_store_dict(cls, d: dict[str, Any]) -> "GemCandidate":

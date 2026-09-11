@@ -45,6 +45,21 @@ _GEM_LAYER_NEUTRAL = 50.0
 
 _TIER_ORDER = {TIER_GEM: 0, TIER_STRONG: 1, TIER_MONITOR: 2, TIER_INSUFFICIENT: 3}
 
+# Personal-mode action mapping (deterministic, derived ONLY from the gem tier — no new
+# thresholds). gem/strong -> Buy, monitor -> Watch, insufficient/universe-fail -> Don't buy.
+# Surfaced only when ``stocvest_personal_advice_mode_enabled`` is on (see position_scan).
+_TIER_ACTION: dict[str, tuple[str, str]] = {
+    TIER_GEM: ("buy", "Buy"),
+    TIER_STRONG: ("buy", "Buy"),
+    TIER_MONITOR: ("watch", "Watch"),
+    TIER_INSUFFICIENT: ("avoid", "Don't buy"),
+}
+
+
+def resolve_gem_action(tier: str) -> tuple[str, str]:
+    """Return ``(action_key, action_label)`` for a gem tier. Pure; personal-mode display only."""
+    return _TIER_ACTION.get(tier, ("watch", "Watch"))
+
 
 # ---------------------------------------------------------------------------
 # Feature extraction (composite body -> normalized, testable struct)

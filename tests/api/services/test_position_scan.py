@@ -143,6 +143,33 @@ def test_snapshot_filter_and_api_dict() -> None:
     assert all_rows["count"] == 2
 
 
+def test_api_dict_action_gated_by_personal_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PERSONAL-MODE: candidates carry a Buy/Watch action only when the flag is on."""
+    from stocvest.utils.config import get_settings
+
+    bodies = [_body("HIGH", fund_score=90, rs=5.0), _body("LOWQ", fund_score=55, rs=5.0)]
+    snap = PositionScanSnapshot(
+        generated_at=__import__("datetime").datetime(2026, 9, 8, tzinfo=__import__("datetime").timezone.utc),
+        universe_size=2,
+        candidates=rank_candidates(bodies),
+    )
+    try:
+        # Personal mode ON → gem/strong -> Buy, monitor -> Watch.
+        monkeypatch.setenv("STOCVEST_PERSONAL_ADVICE_MODE_ENABLED", "true")
+        get_settings.cache_clear()
+        by = {c["symbol"]: c for c in snap.to_api_dict(tier="all", limit=50)["candidates"]}
+        assert by["HIGH"]["action"] == "buy" and by["HIGH"]["action_label"] == "Buy"
+        assert by["LOWQ"]["action"] == "watch" and by["LOWQ"]["action_label"] == "Watch"
+
+        # Product mode OFF → no action keys at all (byte-identical to the POS-D12 contract).
+        monkeypatch.setenv("STOCVEST_PERSONAL_ADVICE_MODE_ENABLED", "false")
+        get_settings.cache_clear()
+        rows2 = snap.to_api_dict(tier="all", limit=50)["candidates"]
+        assert all("action" not in c and "action_label" not in c for c in rows2)
+    finally:
+        get_settings.cache_clear()
+
+
 def test_snapshot_sync_caches_and_forces(monkeypatch: pytest.MonkeyPatch) -> None:
     import datetime as _dt
 

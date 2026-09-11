@@ -19,10 +19,21 @@ from stocvest.signals.position_gem_gates import (
     extract_candidate_features,
     failing_gates,
     min_pillar_score,
+    resolve_gem_action,
     resolve_gem_tier,
 )
 
 pytestmark = pytest.mark.unit
+
+
+def test_resolve_gem_action_maps_tier_to_buy_watch_avoid() -> None:
+    """PERSONAL-MODE action derives deterministically from the tier."""
+    assert resolve_gem_action(TIER_GEM) == ("buy", "Buy")
+    assert resolve_gem_action(TIER_STRONG) == ("buy", "Buy")
+    assert resolve_gem_action(TIER_MONITOR) == ("watch", "Watch")
+    assert resolve_gem_action(TIER_INSUFFICIENT) == ("avoid", "Don't buy")
+    # Unknown tier degrades to the neutral Watch stance (never crashes).
+    assert resolve_gem_action("mystery") == ("watch", "Watch")
 
 
 _PILLAR_LABELS = {

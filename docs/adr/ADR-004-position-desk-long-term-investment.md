@@ -466,6 +466,17 @@ Each phase ships with **tests**, **BACKLOG row update**, and user **“go ahead�
 - **AI copy review:** bull/bear bullets must not imply action; counsel sign-off on Research tab
 - UI disclaimer component reused on Position tab + any future position email
 
+> **PERSONAL-MODE override (2026-09-11):** the operator pivoted STOCVEST to a **private, single-user
+> tool** (external-product path abandoned). Behind **`STOCVEST_PERSONAL_ADVICE_MODE_ENABLED`**
+> (`config.py`, **default ON**) the guard splits into an **ADVICE** family (buy/sell/own, valuation
+> conclusions, recommendations — relaxed in personal mode) and a **HYPE** family (return guarantees,
+> "back up the truck", "screaming buy", "no-brainer" — enforced in **every** mode). Personal mode also
+> surfaces a deterministic, tier-derived **Buy / Watch / Don't-buy** action (`resolve_gem_action`;
+> gem/strong → Buy, monitor → Watch, insufficient → Don't buy) and lets the AI Investment Read state
+> that stance (still no hype/PTs/sizing). **This flag MUST be set OFF before any external release** —
+> OFF restores the strict POS-D12 contract byte-for-byte, and counsel sign-off is required before the
+> "gem"/advice copy is shown to any third party.
+
 ### POS-D13 contract
 
 - Route: **`/dashboard/invest`** — primary **Journey A** surface (gem discovery home)

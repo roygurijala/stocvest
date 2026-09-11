@@ -16,14 +16,24 @@ terminology — e.g. it does NOT flag the noun "capital allocation" or 3rd-perso
 
 Counsel sign-off on the "gem" marketing copy (POS-D12) is tracked separately in BACKLOG;
 this guard enforces the mechanical banned-phrase rules regardless.
+
+PERSONAL-MODE (``stocvest_personal_advice_mode_enabled``): the banned phrases are split
+into two families — ADVICE (buy/sell/own, valuation conclusions, recommendations) and
+HYPE (return guarantees, "back up the truck", "screaming buy", …). When personal mode is
+ON, only the HYPE family is enforced, so the operator's private tool may state a plain
+buy/watch/avoid stance while the AI still can never hype or guarantee. In product mode
+(flag OFF) BOTH families are enforced — the original, stricter POS-D12 contract.
 """
 
 from __future__ import annotations
 
 import re
 
+from stocvest.utils.config import get_settings
+
+# ADVICE family — relaxed in personal mode (allowed when the operator opts in).
 # (human label, compiled pattern). Labels are stable — tests + logs key off them.
-_BANNED_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+_ADVICE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # Analyst-rating language.
     ("strong buy/sell", re.compile(r"\bstrong\s+(?:buy|sell)\b", re.IGNORECASE)),
     ("buy/sell rating", re.compile(r"\b(?:buy|sell)\s+rating\b", re.IGNORECASE)),
@@ -54,7 +64,10 @@ _BANNED_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("recommendation", re.compile(r"\brecommend(?:s|ed|ing|ation)?\b", re.IGNORECASE)),
     # Prescriptive ownership.
     ("prescriptive ownership", re.compile(r"\bmust[-\s]?(?:own|buy|have)\b", re.IGNORECASE)),
-    # Hype / guarantees.
+)
+
+# HYPE / guarantee family — ALWAYS enforced, in every mode.
+_HYPE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("hype: back up the truck", re.compile(r"\bback\s+up\s+the\s+truck\b", re.IGNORECASE)),
     ("hype: load up", re.compile(r"\bload\s+(?:up|the\s+boat)\b", re.IGNORECASE)),
     ("hype: table-pounding", re.compile(r"\btable[-\s]?pounding\b", re.IGNORECASE)),
@@ -74,18 +87,35 @@ _BANNED_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
 )
 
+# Full contract (product mode): advice + hype.
+_BANNED_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = _ADVICE_PATTERNS + _HYPE_PATTERNS
 
-def find_position_copy_violations(text: str | None) -> list[str]:
+
+def _advice_allowed() -> bool:
+    """True when personal mode relaxes the ADVICE family (HYPE stays enforced)."""
+    return bool(get_settings().stocvest_personal_advice_mode_enabled)
+
+
+def find_position_copy_violations(
+    text: str | None, *, allow_advice: bool | None = None
+) -> list[str]:
     """Return the (unique, order-preserved) labels of banned phrases present in ``text``.
 
     Empty list == clean. Purely lexical; safe to run on any string (thesis bullets, gem
     ``why`` copy, deterministic reads, or a Claude Investment Read before it is cached).
+
+    ``allow_advice`` overrides the mode: ``True`` enforces only the HYPE family (personal
+    mode), ``False`` enforces the full advice+hype contract (product mode). When ``None``
+    (default) it reads ``stocvest_personal_advice_mode_enabled`` from settings.
     """
     if not text or not text.strip():
         return []
+    if allow_advice is None:
+        allow_advice = _advice_allowed()
+    patterns = _HYPE_PATTERNS if allow_advice else _BANNED_PATTERNS
     hits: list[str] = []
     seen: set[str] = set()
-    for label, pattern in _BANNED_PATTERNS:
+    for label, pattern in patterns:
         if label in seen:
             continue
         if pattern.search(text):
@@ -94,22 +124,24 @@ def find_position_copy_violations(text: str | None) -> list[str]:
     return hits
 
 
-def position_copy_is_clean(text: str | None) -> bool:
-    """True when ``text`` contains no banned advice/recommendation/hype language."""
-    return not find_position_copy_violations(text)
+def position_copy_is_clean(text: str | None, *, allow_advice: bool | None = None) -> bool:
+    """True when ``text`` contains no banned language (mode-aware; see the finder)."""
+    return not find_position_copy_violations(text, allow_advice=allow_advice)
 
 
-def enforce_position_read(ai_text: str | None, fallback_text: str) -> tuple[str, bool]:
+def enforce_position_read(
+    ai_text: str | None, fallback_text: str, *, allow_advice: bool | None = None
+) -> tuple[str, bool]:
     """Gate an AI Investment Read: keep it only if compliant, else use the deterministic read.
 
     Returns ``(text, used_fallback)``. ``used_fallback`` is True when the AI text was empty
     or tripped the guard, so callers can downgrade ``source`` to ``deterministic`` and log.
     The deterministic read is built from the packet's own (already-compliant) literals, so
-    it is a safe, non-advisory fallback.
+    it is a safe, non-advisory fallback. ``allow_advice`` follows the finder's semantics.
     """
     candidate = (ai_text or "").strip()
     if not candidate:
         return fallback_text, True
-    if find_position_copy_violations(candidate):
+    if find_position_copy_violations(candidate, allow_advice=allow_advice):
         return fallback_text, True
     return candidate, False

@@ -189,7 +189,14 @@ async def test_position_read_model_tier_follows_flag(
     monkeypatch.setattr(svc, "_claude_text_or_none", _fake_claude)
     monkeypatch.setattr(
         "stocvest.signals.ai_explanations.get_settings",
-        lambda: type("S", (), {"stocvest_position_read_strong_model_enabled": flag_on})(),
+        lambda: type(
+            "S",
+            (),
+            {
+                "stocvest_position_read_strong_model_enabled": flag_on,
+                "stocvest_personal_advice_mode_enabled": True,
+            },
+        )(),
     )
 
     p = _packet()

@@ -39,9 +39,47 @@ pytestmark = pytest.mark.unit
         "Guaranteed returns over five years.",
     ],
 )
-def test_flags_advice_and_hype(text: str) -> None:
-    assert not position_copy_is_clean(text)
-    assert find_position_copy_violations(text)
+def test_flags_advice_and_hype_in_product_mode(text: str) -> None:
+    # Product mode (allow_advice=False) enforces the full advice + hype contract.
+    assert not position_copy_is_clean(text, allow_advice=False)
+    assert find_position_copy_violations(text, allow_advice=False)
+
+
+# PERSONAL-MODE: advice/recommendation/valuation language is allowed; HYPE stays blocked.
+@pytest.mark.parametrize(
+    "text",
+    [
+        "This is a strong buy for long-term holders.",
+        "Investors should own this name for the next decade.",
+        "You must buy before earnings.",
+        "Buy now while it's cheap.",
+        "We recommend adding to the position.",
+        "The stock is clearly undervalued.",
+        "Shares look overvalued after the run.",
+        "You should allocate to this name.",
+    ],
+)
+def test_personal_mode_allows_advice(text: str) -> None:
+    assert position_copy_is_clean(text, allow_advice=True), find_position_copy_violations(
+        text, allow_advice=True
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Back up the truck on this one.",
+        "A screaming buy at these levels.",
+        "This is a no-brainer.",
+        "Guaranteed returns over five years.",
+        "Load up the boat here.",
+        "It's a sure thing.",
+    ],
+)
+def test_personal_mode_still_blocks_hype(text: str) -> None:
+    # Even in personal mode the HYPE / return-guarantee family is enforced.
+    assert not position_copy_is_clean(text, allow_advice=True)
+    assert find_position_copy_violations(text, allow_advice=True)
 
 
 @pytest.mark.parametrize(
@@ -61,12 +99,15 @@ def test_flags_advice_and_hype(text: str) -> None:
     ],
 )
 def test_does_not_flag_legitimate_copy(text: str) -> None:
-    assert position_copy_is_clean(text), find_position_copy_violations(text)
+    # Legitimate copy is clean under the strict (product) contract, hence in every mode.
+    assert position_copy_is_clean(text, allow_advice=False), find_position_copy_violations(
+        text, allow_advice=False
+    )
 
 
 def test_find_returns_unique_ordered_labels() -> None:
     text = "strong buy — a strong buy — you should own it, it's undervalued"
-    labels = find_position_copy_violations(text)
+    labels = find_position_copy_violations(text, allow_advice=False)
     # deduped
     assert len(labels) == len(set(labels))
     assert "strong buy/sell" in labels
@@ -96,6 +137,29 @@ def test_enforce_falls_back_on_empty_ai_text(ai_text: str | None) -> None:
     text, used_fallback = enforce_position_read(ai_text, "DET FALLBACK")
     assert used_fallback is True
     assert text == "DET FALLBACK"
+
+
+def test_default_mode_follows_personal_advice_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no explicit ``allow_advice`` the guard reads the settings flag."""
+    from stocvest.utils.config import get_settings
+
+    try:
+        # Personal mode ON → advice allowed, hype still blocked.
+        monkeypatch.setenv("STOCVEST_PERSONAL_ADVICE_MODE_ENABLED", "true")
+        get_settings.cache_clear()
+        assert position_copy_is_clean("This is a strong buy for the long run.")
+        assert not position_copy_is_clean("Back up the truck on this one.")
+        _, used_fallback = enforce_position_read("You should own this. Signal data only.", "DET")
+        assert used_fallback is False
+
+        # Product mode OFF → full advice + hype contract enforced.
+        monkeypatch.setenv("STOCVEST_PERSONAL_ADVICE_MODE_ENABLED", "false")
+        get_settings.cache_clear()
+        assert not position_copy_is_clean("This is a strong buy for the long run.")
+        _, used_fallback = enforce_position_read("You should own this. Signal data only.", "DET")
+        assert used_fallback is True
+    finally:
+        get_settings.cache_clear()
 
 
 # --- Regression: deterministic Position copy must be compliant ------------------------
@@ -153,14 +217,16 @@ def test_thesis_packet_and_deterministic_read_are_compliant() -> None:
 
     packet = build_position_thesis_packet(_body())
     for bullet in packet.bull_case + packet.bear_case + packet.open_questions:
-        assert position_copy_is_clean(bullet.text), find_position_copy_violations(bullet.text)
-    assert position_copy_is_clean(deterministic_investment_read(packet))
+        assert position_copy_is_clean(bullet.text, allow_advice=False), find_position_copy_violations(
+            bullet.text, allow_advice=False
+        )
+    assert position_copy_is_clean(deterministic_investment_read(packet), allow_advice=False)
 
     # insufficient-data path
     empty = build_position_thesis_packet({"symbol": "ZZZ", "status": "insufficient_data"})
     for bullet in empty.open_questions:
-        assert position_copy_is_clean(bullet.text)
-    assert position_copy_is_clean(deterministic_investment_read(empty))
+        assert position_copy_is_clean(bullet.text, allow_advice=False)
+    assert position_copy_is_clean(deterministic_investment_read(empty), allow_advice=False)
 
 
 def _gem_features_body() -> dict[str, Any]:
@@ -186,8 +252,13 @@ def test_gem_why_copy_is_compliant() -> None:
         # exercise both the all-pass and G8-fail branches for INSUFFICIENT
         gates = {f"G{i}": True for i in range(1, 10)}
         why = build_gem_why(feats, gates, tier)
-        assert position_copy_is_clean(why), (tier, find_position_copy_violations(why))
+        assert position_copy_is_clean(why, allow_advice=False), (
+            tier,
+            find_position_copy_violations(why, allow_advice=False),
+        )
     gates_g8_fail = {f"G{i}": True for i in range(1, 10)}
     gates_g8_fail["G8"] = False
     why = build_gem_why(feats, gates_g8_fail, TIER_INSUFFICIENT)
-    assert position_copy_is_clean(why), find_position_copy_violations(why)
+    assert position_copy_is_clean(why, allow_advice=False), find_position_copy_violations(
+        why, allow_advice=False
+    )

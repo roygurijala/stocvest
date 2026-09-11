@@ -10,6 +10,7 @@ import {
   DEFAULT_POSITION_GEM_FILTER,
   parsePositionCandidates,
   parsePositionGemFilterFromParams,
+  positionActionColor,
   positionGemFilterToQuery,
   positionGemTierCopy,
   positionGemTierLabel,
@@ -103,6 +104,45 @@ describe("position-ranked-home-present", () => {
       candidates: [apiRow({ weakest_pillar_id: null, weakest_pillar_label: null })]
     })!.candidates;
     expect(buildPositionGemDisplayRows(cands)[0].weakestLabel).toBe("—");
+  });
+
+  it("parses the personal-mode buy/watch action and surfaces it in rows + rail", () => {
+    const cands = parsePositionCandidates({
+      candidates: [
+        apiRow({ symbol: "AAA", tier: "gem", action: "buy", action_label: "Buy" }),
+        apiRow({ symbol: "BBB", tier: "strong", action: "buy", action_label: "Buy" })
+      ]
+    })!.candidates;
+    expect(cands[0].action).toBe("buy");
+    expect(cands[0].actionLabel).toBe("Buy");
+
+    const row = buildPositionGemDisplayRows(cands)[0];
+    expect(row.action).toBe("buy");
+    expect(row.actionLabel).toBe("Buy");
+
+    const rail = buildPositionGemRailItems(cands);
+    expect(rail[0].action).toBe("buy");
+    expect(rail[0].actionLabel).toBe("Buy");
+  });
+
+  it("maps the action to a semantic color", () => {
+    const colors = { bullish: "#0f0", caution: "#ff0", bearish: "#f00", textMuted: "#888" };
+    expect(positionActionColor("buy", colors)).toBe("#0f0");
+    expect(positionActionColor("watch", colors)).toBe("#ff0");
+    expect(positionActionColor("avoid", colors)).toBe("#f00");
+    expect(positionActionColor(null, colors)).toBe("#888");
+  });
+
+  it("leaves action null in product mode (no action key on the body)", () => {
+    const cands = parsePositionCandidates({ candidates: [apiRow()] })!.candidates;
+    expect(cands[0].action).toBeNull();
+    expect(cands[0].actionLabel).toBeNull();
+    expect(buildPositionGemDisplayRows(cands)[0].actionLabel).toBeNull();
+    // Ignores an unrecognized action value rather than trusting it.
+    const bad = parsePositionCandidates({
+      candidates: [apiRow({ action: "yolo", action_label: "YOLO" })]
+    })!.candidates;
+    expect(bad[0].action).toBeNull();
   });
 
   it("round-trips shareable filter query params", () => {
