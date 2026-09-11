@@ -209,6 +209,79 @@ class TestGetBars:
         # avoid surprising callers who pinned one edge.
         assert sent_params.get("sort") == "asc"
 
+    # ── Weekly/monthly `limit` scaling regression (2026-09-10) ──────────────
+    # Polygon's aggregate `limit` bounds the number of BASE (daily) aggregates
+    # scanned to build the buckets, not the number of week/month buckets returned.
+    # A recent-mode request for N weekly bars must over-fetch the base window
+    # (× trading-days-per-bucket) so SMA-100/200 have enough history, then slice
+    # to N. Before the fix a "give me 368 weeks" call returned only ~73 weeks.
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_recent_mode_weekly_overfetches_base_window(self) -> None:
+        route = respx.get(
+            url__regex=r"https://api\.polygon\.io/v2/aggs/ticker/AAPL/range/1/week/2000-01-01/.+"
+        ).mock(return_value=httpx.Response(200, json={"status": "OK", "results": []}))
+        async with PolygonClient(FAKE_KEY) as client:
+            await client.get_bars("AAPL", Timeframe.WEEK_1, limit=200)
+        sent_params = dict(route.calls[0].request.url.params)
+        assert sent_params.get("limit") == str(200 * 7), (
+            "Weekly recent-mode must scale the Polygon base-aggregate limit by ~trading "
+            "days per week so 200 weekly buckets' worth of daily history is scanned."
+        )
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_recent_mode_monthly_overfetches_base_window(self) -> None:
+        route = respx.get(
+            url__regex=r"https://api\.polygon\.io/v2/aggs/ticker/AAPL/range/1/month/2000-01-01/.+"
+        ).mock(return_value=httpx.Response(200, json={"status": "OK", "results": []}))
+        async with PolygonClient(FAKE_KEY) as client:
+            await client.get_bars("AAPL", Timeframe.MONTH_1, limit=120)
+        sent_params = dict(route.calls[0].request.url.params)
+        assert sent_params.get("limit") == str(120 * 31)
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_recent_mode_daily_limit_unscaled(self) -> None:
+        route = respx.get(
+            url__regex=r"https://api\.polygon\.io/v2/aggs/ticker/AAPL/range/1/day/2000-01-01/.+"
+        ).mock(return_value=httpx.Response(200, json={"status": "OK", "results": []}))
+        async with PolygonClient(FAKE_KEY) as client:
+            await client.get_bars("AAPL", Timeframe.DAY_1, limit=340)
+        sent_params = dict(route.calls[0].request.url.params)
+        assert sent_params.get("limit") == "340", "Daily is 1:1 (base == target) — limit must not scale."
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_recent_mode_weekly_slices_to_requested_count(self) -> None:
+        # Polygon returns more buckets than requested (newest-first); we must keep
+        # only the most-recent `limit`, oldest-first.
+        newest_first = [agg_bar((10 - i) * 1_000_000_000_000 + 1) for i in range(10)]
+        respx.get(
+            url__regex=r"https://api\.polygon\.io/v2/aggs/ticker/AAPL/range/1/week/2000-01-01/.+"
+        ).mock(return_value=httpx.Response(200, json={"status": "OK", "results": newest_first}))
+        async with PolygonClient(FAKE_KEY) as client:
+            bars = await client.get_bars("AAPL", Timeframe.WEEK_1, limit=3)
+        assert len(bars) == 3, "Must slice to the caller's requested target-bar count."
+        ts_ms = [int(b.timestamp.timestamp() * 1000) for b in bars]
+        assert ts_ms == sorted(ts_ms), "Sliced bars must stay oldest-first."
+        # The 3 kept are the most recent (largest timestamps of the 10).
+        assert min(ts_ms) == 8 * 1_000_000_000_000 + 1
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_explicit_range_weekly_does_not_scale_limit(self) -> None:
+        route = respx.get(
+            "https://api.polygon.io/v2/aggs/ticker/AAPL/range/1/week/2024-01-01/2024-06-01"
+        ).mock(return_value=httpx.Response(200, json={"status": "OK", "results": []}))
+        async with PolygonClient(FAKE_KEY) as client:
+            await client.get_bars(
+                "AAPL", Timeframe.WEEK_1, from_date="2024-01-01", to_date="2024-06-01", limit=200
+            )
+        sent_params = dict(route.calls[0].request.url.params)
+        assert sent_params.get("limit") == "200", "Explicit date-range mode must not over-fetch."
+
 
 class TestGetEvaluatedPriceAfterSignal:
     @pytest.mark.asyncio
