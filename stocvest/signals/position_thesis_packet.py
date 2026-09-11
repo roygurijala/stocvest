@@ -241,6 +241,24 @@ def build_position_thesis_packet(body: dict[str, Any]) -> PositionThesisPacket:
             )
         )
 
+    # Earnings-calendar risk: a multi-week/month hold entered right before a report
+    # carries event volatility. Surface it as a watch item when a report is near
+    # (display-only — reads the already-merged earnings horizon; no score change).
+    earnings_risk = str(body.get("earnings_risk") or "").strip().lower()
+    earnings_days = _as_int(body.get("earnings_days_away"))
+    if earnings_risk in ("imminent", "elevated", "watch") and earnings_days is not None:
+        when = "tomorrow" if earnings_days <= 1 else f"in {earnings_days} days"
+        questions.append(
+            ThesisBullet(
+                text=(
+                    f"Earnings {when} — expect event volatility on a long-term entry; "
+                    "consider timing the entry around the report."
+                ),
+                source="layer:earnings",
+                confidence="medium",
+            )
+        )
+
     # Weakest pillar always surfaces as a watch item (even if neutral).
     if weakest_id and weakest_id in pillars:
         wp = pillars[weakest_id]

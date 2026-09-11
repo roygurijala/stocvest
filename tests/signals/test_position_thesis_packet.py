@@ -253,6 +253,24 @@ def test_insufficient_data_marks_fundamentals_not_covered() -> None:
     assert packet.fundamentals_covered is False
 
 
+def test_earnings_within_window_surfaces_watch_item() -> None:
+    b = _body()
+    b["earnings_risk"] = "watch"
+    b["earnings_days_away"] = 5
+    packet = build_position_thesis_packet(b)
+    texts = " ".join(q.text for q in packet.open_questions).lower()
+    assert "earnings in 5 days" in texts
+    assert any(q.source == "layer:earnings" for q in packet.open_questions)
+
+
+def test_no_earnings_watch_item_when_report_is_far() -> None:
+    b = _body()
+    b["earnings_risk"] = "normal"
+    b["earnings_days_away"] = 60
+    packet = build_position_thesis_packet(b)
+    assert not any(q.source == "layer:earnings" for q in packet.open_questions)
+
+
 def test_deterministic_read_does_not_assert_verdict_without_coverage() -> None:
     # A bullish routing verdict must NOT surface as "reads bullish on fundamentals" when there
     # are no scored pillars — that contradicted the "insufficient coverage" body (copy bug).

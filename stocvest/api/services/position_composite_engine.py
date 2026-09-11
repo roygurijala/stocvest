@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -227,11 +228,17 @@ async def build_position_composite_response(
 
     spy_weekly = aggregate_daily_to_weekly_bars(spy_daily_bars, "SPY")
     snap_for_tech = sym_snap if sym_snap is not None else Snapshot(symbol=sym)
+    # Flag-gated position-technical gap fixes (default OFF → structural score unchanged).
+    position_technical_params = dataclasses.replace(
+        params.position_technical,
+        weekly_momentum_confirm_enabled=settings.stocvest_position_weekly_momentum_confirm_enabled,
+        volume_confirm_enabled=settings.stocvest_position_volume_confirm_enabled,
+    )
     tech = PositionTechnicalAnalyzer().analyze(
         sym,
         daily_bars,
         snap_for_tech,
-        params.position_technical,
+        position_technical_params,
         spy_weekly_bars=spy_weekly,
     )
 

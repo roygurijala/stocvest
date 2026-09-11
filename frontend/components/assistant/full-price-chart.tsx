@@ -512,6 +512,16 @@ export function FullPriceChart({
         priceLine(signal?.target1, colors.bullish, SOLID, "T1");
         priceLine(signal?.target2, colors.bullish, SOLID, "T2");
         priceLine(signal?.prevClose, colors.textMuted, DASHED, "Prev close");
+        if (mode === "position") {
+          // Long-term structural S/R: the 52-week ceiling/floor (where a multi-year
+          // thesis is confirmed / breaks) drawn from the same range the grid shows.
+          const yr = sessionRange(
+            indicatorBars,
+            tf === "1month" ? 12 : tf === "1week" ? 52 : 252
+          );
+          priceLine(yr?.high, COLOR.sma200, DASHED, "52W High");
+          priceLine(yr?.low, colors.textMuted, DASHED, "52W Low");
+        }
         if (mode === "day") {
           const or = openingRange(indicatorBars, 30);
           if (or) {

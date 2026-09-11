@@ -304,6 +304,28 @@ class PositionTechnicalParameters:
     daily_confirm_sma_slow: int = 200
     bullish_threshold: int = 60
     bearish_threshold: int = 40
+    # ── Weekly momentum confirmation (gap fix, ships dark) ──────────────────
+    # The base position technical read is purely structural (SMA-50/200 + 52w range
+    # + RS + HH/HL). It has no oscillator, so an uptrend can lose steam for weeks
+    # before price breaks SMA-200. When enabled, a weekly MACD acts as a bounded
+    # *confirmation* modifier (never a standalone pillar): momentum aligned with the
+    # structural trend adds a little; momentum diverging against it subtracts a little.
+    # Default OFF → score byte-identical to the shipped structural read.
+    weekly_momentum_confirm_enabled: bool = False
+    weekly_macd_fast: int = 12
+    weekly_macd_slow: int = 26
+    weekly_macd_signal: int = 9
+    weekly_momentum_confirm_score: int = 6
+    # ── Volume / breakout confirmation (gap fix, ships dark) ────────────────
+    # The structural score credits proximity to the 52-week high and base emergence
+    # but ignores whether volume confirms the move. When enabled, a breakout / upper-
+    # range read backed by above-average weekly volume gets a small credit; the same
+    # read on weak volume gets a small haircut. Default OFF → byte-identical.
+    volume_confirm_enabled: bool = False
+    volume_lookback_weeks: int = 12
+    volume_breakout_surge_mult: float = 1.5
+    volume_weak_mult: float = 0.8
+    volume_confirm_score: int = 6
 
 
 @dataclass

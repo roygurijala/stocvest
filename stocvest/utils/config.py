@@ -360,6 +360,19 @@ class Settings(BaseSettings):
         False,
         alias="STOCVEST_POSITION_READ_STRONG_MODEL_ENABLED",
     )
+    # Position technical gap fixes (ship dark; default OFF → structural score byte-identical).
+    # Weekly MACD momentum confirmation: a bounded modifier that flags an uptrend losing
+    # steam (or a downtrend stabilizing) before price breaks SMA-200.
+    stocvest_position_weekly_momentum_confirm_enabled: bool = Field(
+        False,
+        alias="STOCVEST_POSITION_WEEKLY_MOMENTUM_CONFIRM_ENABLED",
+    )
+    # Volume / breakout confirmation: credits a 52w-high/base-emergence read backed by
+    # above-average weekly volume, haircuts the same read on weak volume.
+    stocvest_position_volume_confirm_enabled: bool = Field(
+        False,
+        alias="STOCVEST_POSITION_VOLUME_CONFIRM_ENABLED",
+    )
     # B76 — swing/day target geometry v2. Fixes two defects that produce misleading
     # risk/reward in the deep-dive "what-if" planner:
     #   (A) analyst price targets (Benzinga/Perplexity, ~12-month fundamental PTs) reach
