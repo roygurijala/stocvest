@@ -27,12 +27,12 @@ def _last_not_none(series: list[Optional[float]]) -> Optional[float]:
 def _weekly_macd_state(
     weekly_closes: list[float], params: PositionTechnicalParameters
 ) -> Optional[str]:
-    """Direction of weekly MACD vs its signal line.
+    """Direction of weekly MACD momentum from the histogram sign.
 
-    Returns ``"up"`` (MACD above signal AND histogram non-negative → momentum
-    supports an uptrend), ``"down"`` (below signal AND histogram negative →
-    deteriorating), or ``None`` when it is mixed / insufficient history. Pure reuse
-    of the shared MACD math (no new indicator invented).
+    Histogram = MACD − signal. Returns ``"up"`` (histogram > 0 → momentum leaning
+    up), ``"down"`` (histogram < 0 → leaning down / deteriorating), or ``None`` when
+    it is flat / insufficient history. Pure reuse of the shared MACD math (no new
+    indicator invented).
     """
     if len(weekly_closes) < params.weekly_macd_slow + params.weekly_macd_signal:
         return None
