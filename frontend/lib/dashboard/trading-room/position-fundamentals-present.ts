@@ -2,6 +2,8 @@
  * Pure helpers for Position desk fundamentals payload (`position_fundamentals`).
  */
 
+import type { TickerAnalystPanel, TickerAnalystRatingRow } from "@/lib/api/ticker-news-panel";
+
 export type PositionPillarId = "F1" | "F2" | "F3" | "F4" | "F5";
 
 export type PositionPillarRow = {
@@ -167,6 +169,66 @@ export function parsePositionHolderRead(
     actions,
     context: strList(o.context),
     disclaimer: str(o.disclaimer)
+  };
+}
+
+/**
+ * POS-AI-13 (display-only) — parse the ship-dark Long Term analyst panel
+ * (`position_analyst`, same shape as the ticker news panel's analyst block).
+ * Present only when the backend flag is on; returns null otherwise so the UI
+ * renders nothing. This is DISPLAY-only — it never affects the composite score.
+ */
+export function parsePositionAnalystPanel(
+  body: Record<string, unknown> | null | undefined
+): TickerAnalystPanel | null {
+  const raw = body?.position_analyst;
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const feedState = str(o.feed_state);
+  if (!feedState) return null;
+
+  const consensusRaw = o.consensus;
+  let consensus: TickerAnalystPanel["consensus"] = null;
+  if (consensusRaw && typeof consensusRaw === "object") {
+    const c = consensusRaw as Record<string, unknown>;
+    consensus = {
+      upgrades_30d: num(c.upgrades_30d) ?? 0,
+      downgrades_30d: num(c.downgrades_30d) ?? 0,
+      momentum: num(c.momentum) ?? 0,
+      label: str(c.label) || null,
+      unique_firms: c.unique_firms === true
+    };
+  }
+
+  const ratingsRaw = Array.isArray(o.ratings) ? o.ratings : [];
+  const ratings: TickerAnalystRatingRow[] = ratingsRaw
+    .map((r): TickerAnalystRatingRow | null => {
+      if (!r || typeof r !== "object") return null;
+      const row = r as Record<string, unknown>;
+      const id = str(row.id);
+      const firm = str(row.firm);
+      if (!id || !firm) return null;
+      return {
+        id,
+        firm,
+        action: str(row.action),
+        rating: str(row.rating),
+        price_target: num(row.price_target),
+        upside_pct: typeof row.upside_pct === "number" && Number.isFinite(row.upside_pct) ? row.upside_pct : null,
+        firm_tier: str(row.firm_tier) || "standard",
+        published_at: str(row.published_at),
+        age_label: str(row.age_label)
+      };
+    })
+    .filter((r): r is TickerAnalystRatingRow => r != null);
+
+  return {
+    feed_state: feedState,
+    window_days: num(o.window_days) ?? 30,
+    consensus,
+    ratings,
+    total_found: num(o.total_found) ?? ratings.length,
+    symbol: str(o.symbol)
   };
 }
 

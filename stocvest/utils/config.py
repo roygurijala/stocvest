@@ -395,6 +395,17 @@ class Settings(BaseSettings):
         False,
         alias="STOCVEST_POSITION_HOLDER_READ_ENABLED",
     )
+    # POS-AI-13 (display-only slice; ship dark, default OFF). Surfaces Benzinga analyst
+    # ratings + consensus on the Long Term desk as a DISPLAY panel (position_analyst) only.
+    # It does NOT feed the composite score — the News-layer bundle stays empty per ADR-001,
+    # so the score is byte-identical whether this flag is on or off. Score-feeding the
+    # structured analyst signal into the position composite is a separate, walk-forward-gated
+    # step (ADR-001 addendum) tracked under POS-AI-13's score half. Degrades to an
+    # "unconfigured" panel when no Benzinga analyst key is present.
+    stocvest_position_composite_analyst_enabled: bool = Field(
+        False,
+        alias="STOCVEST_POSITION_COMPOSITE_ANALYST_ENABLED",
+    )
     # B76 — swing/day target geometry v2. Fixes two defects that produce misleading
     # risk/reward in the deep-dive "what-if" planner:
     #   (A) analyst price targets (Benzinga/Perplexity, ~12-month fundamental PTs) reach
@@ -506,11 +517,6 @@ class Settings(BaseSettings):
     stocvest_news_worker_benzinga_ws_enabled: bool = Field(
         False,
         alias="STOCVEST_NEWS_WORKER_BENZINGA_WS_ENABLED",
-    )
-    # ADR-001 Phase 7: Benzinga get_multi on day composite (default OFF — Polygon-primary).
-    stocvest_day_composite_benzinga_enabled: bool = Field(
-        False,
-        alias="STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED",
     )
 
     model_config = {"populate_by_name": True}

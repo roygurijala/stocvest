@@ -58,3 +58,31 @@ def test_discovery_row_null_risk_when_geometry_unscored() -> None:
     )
     assert row["risk_reward"] is None
     assert row["structure_risk_reward"] is None
+
+
+@pytest.mark.unit
+def test_discovery_row_carries_company_name_when_provided() -> None:
+    mover = FunnelMover(
+        symbol="CCC",
+        gap_percent=1.0,
+        direction="up",
+        rank_score=5.0,
+        day_volume=1e6,
+        session_price=10.0,
+    )
+    row = discovery_row_from_mover(mover, mode="swing", company_name="  Cee Corp  ")
+    assert row["company_name"] == "Cee Corp"
+
+
+@pytest.mark.unit
+def test_discovery_row_company_name_none_when_absent_or_blank() -> None:
+    mover = FunnelMover(
+        symbol="DDD",
+        gap_percent=1.0,
+        direction="up",
+        rank_score=5.0,
+        day_volume=1e6,
+        session_price=10.0,
+    )
+    assert discovery_row_from_mover(mover, mode="swing")["company_name"] is None
+    assert discovery_row_from_mover(mover, mode="swing", company_name="   ")["company_name"] is None

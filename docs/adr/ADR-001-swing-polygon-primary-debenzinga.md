@@ -63,6 +63,8 @@ Each phase ships with tests and a CONTEXT/BACKLOG update before the next phase s
 
 ## Phase 7 contract
 
+> **Superseded by DBZ-9 (2026-09-11):** `STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED` has been **retired**. The day composite is permanently Polygon-primary — it never instantiates `BenzingaClient`, never calls `get_multi` / `ensure_analyst_feed`, and no longer emits `benzinga_feed_health`. The Benzinga analyst library (`get_analyst_ratings`, `ensure_analyst_feed`) is retained for the ticker news panel and POS-AI-13. The rows below describe the pre-DBZ-9 behavior for history.
+
 - `STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED` (default **off**): when off, day composite skips `BenzingaClient.get_multi` / `ensure_analyst_feed` and uses `swing_news_source_bundle()` + Polygon reference news.
 - Day composite responses include **`news_source`: `"polygon_primary"`** when Benzinga is disabled.
 - Day composite entry points pass `perplexity_mode` (same semantics as Phase 5 swing):

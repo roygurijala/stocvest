@@ -1,18 +1,19 @@
-"""Day composite Benzinga flag + Perplexity gating (ADR-001 DBZ-7)."""
+"""Day composite Polygon-primary news + Perplexity gating (ADR-001; DBZ-9).
+
+DBZ-9 retired ``STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED`` entirely — the day desk
+is permanently Polygon-primary and never calls ``BenzingaClient.get_multi`` /
+``ensure_analyst_feed``. These tests lock that invariant.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from stocvest.config.signal_parameters import default_signal_parameters
-from stocvest.data.benzinga_client import BenzingaFeedHealth, BenzingaMultiResult
 from stocvest.data.models import Bar, Snapshot, Timeframe
-from stocvest.signals.sector_mapper import SectorResolutionState
-from stocvest.signals.sector_sic_fallback import SicMappingTier
-from stocvest.utils.config import get_settings
 from tests.api.test_class_share_symbol_normalization import _mute_shared
 
 
@@ -92,39 +93,12 @@ def _fake_poly_factory(*, news_rows: list[dict] | None = None):
     return FakePoly
 
 
-def _empty_benzinga_bundle() -> BenzingaMultiResult:
-    return BenzingaMultiResult(
-        analyst_feed_configured=False,
-        feed_health=BenzingaFeedHealth(
-            news="ok",
-            wim="ok",
-            ratings="ok",
-            guidance="ok",
-            earnings="ok",
-            bundle="ok",
-        ),
-    )
-
-
 @pytest.mark.asyncio
 async def test_day_composite_polygon_primary_news_source_default(
     _mute_day_side_effects: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ADR-001 Phase 7: day desk uses Polygon news only when Benzinga flag is off (default)."""
+    """DBZ-9: day desk is permanently Polygon-primary — no Benzinga get_multi path."""
 
-    benzinga_calls: list[str] = []
-
-    class SpyBenzinga:
-        def __init__(self, *a, **k):
-            pass
-
-        async def get_multi(self, symbol: str, **kwargs: object) -> BenzingaMultiResult:
-            benzinga_calls.append(symbol)
-            raise AssertionError("BenzingaClient.get_multi must not run when day flag is off")
-
-    monkeypatch.setenv("STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED", "0")
-    get_settings.cache_clear()
-    monkeypatch.setattr("stocvest.api.services.real_composite_engine.BenzingaClient", SpyBenzinga)
     monkeypatch.setattr(
         "stocvest.api.services.real_composite_engine.PolygonClient",
         _fake_poly_factory(
@@ -149,50 +123,20 @@ async def test_day_composite_polygon_primary_news_source_default(
         user_email=None,
         params=default_signal_parameters(),
     )
-    assert benzinga_calls == []
     assert out.get("news_source") == SWING_NEWS_SOURCE_POLYGON_PRIMARY
     assert "benzinga_feed_health" not in out
     assert out.get("mode") == "day"
 
 
 @pytest.mark.asyncio
-async def test_day_composite_benzinga_flag_on_invokes_get_multi(
+async def test_day_composite_benzinga_client_not_referenced(
     _mute_day_side_effects: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    benzinga_calls: list[str] = []
+    """DBZ-9 guard: the day engine no longer imports BenzingaClient / ensure_analyst_feed."""
+    import stocvest.api.services.real_composite_engine as rce
 
-    class StubBenzinga:
-        def __init__(self, *a, **k):
-            pass
-
-        async def get_multi(self, symbol: str, **kwargs: object) -> BenzingaMultiResult:
-            benzinga_calls.append(symbol)
-            return _empty_benzinga_bundle()
-
-    monkeypatch.setenv("STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED", "1")
-    get_settings.cache_clear()
-    monkeypatch.setattr("stocvest.api.services.real_composite_engine.BenzingaClient", StubBenzinga)
-    monkeypatch.setattr(
-        "stocvest.api.services.real_composite_engine.ensure_analyst_feed",
-        AsyncMock(side_effect=lambda _bz, sym, data: data),
-    )
-    monkeypatch.setattr(
-        "stocvest.api.services.real_composite_engine.PolygonClient",
-        _fake_poly_factory(),
-    )
-
-    from stocvest.api.services.real_composite_engine import build_real_composite_response
-
-    out = await build_real_composite_response(
-        symbol="AAPL",
-        user_id=None,
-        user_email=None,
-        params=default_signal_parameters(),
-    )
-    assert benzinga_calls == ["AAPL"]
-    assert out.get("benzinga_feed_health") is not None
-    assert "news_source" not in out or out.get("news_source") != "polygon_primary"
-    assert out.get("mode") == "day"
+    assert not hasattr(rce, "BenzingaClient")
+    assert not hasattr(rce, "ensure_analyst_feed")
 
 
 @pytest.mark.asyncio

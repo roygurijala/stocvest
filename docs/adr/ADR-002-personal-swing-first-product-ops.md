@@ -54,7 +54,7 @@ Each phase ships with **tests**, **CONTEXT/BACKLOG update**, and user **“go ah
 | 7 | **UX-2** | **Market swing setups table on dashboard brief** — Symbol \| Readiness \| Direction \| R/R \| State \| Why from cached swing desk scan (not watchlist); embedded in market brief | **SUPERSEDED 2026-09-04** by **ADR-003 UX-D1** — table removed from brief; ranked swing list lives in desk feed + Scanner |
 | 8 | **UX-3** | **Symbol one-page** — consolidate Setup/Layers/Evolution/Chart into a single scroll on `/dashboard` deep dive | **DONE 2026-09-02** — `deep-dive.tsx` one-page sections |
 | 9 | **VAL-1** | **Personal validation loop** — document daily workflow in CONTEXT; tighten email prefs to **execution-actionable-only** + geometry gates; weekly `ledger_signal_report.py` review checklist | **DONE 2026-09-03** — `docs/VALIDATION_LOOP.md`, alert pref defaults, weekly report section |
-| 10 | **DBZ-9** | *(Optional)* **Retire day Benzinga entirely** — remove `STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED` path; day desk Polygon-only always | Pending (ADR-001 left day flag for optional legacy) |
+| 10 | **DBZ-9** | *(Optional)* **Retire day Benzinga entirely** — remove `STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED` path; day desk Polygon-only always | **DONE 2026-09-11.** Flag + day-engine `get_multi`/`ensure_analyst_feed` branch + `benzinga_feed_health` day surface + Terraform var removed; day desk permanently Polygon-primary. Shared Benzinga library (analyst ratings) preserved for POS-AI-13 + ticker news panel. |
 
 ---
 

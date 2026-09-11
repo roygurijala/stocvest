@@ -23,8 +23,10 @@ import { DeepDiveEvidenceTabs } from "@/components/dashboard/trading-room/deep-d
 import { DeepDiveLaneToggle } from "@/components/dashboard/trading-room/deep-dive-lane-toggle";
 import { PositionSetupRead } from "@/components/dashboard/trading-room/position-setup-read";
 import { PositionHolderRead } from "@/components/dashboard/trading-room/position-holder-read";
+import { PositionAnalystPanel } from "@/components/dashboard/trading-room/position-analyst-panel";
 import {
   buildPositionThesisSummary,
+  parsePositionAnalystPanel,
   parsePositionFundamentals,
   parsePositionHolderRead,
   parsePositionThesisPacket
@@ -1522,6 +1524,14 @@ export function DeepDive({
     [activeLane, composite]
   );
 
+  const positionAnalystPanel = useMemo(
+    () =>
+      activeLane === "position" && composite
+        ? parsePositionAnalystPanel(composite as Record<string, unknown>)
+        : null,
+    [activeLane, composite]
+  );
+
   const signalValidDays = useMemo(() => {
     if (!composite || isInsufficient) return null;
     const raw = (composite as Record<string, unknown>).signal_valid_days;
@@ -1963,6 +1973,9 @@ export function DeepDive({
                 ) : null}
                 {isPositionLane && positionHolderRead ? (
                   <PositionHolderRead read={positionHolderRead} colors={colors} />
+                ) : null}
+                {isPositionLane && positionAnalystPanel ? (
+                  <PositionAnalystPanel panel={positionAnalystPanel} colors={colors} />
                 ) : null}
                 {!isPositionLane && pageDecision ? (
                   <SignalsSetupRead

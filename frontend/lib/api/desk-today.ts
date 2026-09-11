@@ -7,6 +7,8 @@ export type DeskTodayMode = "swing" | "day";
 
 export type DeskDiscoveryLeader = {
   symbol: string;
+  /** B75 — company name carried in the desk payload so cards survive a backend outage. */
+  company_name?: string | null;
   gap_percent: number;
   direction: "up" | "down";
   rank_score: number;

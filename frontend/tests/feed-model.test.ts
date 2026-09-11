@@ -34,6 +34,50 @@ describe("buildFeedCards", () => {
     expect(cards.some((c) => c.setupTier === "mover")).toBe(false);
   });
 
+  test("B75: leader company_name from the desk payload is used and beats the live map", () => {
+    const cards = buildFeedCards({
+      mode: "swing",
+      swingDesk: {
+        discovery: [
+          {
+            symbol: "NVDA",
+            gap_percent: 1,
+            direction: "up",
+            rank_score: 90,
+            desk: "swing",
+            company_name: "NVIDIA Corp"
+          }
+        ]
+      },
+      dayDesk: null,
+      swingSetups: [],
+      daySetups: [],
+      snapshotsBySymbol: new Map(),
+      // Stale/empty live side-channel must not override the payload name.
+      companyBySymbol: new Map([["NVDA", "Wrong Name"]]),
+      dayTradingSurfaces: true
+    });
+    const card = cards.find((c) => c.symbol === "NVDA");
+    expect(card?.company).toBe("NVIDIA Corp");
+  });
+
+  test("B75: leader falls back to the live map when the payload carries no name", () => {
+    const cards = buildFeedCards({
+      mode: "swing",
+      swingDesk: {
+        discovery: [{ symbol: "AMD", gap_percent: 1, direction: "up", rank_score: 90, desk: "swing" }]
+      },
+      dayDesk: null,
+      swingSetups: [],
+      daySetups: [],
+      snapshotsBySymbol: new Map(),
+      companyBySymbol: new Map([["AMD", "Advanced Micro Devices"]]),
+      dayTradingSurfaces: true
+    });
+    const card = cards.find((c) => c.symbol === "AMD");
+    expect(card?.company).toBe("Advanced Micro Devices");
+  });
+
   test("excludes desk leaders marked not surface eligible", () => {
     const cards = buildFeedCards({
       mode: "swing",
