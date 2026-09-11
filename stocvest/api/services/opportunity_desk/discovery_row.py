@@ -51,6 +51,7 @@ def discovery_row_from_mover(
     *,
     mode: DeskMode,
     composite: dict[str, Any] | None = None,
+    company_name: str | None = None,
 ) -> dict[str, Any]:
     alignment_ratio: float | None = None
     verdict: str | None = None
@@ -108,6 +109,9 @@ def discovery_row_from_mover(
 
     row: dict[str, Any] = {
         "symbol": mover.symbol,
+        # B75 — carry the resolved company name inside the desk payload so feed
+        # cards + deep-dive survive a full backend outage (no live side-channel).
+        "company_name": (company_name or "").strip() or None,
         "gap_percent": mover.gap_percent,
         "direction": mover.direction,
         "rank_score": mover.rank_score,

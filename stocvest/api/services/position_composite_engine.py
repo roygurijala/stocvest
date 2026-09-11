@@ -71,6 +71,7 @@ from stocvest.signals.position_technical_analyzer import (
     PositionTechnicalAnalyzer,
     aggregate_daily_to_weekly_bars,
 )
+from stocvest.api.services.position_analyst_panel import build_position_analyst_panel
 from stocvest.signals.position_holder_read import build_position_holder_read
 from stocvest.signals.position_thesis_packet import build_position_thesis_packet
 from stocvest.signals.sector_analyzer import SectorAnalyzer
@@ -562,6 +563,16 @@ async def build_position_composite_response(
         holder_read = build_position_holder_read(response_body)
         if holder_read is not None:
             response_body["position_holder_read"] = holder_read
+
+    # POS-AI-13 (display-only; ship dark, default OFF). Attach a Benzinga analyst
+    # panel for the Long Term deep-dive. Purely additive — the composite score above
+    # is untouched (News-layer bundle stays empty per ADR-001). Byte-identical body
+    # when the flag is off; degrades to an "unconfigured" panel without a key.
+    if settings.stocvest_position_composite_analyst_enabled:
+        response_body["position_analyst"] = await build_position_analyst_panel(
+            sym,
+            current_price=last_px if last_px and last_px > 0 else None,
+        )
 
     return response_body
 

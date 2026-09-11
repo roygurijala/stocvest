@@ -143,6 +143,8 @@ async def test_position_composite_mode_and_fundamentals(_mute_side_effects: None
     assert isinstance(out.get("signal_structure_broken"), bool)
     # Holder read is ship-dark: absent unless the flag is flipped on.
     assert "position_holder_read" not in out
+    # POS-AI-13 analyst panel is ship-dark too: absent unless the flag is flipped on.
+    assert "position_analyst" not in out
 
     # Flag ON → owner-oriented holder read attached (reuses the same mocks/fixture).
     from stocvest.utils.config import get_settings
@@ -163,6 +165,41 @@ async def test_position_composite_mode_and_fundamentals(_mute_side_effects: None
         assert isinstance(holder.get("actions"), list) and holder["actions"]
     finally:
         monkeypatch.delenv("STOCVEST_POSITION_HOLDER_READ_ENABLED", raising=False)
+        get_settings.cache_clear()
+
+    # POS-AI-13 flag ON → display-only analyst panel attached (score untouched).
+    # Stub the fetch so the test stays offline and deterministic.
+    async def _fake_panel(symbol: str, *, current_price: float | None = None) -> dict:
+        return {
+            "feed_state": "available",
+            "window_days": 30,
+            "consensus": None,
+            "ratings": [],
+            "total_found": 0,
+            "symbol": symbol.strip().upper(),
+        }
+
+    monkeypatch.setattr(
+        "stocvest.api.services.position_composite_engine.build_position_analyst_panel",
+        _fake_panel,
+    )
+    monkeypatch.setenv("STOCVEST_POSITION_COMPOSITE_ANALYST_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        out_analyst = await build_position_composite_response(
+            symbol="AAPL",
+            user_id=None,
+            user_email=None,
+            params=default_signal_parameters(),
+            fundamentals_provider=_fundamentals_mock(),
+        )
+        analyst_panel = out_analyst.get("position_analyst")
+        assert isinstance(analyst_panel, dict)
+        assert analyst_panel.get("feed_state") == "available"
+        # Composite score must be identical with the display-only flag on.
+        assert out_analyst.get("composite_score") == out.get("composite_score")
+    finally:
+        monkeypatch.delenv("STOCVEST_POSITION_COMPOSITE_ANALYST_ENABLED", raising=False)
         get_settings.cache_clear()
     pf = out.get("position_fundamentals") or {}
     assert isinstance(pf.get("pillars"), list)

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPositionThesisSummary,
+  parsePositionAnalystPanel,
   parsePositionFundamentals,
   parsePositionHolderRead,
   parsePositionThesisPacket
@@ -167,5 +168,58 @@ describe("parsePositionHolderRead (ship-dark)", () => {
     expect(
       parsePositionHolderRead({ position_holder_read: { stance: "caution", actions: [] } })
     ).toBeNull();
+  });
+});
+
+describe("parsePositionAnalystPanel (POS-AI-13, display-only)", () => {
+  it("parses an available panel with consensus + ratings", () => {
+    const panel = parsePositionAnalystPanel({
+      position_analyst: {
+        feed_state: "available",
+        window_days: 30,
+        consensus: { upgrades_30d: 3, downgrades_30d: 1, momentum: 2, label: "Net upgrades", unique_firms: true },
+        ratings: [
+          {
+            id: "morgan-stanley-20260901T1200",
+            firm: "Morgan Stanley",
+            action: "Upgrades",
+            rating: "Overweight",
+            price_target: 250,
+            upside_pct: 12.5,
+            firm_tier: "tier_1",
+            published_at: "2026-09-01T12:00:00Z",
+            age_label: "10d ago"
+          }
+        ],
+        total_found: 1,
+        symbol: "AAPL"
+      }
+    });
+    expect(panel).not.toBeNull();
+    expect(panel?.feed_state).toBe("available");
+    expect(panel?.consensus?.label).toBe("Net upgrades");
+    expect(panel?.ratings).toHaveLength(1);
+    expect(panel?.ratings[0].firm).toBe("Morgan Stanley");
+  });
+
+  it("parses an unconfigured panel (feed off but flag on)", () => {
+    const panel = parsePositionAnalystPanel({
+      position_analyst: { feed_state: "unconfigured", window_days: 30, consensus: null, ratings: [], total_found: 0, symbol: "AAPL" }
+    });
+    expect(panel?.feed_state).toBe("unconfigured");
+    expect(panel?.ratings).toHaveLength(0);
+  });
+
+  it("returns null when absent (flag off) or malformed, and drops rows missing id/firm", () => {
+    expect(parsePositionAnalystPanel({})).toBeNull();
+    expect(parsePositionAnalystPanel({ position_analyst: { feed_state: "" } })).toBeNull();
+    const panel = parsePositionAnalystPanel({
+      position_analyst: {
+        feed_state: "available",
+        ratings: [{ firm: "No Id Corp", action: "Buy" }, { id: "x", action: "Buy" }],
+        symbol: "ZZZ"
+      }
+    });
+    expect(panel?.ratings).toHaveLength(0);
   });
 });

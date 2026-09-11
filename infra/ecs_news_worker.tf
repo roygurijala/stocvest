@@ -1,10 +1,7 @@
 # Optional Fargate service: EDGAR news worker (+ optional Benzinga WS; set news_worker_desired_count > 0 after pushing image).
 
-variable "day_composite_benzinga_enabled" {
-  description = "ADR-001 Phase 7: enable Benzinga get_multi on day composite. Default off (Polygon-primary; expired Benzinga keys return 401). Sets STOCVEST_DAY_COMPOSITE_BENZINGA_ENABLED on the signals Lambda."
-  type        = bool
-  default     = false
-}
+# DBZ-9: day_composite_benzinga_enabled retired — the day composite is permanently
+# Polygon-primary (ADR-001/ADR-002); the Benzinga get_multi path no longer exists.
 
 variable "news_worker_benzinga_ws_enabled" {
   description = "ADR-001 Phase 2: enable Benzinga WebSocket ingestion on the ECS news worker. Default off (EDGAR-only; Benzinga keys return 401). Sets STOCVEST_NEWS_WORKER_BENZINGA_WS_ENABLED on the task."

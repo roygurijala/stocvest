@@ -70,7 +70,7 @@ from stocvest.api.services.symbol_news_fetch import (
 )
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
-from stocvest.data.benzinga_client import BenzingaClient, BenzingaMultiResult, benzinga_multi_shell, ensure_analyst_feed
+from stocvest.data.benzinga_client import BenzingaMultiResult, benzinga_multi_shell
 from stocvest.data.models import Bar, SignalRecord, Snapshot, Timeframe
 from stocvest.data.polygon_client import PolygonClient, PolygonError
 from stocvest.data.symbol_normalize import to_polygon_symbol
@@ -305,7 +305,6 @@ class RealCompositeEnginePhase:
     ticker_ref: TickerReference | None = None
     market_context_dampening: dict[str, Any] | None = None
     perplexity_headwinds: tuple[str, ...] = ()
-    benzinga_feed_health: dict[str, str] | None = None
     analyst_target_levels: tuple[float, ...] = ()
     analyst_target_source: str = "none"
 
@@ -331,13 +330,12 @@ async def run_real_composite_engine_phase(
     sector_cache = DynamoSectorCache(settings.dynamodb_sector_cache_table)
 
     news_since = datetime.now(timezone.utc) - timedelta(hours=float(params.news.lookback_hours))
-    benzinga_enabled = bool(get_settings().stocvest_day_composite_benzinga_enabled)
-    benzinga: BenzingaClient | None = BenzingaClient() if benzinga_enabled else None
 
+    # DBZ-9: the day composite is Polygon-primary (ADR-001/ADR-002). The Benzinga
+    # get_multi path is fully retired — the News layer always gets an empty structured
+    # bundle so Polygon headlines drive the day-desk news score.
     async def _fetch_benzinga_bundle() -> BenzingaMultiResult:
-        if not benzinga_enabled or benzinga is None:
-            return swing_news_source_bundle()
-        return await benzinga.get_multi(sym, mode="day")
+        return swing_news_source_bundle()
 
     async def _fetch_composite_news_rows() -> list[dict[str, Any]]:
         return await fetch_symbol_panel_raw_articles(
@@ -367,8 +365,6 @@ async def run_real_composite_engine_phase(
         daily_bars: list[Bar] = _safe_result(daily_r, [])
         sym_snap: Snapshot | None = _safe_result(sym_r, None)
         bz_data: BenzingaMultiResult = _safe_result(bz_r, swing_news_source_bundle())
-        if benzinga_enabled and benzinga is not None:
-            bz_data = await ensure_analyst_feed(benzinga, sym, bz_data)
         news_raw: list[dict[str, Any]] = _safe_result(news_raw_r, [])
         news_rows = [
             enrich_article_ticker_metadata(a, sym) for a in news_raw if isinstance(a, dict)
@@ -630,7 +626,6 @@ async def run_real_composite_engine_phase(
         ticker_ref=ticker_ref,
         market_context_dampening=damp_meta,
         perplexity_headwinds=tuple(perplexity_headwinds),
-        benzinga_feed_health=bz_data.feed_health.as_dict(),
         analyst_target_levels=tuple(_analyst_levels),
         analyst_target_source=_analyst_source,
     )
@@ -811,10 +806,8 @@ async def build_real_composite_response(
         "sector_technical_calibration": sector_technical_calibration_payload(sic_bucket_for_geo),
     }
     response_body.update(composite_layers_meta(phase.layer_results, phase.layer_ids))
-    if get_settings().stocvest_day_composite_benzinga_enabled and phase.benzinga_feed_health:
-        response_body["benzinga_feed_health"] = phase.benzinga_feed_health
-    if not get_settings().stocvest_day_composite_benzinga_enabled:
-        response_body["news_source"] = SWING_NEWS_SOURCE_POLYGON_PRIMARY
+    # DBZ-9: day composite is always Polygon-primary; no Benzinga feed-health surface.
+    response_body["news_source"] = SWING_NEWS_SOURCE_POLYGON_PRIMARY
     if phase.market_context_dampening:
         response_body["market_context_dampening"] = phase.market_context_dampening
     if alignment is not None:

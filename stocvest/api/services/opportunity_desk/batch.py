@@ -236,10 +236,12 @@ async def _build_discovery_rows(
     mode: DeskMode,
     limit: int,
     concurrency: int,
+    names_by_symbol: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     sem = asyncio.Semaphore(max(1, concurrency))
     targets = list(movers[: max(0, limit)])
     composite_failures = 0
+    names = names_by_symbol or {}
 
     async def one(mover: Any) -> dict[str, Any]:
         nonlocal composite_failures
@@ -253,7 +255,12 @@ async def _build_discovery_rows(
                 process_composite_body(composite, mode=mode, symbol=mover.symbol, notify=True)
             except Exception as exc:  # noqa: BLE001
                 _LOG.debug("execution_actionable track failed %s %s: %s", mode, mover.symbol, exc)
-        return discovery_row_from_mover(mover, mode=mode, composite=composite)
+        return discovery_row_from_mover(
+            mover,
+            mode=mode,
+            composite=composite,
+            company_name=names.get(str(mover.symbol).strip().upper()),
+        )
 
     if not targets:
         return [], 0
@@ -438,6 +445,14 @@ async def run_opportunity_desk_batch(
         "modes": {},
     }
 
+    # B75 — resolve company names from the same bulk snapshots used for the funnel
+    # (zero extra Polygon calls) so the desk payload carries names through outages.
+    names_by_symbol: dict[str, str] = {
+        s.symbol.strip().upper(): (s.company_name or "").strip()
+        for s in snapshots
+        if s.symbol and (s.company_name or "").strip()
+    }
+
     for mode in ("swing", "day"):
         mode_lit: DeskMode = mode  # type: ignore[assignment]
         key = opportunity_desk_redis_key(mode_lit)
@@ -467,6 +482,7 @@ async def run_opportunity_desk_batch(
                 funnel.movers,
                 mode=mode_lit,
                 limit=composite_limit,
+                names_by_symbol=names_by_symbol,
                 concurrency=cfg.composite_concurrency,
             )
             composite_failures_total += composite_failures

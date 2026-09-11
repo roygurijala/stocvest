@@ -232,8 +232,10 @@ function cardFromLeader(
   const symbol = leader.symbol.trim().toUpperCase();
   const snap = snapshotsBySymbol.get(symbol);
   const ratio = cleanNum(leader.alignment_ratio);
-  // Prefer pre-resolved company names (includes scanner + gap intelligence)
-  const company = companyBySymbol?.get(symbol) ?? snap?.company_name?.trim() ?? null;
+  // B75 — prefer the name carried in the desk payload (survives a backend outage),
+  // then the pre-resolved live map, then the live snapshot.
+  const company =
+    leader.company_name?.trim() || companyBySymbol?.get(symbol) || snap?.company_name?.trim() || null;
   return {
     id: `${lane}:${symbol}`,
     symbol,

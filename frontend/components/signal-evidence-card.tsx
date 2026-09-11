@@ -25,6 +25,7 @@ import { CausalNarrativePanel } from "@/components/signals/causal-narrative-pane
 import { MarketContextPanel } from "@/components/signals/market-context-panel";
 import { TimeframeContextPanel } from "@/components/signals/timeframe-context-panel";
 import { resolveCausalNarrative } from "@/lib/signal-evidence/causal-narrative";
+import { macroPreEventPosture } from "@/lib/signal-evidence/macro-posture-copy";
 import { resolveTimeframeContext } from "@/lib/signal-evidence/timeframe-context";
 import { executionQualitySummaryLine } from "@/lib/signal-evidence/execution-quality";
 import { PlanningGatesPanel } from "@/components/signal-evidence/planning-gates-panel";
@@ -808,6 +809,18 @@ export function SignalEvidenceCard({ evidence, onOpenNewsPanel, gapIntelSnapshot
                   </p>
                   {layer.key === "macro" ? (
                 <div className="flex flex-col gap-2">
+                  {(() => {
+                    const posture = macroPreEventPosture(layer);
+                    return posture ? (
+                      <p
+                        data-testid="macro-pre-event-posture"
+                        className="mb-1 rounded-md border px-3 py-2 text-xs leading-relaxed"
+                        style={{ borderColor: colors.border, color: colors.textMuted }}
+                      >
+                        {posture}
+                      </p>
+                    ) : null;
+                  })()}
                   {layer.macro_risk_level === "critical" && (layer.macro_warnings?.length ?? 0) > 0 ? (
                     <div className="mb-1 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2">
                       <div className="text-sm font-medium text-red-400">⚠️ High-Impact Event Imminent</div>

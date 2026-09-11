@@ -130,6 +130,7 @@ def quiet_leader_row(
     technical: SwingTechnicalLayerResult,
     composite: dict[str, Any] | None,
     mode: DeskMode = "swing",
+    company_name: str | None = None,
 ) -> dict[str, Any]:
     direction: Literal["up", "down"] = "up" if gap_percent >= 0 else "down"
     mover = FunnelMover(
@@ -140,7 +141,7 @@ def quiet_leader_row(
         day_volume=0.0,
         session_price=0.0,
     )
-    row = discovery_row_from_mover(mover, mode=mode, composite=composite)
+    row = discovery_row_from_mover(mover, mode=mode, composite=composite, company_name=company_name)
     row["technical_score"] = technical.score
     row["daily_rsi"] = technical.daily_rsi
     row["quiet_leader"] = True
@@ -216,12 +217,24 @@ async def build_quiet_leaders(
 
     comp_sem = asyncio.Semaphore(max(1, cfg.composite_concurrency))
     rows: list[dict[str, Any]] = []
+    # B75 — carry company names from the bulk snapshots (no extra Polygon calls).
+    names_by_symbol: dict[str, str] = {
+        s.symbol.strip().upper(): (s.company_name or "").strip()
+        for s in snapshots
+        if s.symbol and (s.company_name or "").strip()
+    }
 
     async def with_composite(item: tuple[str, float, SwingTechnicalLayerResult]) -> dict[str, Any]:
         sym, gap_pct, technical = item
         async with comp_sem:
             composite = await composite_fn(sym)
-        return quiet_leader_row(sym, gap_percent=gap_pct, technical=technical, composite=composite)
+        return quiet_leader_row(
+            sym,
+            gap_percent=gap_pct,
+            technical=technical,
+            composite=composite,
+            company_name=names_by_symbol.get(sym),
+        )
 
     built = await asyncio.gather(*[with_composite(t) for t in targets])
     rows = list(built)
