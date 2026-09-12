@@ -83,7 +83,7 @@ def test_review_returns_payload(monkeypatch):
     _seed_holding("u-pr-1")
     captured: dict = {}
 
-    async def _fake_build(*, holdings, settings, user_id, user_email):
+    async def _fake_build(*, holdings, settings, user_id, user_email, ai_read_fn=None):
         captured["holdings"] = holdings
         captured["settings"] = settings
         captured["user_id"] = user_id
@@ -112,7 +112,7 @@ def test_review_returns_payload(monkeypatch):
 def test_dispatch_routes_get(monkeypatch):
     _seed_holding("u-pr-2")
 
-    async def _fake_build(*, holdings, settings, user_id, user_email):
+    async def _fake_build(*, holdings, settings, user_id, user_email, ai_read_fn=None):
         return _stub_review()
 
     monkeypatch.setattr(handler_mod, "build_portfolio_review", _fake_build)
@@ -127,6 +127,63 @@ def test_dispatch_routes_get(monkeypatch):
     )
     resp = portfolio_review_dispatch_handler(event, {})
     assert resp["statusCode"] == 200
+
+
+class _Profile:
+    def __init__(self, ai: bool):
+        self.has_ai_explanations = ai
+
+
+class _FakeStore:
+    def __init__(self, profile):
+        self._profile = profile
+
+    def get_profile(self, _user_id):
+        return self._profile
+
+
+def test_ai_read_fn_none_for_free_user(monkeypatch):
+    monkeypatch.setattr(handler_mod, "get_user_profile_store", lambda: _FakeStore(_Profile(False)))
+    assert handler_mod._build_ai_read_fn("u-free") is None
+
+
+def test_ai_read_fn_none_when_no_profile(monkeypatch):
+    monkeypatch.setattr(handler_mod, "get_user_profile_store", lambda: _FakeStore(None))
+    assert handler_mod._build_ai_read_fn("u-missing") is None
+
+
+def test_ai_read_fn_narrates_for_paid_user(monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(handler_mod, "get_user_profile_store", lambda: _FakeStore(_Profile(True)))
+
+    class _Result:
+        text = "F1 profitability is strong; watch F4 valuation. Signal data only."
+
+    class _FakeSvc:
+        async def explain_position_setup_read(self, **kwargs):
+            assert kwargs["symbol"] == "AAPL"
+            assert kwargs["verdict"] == "bullish"
+            return _Result()
+
+    import stocvest.signals.ai_explanations as ai_mod
+
+    monkeypatch.setattr(ai_mod, "AIExplanationService", _FakeSvc)
+
+    fn = handler_mod._build_ai_read_fn("u-paid")
+    assert fn is not None
+    body = {
+        "signal_summary": "bullish",
+        "position_thesis_packet": {
+            "bull_case": [{"text": "high ROIC"}],
+            "bear_case": [],
+            "open_questions": [],
+            "pillar_snapshot_hash": "abc123",
+            "fundamentals_covered": True,
+        },
+    }
+    text = asyncio.run(fn("AAPL", body))
+    assert "Signal data only" in text
 
 
 def test_dispatch_unknown_route():
