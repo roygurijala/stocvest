@@ -1,6 +1,6 @@
 # STOCVEST — API contracts (immutable sections)
 
-**Last reviewed:** 2026-06-20 (added §4.15 tracked trade plans — B69, deploy pending)
+**Last reviewed:** 2026-09-12 (§4.16 holdings + §4.17 portfolio-review Lambdas + `Holdings` table + `/v1/holdings*` and `/v1/portfolio-review` API routes deployed via `terraform apply` — status flipped from "deploy pending" to "deployed 2026-09-12")
 
 Sections referenced from **`docs/CONTEXT.md`** §7 must not change without explicit review and coordinated code updates.
 
@@ -297,7 +297,7 @@ User-scoped frozen planning snapshots. **Planning only — never a broker order.
 - `DELETE /v1/trade-plans/{plan_id}` — removes one plan; **404** when not found.
 - `POST /v1/trade-plans/thesis-alerts` — body **`{ "assessments": [ ... ] }`**; emits best-effort **self-notification** emails when a tracked plan's live assessment diverges from its committed thesis; returns **`{ "sent": <int> }`**. (Client-asserted; server-side verification is an open question — see `CONTEXT.md` §3 / `BACKLOG.md`.)
 
-### 4.16 Manual portfolio holdings (PORTFOLIO-MGMT, `holdings` Lambda — deploy pending)
+### 4.16 Manual portfolio holdings (PORTFOLIO-MGMT, `holdings` Lambda — deployed 2026-09-12)
 
 User-declared holdings for the STOCVEST-managed **personal** portfolio — **manual entry, not a broker link** (distinct from the paused broker `portfolio` Lambda §4.5). All routes **authenticated**; identity from the JWT — a body carrying **`userId`** / **`user_id`** is rejected (`400`). Lot notes are sanitized server-side. Caps: **100** holdings per user (`MAX_HOLDINGS_PER_USER`), **50** lots per symbol (`MAX_LOTS_PER_SYMBOL`). DynamoDB **`Holdings`** (one item per user). Holding JSON (camelCase): **`symbol`**, **`lots`** (each: **`lotId`**, **`quantity`** > 0, **`costBasis`** ≥ 0 price/share, **`purchaseDate`** ISO `YYYY-MM-DD`, optional **`note`**); responses also include derived **`totalQuantity`**, **`averageCost`**, **`totalCost`**.
 
@@ -309,7 +309,7 @@ User-declared holdings for the STOCVEST-managed **personal** portfolio — **man
 - `GET /v1/holdings/settings` — portfolio-level settings; returns **`{ cashBalance, targetPositionPct, benchmarkSymbol }`** (defaults `{ 0, null, "SPY" }` when never set). Cash + settings live in the same per-user `Holdings` item as the holdings; writing settings never clobbers holdings and vice versa.
 - `PUT /v1/holdings/settings` — body **`{ cashBalance ≥ 0, targetPositionPct (0,100] | null, benchmarkSymbol }`** (a client-supplied `userId`/`user_id` is rejected `400`); returns the stored settings. `targetPositionPct` is the target weight per position as a % of total portfolio value (holdings-at-cost + cash); `null` means no target (guidance stays directional, no suggested amounts).
 
-### 4.17 Portfolio review (PORTFOLIO-MGMT Slice 2, `portfolio_review` Lambda — deploy pending)
+### 4.17 Portfolio review (PORTFOLIO-MGMT Slice 2, `portfolio_review` Lambda — deployed 2026-09-12)
 
 The daily "manage my portfolio" read. **Authenticated**; identity from the JWT (loads the caller's own holdings + settings from §4.16). Composites each holding through the Long-Term desk engine, so it runs in its own Lambda module with the **same signal feature flags** as `signals` for verdict parity (timeout 180s).
 
