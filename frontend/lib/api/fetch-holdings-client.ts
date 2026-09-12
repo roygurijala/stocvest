@@ -44,15 +44,46 @@ export async function loadPortfolioBundleClient(): Promise<{
   return { holdings, settings, error };
 }
 
-export async function upsertHoldingClient(holding: HoldingInput): Promise<Holding | null> {
+/**
+ * Result of a holding upsert. On failure we carry the HTTP status + the backend's
+ * own message (`{error, message}`) so the UI can show WHY a save failed instead of a
+ * generic "Check the values" — the reason is usually the write path (e.g. the holdings
+ * route/table not deployed → 403/500), not the user's input.
+ */
+export type UpsertHoldingResult =
+  | { ok: true; holding: Holding }
+  | { ok: false; status: number; message: string };
+
+const _GENERIC_SAVE_ERROR = "Could not save. Please try again.";
+
+export async function upsertHoldingClient(holding: HoldingInput): Promise<UpsertHoldingResult> {
   const res = await fetch("/api/stocvest/holdings", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(holding),
     cache: "no-store"
   }).catch(() => null);
-  if (!res?.ok) return null;
-  return parseJson<Holding>(res);
+  if (!res) {
+    return {
+      ok: false,
+      status: 0,
+      message: "Couldn't reach the server. Check your connection and try again."
+    };
+  }
+  if (!res.ok) {
+    const body = await parseJson<{ message?: string; error?: string }>(res);
+    const detail = body?.message || body?.error;
+    const message =
+      res.status === 401 || res.status === 403
+        ? `Save was rejected (HTTP ${res.status}). You may be signed out, or the holdings service isn't available in this environment.`
+        : detail || `${_GENERIC_SAVE_ERROR} (HTTP ${res.status})`;
+    return { ok: false, status: res.status, message };
+  }
+  const saved = await parseJson<Holding>(res);
+  if (!saved) {
+    return { ok: false, status: res.status, message: "The server returned an unexpected response." };
+  }
+  return { ok: true, holding: saved };
 }
 
 /**
