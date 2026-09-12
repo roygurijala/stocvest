@@ -8,6 +8,8 @@ from stocvest.api.handlers.holdings import (
     holdings_delete_handler,
     holdings_dispatch_handler,
     holdings_list_handler,
+    holdings_settings_get_handler,
+    holdings_settings_put_handler,
     holdings_sync_handler,
     holdings_upsert_handler,
 )
@@ -104,3 +106,63 @@ def test_dispatch_routes_by_route_key() -> None:
     )
     resp = holdings_dispatch_handler(event, {})
     assert resp["statusCode"] == 200
+
+
+def test_settings_default_get_then_put_roundtrip() -> None:
+    got = holdings_settings_get_handler(_event("u-h-6"), {})
+    assert got["statusCode"] == 200
+    assert json.loads(got["body"]) == {
+        "cashBalance": 0.0,
+        "targetPositionPct": None,
+        "benchmarkSymbol": "SPY",
+    }
+
+    put = holdings_settings_put_handler(
+        _event("u-h-6", {"cashBalance": 7500, "targetPositionPct": 6.5, "benchmarkSymbol": "qqq"}),
+        {},
+    )
+    assert put["statusCode"] == 200
+    body = json.loads(put["body"])
+    assert body["cashBalance"] == 7500.0
+    assert body["targetPositionPct"] == 6.5
+    assert body["benchmarkSymbol"] == "QQQ"
+
+    again = holdings_settings_get_handler(_event("u-h-6"), {})
+    assert json.loads(again["body"])["cashBalance"] == 7500.0
+
+
+def test_settings_preserved_across_holdings_writes() -> None:
+    holdings_settings_put_handler(_event("u-h-7", {"cashBalance": 1000}), {})
+    holdings_upsert_handler(_event("u-h-7", _holding_payload("AAPL")), {})
+    got = holdings_settings_get_handler(_event("u-h-7"), {})
+    assert json.loads(got["body"])["cashBalance"] == 1000.0
+
+
+def test_settings_rejects_bad_target_pct() -> None:
+    resp = holdings_settings_put_handler(_event("u-h-8", {"targetPositionPct": 150}), {})
+    assert resp["statusCode"] == 400
+
+
+def test_settings_rejects_user_id_in_body() -> None:
+    resp = holdings_settings_put_handler(_event("u-h-9", {"cashBalance": 1, "userId": "x"}), {})
+    assert resp["statusCode"] == 400
+
+
+def test_settings_requires_auth() -> None:
+    assert holdings_settings_get_handler({"requestContext": {}, "body": None}, {})["statusCode"] == 401
+    assert holdings_settings_put_handler({"requestContext": {}, "body": None}, {})["statusCode"] == 401
+
+
+def test_dispatch_routes_settings() -> None:
+    put_event = _event(
+        "u-h-10",
+        {"cashBalance": 4200},
+        routeKey="PUT /v1/holdings/settings",
+    )
+    put = holdings_dispatch_handler(put_event, {})
+    assert put["statusCode"] == 200
+
+    get_event = _event("u-h-10", routeKey="GET /v1/holdings/settings")
+    got = holdings_dispatch_handler(get_event, {})
+    assert got["statusCode"] == 200
+    assert json.loads(got["body"])["cashBalance"] == 4200.0
