@@ -273,6 +273,7 @@ async def build_position_composite_response(
     fund_ctx = PositionFundamentalsContext(
         sector_bucket=sic_bucket_for_geo,
         fundamentals_v2=settings.stocvest_position_fundamentals_v2_enabled,
+        valuation_peg=settings.stocvest_position_valuation_peg_enabled,
     )
     fundamentals = PositionFundamentalsAnalyzer().analyze(fund_snapshot, context=fund_ctx)
 
