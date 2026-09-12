@@ -11,6 +11,7 @@ from stocvest.api.services.portfolio_review import (
     BenchmarkComparison,
     ReviewAction,
     _build_spy_close_lookup,
+    build_owner_position_context,
     build_portfolio_review,
     compute_benchmark_comparison,
     derive_action,
@@ -238,6 +239,38 @@ def test_build_portfolio_review_end_to_end():
     payload = review.to_api()
     assert payload["holdings"][0]["action"] in {"hold", "sell", "buy_more", "trim", "review"}
     assert payload["disclaimer"]
+
+
+def test_owner_context_priced_bullish():
+    h = _holding("AAPL", [(10, 100.0, "2020-01-01")])
+    body = {"status": "ok", "signal_summary": "bullish"}  # → constructive stance
+    ctx = build_owner_position_context(
+        body=body, holding=h, current_price=120.0, as_of=date(2026, 9, 11)
+    )
+    assert ctx["symbol"] == "AAPL"
+    assert ctx["action"] == ReviewAction.BUY_MORE.value
+    assert ctx["unrealized_pl"] == 200.0
+    assert ctx["unrealized_pl_pct"] == 20.0
+    assert ctx["long_term_lots"] == 1 and ctx["short_term_lots"] == 0
+    assert ctx["earliest_purchase_date"] == "2020-01-01"
+
+
+def test_owner_context_unpriced_has_null_pl():
+    h = _holding("XOM", [(5, 200.0, "2026-06-01")])
+    body = {
+        "status": "ok",
+        "signal_summary": "bearish",
+        "signal_structure_broken": True,
+        "risk_reward": 1.0,
+        "min_rr_desk": 2.0,
+    }
+    ctx = build_owner_position_context(
+        body=body, holding=h, current_price=None, as_of=date(2026, 9, 11)
+    )
+    assert ctx["action"] == ReviewAction.SELL.value
+    assert ctx["unrealized_pl"] is None and ctx["unrealized_pl_pct"] is None
+    assert ctx["market_value"] == 1000.0  # valued at cost when unpriced
+    assert ctx["tax_lot_hint"] is not None  # short-term sell hint
 
 
 def test_build_portfolio_review_empty_portfolio():

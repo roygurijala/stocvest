@@ -266,6 +266,60 @@ def compute_benchmark_comparison(
     )
 
 
+def build_owner_position_context(
+    *,
+    body: dict[str, Any],
+    holding: PortfolioHolding,
+    current_price: float | None,
+    as_of: date | None = None,
+) -> dict[str, Any]:
+    """Owner-oriented context for a deep-dive of a symbol the caller *already holds*.
+
+    Attached to the Long-Term composite body (snake_case, like the other ``position_*``
+    payloads) so the deep-dive can show YOUR cost basis, unrealized P/L, tax
+    holding-period, and the signal-first action — using the same verdict + holder-read
+    the review uses. Pure/deterministic; no network, no invented thresholds.
+    """
+    as_of = as_of or datetime.now(timezone.utc).date()
+    status = str(body.get("status") or "").strip().lower()
+    verdict = str(body.get("signal_summary") or body.get("verdict") or "").strip().lower()
+    holder_read = build_position_holder_read(body)
+    stance = str((holder_read or {}).get("stance") or "").strip().lower() or None
+    action = derive_action(verdict=verdict, holder_stance=stance, status=status)
+
+    qty = holding.total_quantity
+    avg = holding.average_cost
+    if current_price is not None and avg is not None:
+        market_value = round(qty * current_price, 2)
+        unrealized_pl = round((current_price - avg) * qty, 2)
+        unrealized_pl_pct = round((current_price - avg) / avg * 100.0, 2) if avg > 0 else None
+    else:
+        market_value = round(qty * (avg or 0.0), 2)
+        unrealized_pl = None
+        unrealized_pl_pct = None
+
+    hint, lt, st = tax_lot_hint(holding, action, as_of=as_of)
+
+    return {
+        "symbol": holding.symbol,
+        "quantity": qty,
+        "average_cost": avg,
+        "current_price": current_price,
+        "market_value": market_value,
+        "unrealized_pl": unrealized_pl,
+        "unrealized_pl_pct": unrealized_pl_pct,
+        "action": action.value,
+        "action_label": _ACTION_LABELS[action],
+        "holder_stance": stance,
+        "tax_lot_hint": hint,
+        "long_term_lots": lt,
+        "short_term_lots": st,
+        "lot_count": len(holding.lots),
+        "earliest_purchase_date": holding.earliest_purchase_date(),
+        "disclaimer": _REVIEW_DISCLAIMER,
+    }
+
+
 def _build_spy_close_lookup(bars: list[Any]) -> Callable[[date], float | None]:
     """Return an 'on-or-before' close lookup from daily bars (weekends/holidays safe)."""
     by_date: list[tuple[date, float]] = []
