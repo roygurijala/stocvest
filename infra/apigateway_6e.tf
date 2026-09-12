@@ -147,6 +147,11 @@ locals {
     "DELETE /v1/trade-plans/{plan_id}"   = { module_key = "trade_plans", authorizer = true }
     "POST /v1/trade-plans/thesis-alerts" = { module_key = "trade_plans", authorizer = true }
 
+    "GET /v1/holdings"            = { module_key = "holdings", authorizer = true }
+    "PUT /v1/holdings"            = { module_key = "holdings", authorizer = true }
+    "PUT /v1/holdings/sync"       = { module_key = "holdings", authorizer = true }
+    "DELETE /v1/holdings/{symbol}" = { module_key = "holdings", authorizer = true }
+
     "GET /v1/pdt/status" = { module_key = "pdt", authorizer = true }
 
     "POST /v1/scanner/gaps"             = { module_key = "scanner", authorizer = true }
