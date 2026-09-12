@@ -75,6 +75,14 @@ describe("NAV_FEATURES sidebar", () => {
     expect(screen.queryByText("Portfolio")).not.toBeInTheDocument();
   });
 
+  // The manual "STOCVEST manages my portfolio" workspace has no feature flag
+  // (it is not the paused broker surface) and must stay discoverable in the
+  // sidebar. Fails loud if a refactor accidentally gates or drops this row.
+  test("test_nav_shows_my_portfolio_when_brokers_disabled", () => {
+    wrap(<Sidebar userLabel="u@example.com" />);
+    expect(screen.getByText("My Portfolio")).toBeInTheDocument();
+  });
+
   test("test_nav_hides_journal_when_brokers_disabled", () => {
     wrap(<Sidebar userLabel="u@example.com" />);
     expect(screen.queryByText("Journal")).not.toBeInTheDocument();

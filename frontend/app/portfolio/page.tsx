@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 
-/** Legacy URL for the removed model signal book; broker portfolio lives at `/dashboard/portfolio`. */
+/**
+ * Legacy `/portfolio` URL. The manual "STOCVEST manages my portfolio" workspace lives at
+ * `/dashboard/my-portfolio`; the paused broker portfolio is at `/dashboard/portfolio`.
+ * Point the bare URL at the manual portfolio so bookmarks/links land on the live feature.
+ */
 export default function LegacyPortfolioRedirectPage() {
-  redirect("/dashboard/setup-outcomes");
+  redirect("/dashboard/my-portfolio");
 }
