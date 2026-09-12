@@ -107,31 +107,37 @@ class EmailService:
         review: dict[str, Any],
     ) -> bool:
         """Send the daily post-close portfolio digest. ``review`` is ``PortfolioReview.to_api()``."""
+        ok = False
         try:
             settings = get_settings()
             sender = (settings.stocvest_email_sender or "").strip()
             token = (settings.postmark_server_token or "").strip()
             if not sender or not token or not (to_email or "").strip():
                 _LOG.warning("portfolio digest skipped: missing sender, Postmark token, or recipient")
-                return False
-            base = (settings.stocvest_public_app_url or "https://stocvest.ai").rstrip("/")
-            holdings = review.get("holdings") or []
-            subj = f"STOCVEST · Your portfolio review — {len(holdings)} holding(s)"
-            body_html = self._build_portfolio_digest_html(review, base_url=base)
-            ok = send_postmark_html_email(
-                server_token=token,
-                sender=sender,
-                to_email=to_email.strip(),
-                subject=subj,
-                html_body=body_html,
-                message_stream=settings.postmark_message_stream,
-            )
-            if not ok:
-                _LOG.warning("Postmark send_portfolio_digest_email failed for %s", to_email.strip())
-            return ok
+            else:
+                base = (settings.stocvest_public_app_url or "https://stocvest.ai").rstrip("/")
+                holdings = review.get("holdings") or []
+                subj = f"STOCVEST · Your portfolio review — {len(holdings)} holding(s)"
+                body_html = self._build_portfolio_digest_html(review, base_url=base)
+                ok = send_postmark_html_email(
+                    server_token=token,
+                    sender=sender,
+                    to_email=to_email.strip(),
+                    subject=subj,
+                    html_body=body_html,
+                    message_stream=settings.postmark_message_stream,
+                )
+                if not ok:
+                    _LOG.warning(
+                        "Postmark send_portfolio_digest_email failed for %s", to_email.strip()
+                    )
         except Exception as exc:  # noqa: BLE001 — delivery errors must not propagate
             _LOG.warning("Postmark send_portfolio_digest_email failed: %s", exc)
-            return False
+            ok = False
+        # Feed the same EmailSendOutcome metric + CloudWatch failure alarm as alert emails,
+        # so a silent Postmark freeze (over-limit / inactive) is caught on this path too.
+        publish_email_send_outcome(success=ok)
+        return ok
 
     @staticmethod
     def _fmt_usd(value: Any) -> str:

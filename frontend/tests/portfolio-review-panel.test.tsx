@@ -143,4 +143,34 @@ describe("PortfolioReviewPanel", () => {
       expect(screen.getByText(/Could not run the review/i)).toBeInTheDocument()
     );
   });
+
+  test("renders holder-read guidance when present", async () => {
+    const review = sampleReview();
+    review.holdings[0].holderRead = {
+      stance: "constructive",
+      headline: "Keep holding — trend intact",
+      actions: ["Add on a pullback to support"]
+    };
+    fetchMock.mockResolvedValueOnce(review);
+    wrap(<PortfolioReviewPanel />);
+
+    fireEvent.click(screen.getByTestId("run-review"));
+
+    await waitFor(() => expect(screen.getByTestId("holder-read-AAPL")).toBeInTheDocument());
+    expect(screen.getByText(/Keep holding — trend intact/)).toBeInTheDocument();
+    expect(screen.getByText(/Add on a pullback/)).toBeInTheDocument();
+  });
+
+  test("shows an empty-holdings message when the review has no holdings", async () => {
+    const review = sampleReview();
+    review.holdings = [];
+    fetchMock.mockResolvedValueOnce(review);
+    wrap(<PortfolioReviewPanel />);
+
+    fireEvent.click(screen.getByTestId("run-review"));
+
+    await waitFor(() =>
+      expect(screen.getByText(/No holdings to review yet/i)).toBeInTheDocument()
+    );
+  });
 });

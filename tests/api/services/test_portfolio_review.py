@@ -283,3 +283,87 @@ def test_build_portfolio_review_empty_portfolio():
     assert review.holdings == []
     assert review.total_market_value == 1000.0
     assert review.cash_balance == 1000.0
+
+
+def test_build_portfolio_review_advice_disabled_is_informational_only():
+    """With personal-advice mode OFF, actions degrade to REVIEW and advisory extras drop."""
+    holdings = (
+        _holding("AAPL", [(10, 100.0, "2020-01-01")]),
+        _holding("XOM", [(5, 200.0, "2026-06-01")]),
+    )
+    settings = PortfolioSettings(cash_balance=250.0, target_position_pct=50.0, benchmark_symbol="SPY")
+    prices = {
+        "AAPL": _Snap(last_trade_price=120.0),
+        "XOM": _Snap(last_trade_price=150.0),
+        "SPY": _Snap(last_trade_price=500.0),
+    }
+
+    async def snap_fn(symbols):
+        return {s: prices[s] for s in symbols if s in prices}
+
+    async def compose_fn(sym):
+        return {"status": "ok", "signal_summary": "bullish"}
+
+    async def spy_bars_fn(sym, from_date):
+        return [_Bar(date(2020, 1, 2), 300.0), _Bar(date(2026, 6, 1), 480.0)]
+
+    def scan_fn():
+        return [_Cand("NVDA", "gem")]
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=scan_fn,
+            as_of=date(2026, 9, 11),
+            advice_enabled=False,
+        )
+    )
+
+    # Every action is the informational REVIEW; no sizing / holder-read / concentration / adds.
+    assert all(h.action == ReviewAction.REVIEW for h in review.holdings)
+    assert all(h.suggested_add_amount is None and h.suggested_reduce_amount is None for h in review.holdings)
+    assert all(h.holder_read is None for h in review.holdings)
+    assert review.concentration == []
+    assert review.consider_adding == []
+    # Factual valuation is still present.
+    assert review.holdings[0].unrealized_pl == 200.0
+    assert review.benchmark is not None
+
+
+def test_build_portfolio_review_buy_more_capped_by_aggregate_cash():
+    """Two BUY_MORE candidates cannot jointly exceed available cash."""
+    holdings = (
+        _holding("AAA", [(1, 10.0, "2020-01-01")]),
+        _holding("BBB", [(1, 10.0, "2020-01-01")]),
+    )
+    # Tiny weights vs a high target → each has a large gap, but only $30 cash total.
+    settings = PortfolioSettings(cash_balance=30.0, target_position_pct=90.0, benchmark_symbol="SPY")
+    prices = {"AAA": _Snap(last_trade_price=100.0), "BBB": _Snap(last_trade_price=100.0)}
+
+    async def snap_fn(symbols):
+        return {s: prices[s] for s in symbols if s in prices}
+
+    async def compose_fn(sym):
+        return {"status": "ok", "signal_summary": "bullish"}  # → BUY_MORE
+
+    async def spy_bars_fn(sym, from_date):
+        return []
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 11),
+            advice_enabled=True,
+        )
+    )
+    total_add = sum(h.suggested_add_amount or 0.0 for h in review.holdings)
+    assert total_add <= 30.0 + 1e-6

@@ -168,6 +168,16 @@ def test_apply_stock_split_reverse() -> None:
     assert split.total_cost == holding.total_cost
 
 
+def test_apply_stock_split_odd_ratio_preserves_total_cost() -> None:
+    # A non-clean ratio (3:2) must not drift a lot's total cost off by sub-cents.
+    holding = PortfolioHolding.from_api(
+        {"symbol": "AAPL", "lots": [_lot(quantity=7, costBasis=101.0)]}
+    )
+    split = apply_stock_split(holding, ratio=1.5)
+    assert split.total_quantity == 10.5
+    assert split.total_cost == pytest.approx(holding.total_cost, abs=1e-6)
+
+
 @pytest.mark.parametrize("bad", [0, -1, -0.5])
 def test_apply_stock_split_rejects_nonpositive_ratio(bad: float) -> None:
     holding = PortfolioHolding.from_api({"symbol": "AAPL", "lots": [_lot()]})

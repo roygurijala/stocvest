@@ -22,13 +22,28 @@ function fmtPct(n: number | null | undefined): string {
   return `${sign}${n.toFixed(1)}%`;
 }
 
-const ACTION_COLORS: Record<ReviewAction, string> = {
-  buy_more: "#16a34a",
-  hold: "#6b7280",
-  trim: "#d97706",
-  sell: "#dc2626",
-  review: "#6b7280"
-};
+/**
+ * Map a review action to a theme color (so badges track dark/light and the app's
+ * P/L color language). Unknown/missing actions fall back to the muted color instead
+ * of rendering an undefined background.
+ */
+function actionColor(
+  action: ReviewAction | string | null | undefined,
+  colors: { bullish: string; bearish: string; caution: string; textMuted: string }
+): string {
+  switch (action) {
+    case "buy_more":
+      return colors.bullish;
+    case "sell":
+      return colors.bearish;
+    case "trim":
+      return colors.caution;
+    case "hold":
+    case "review":
+    default:
+      return colors.textMuted;
+  }
+}
 
 export function PortfolioReviewPanel() {
   const { colors } = useTheme();
@@ -133,12 +148,24 @@ export function PortfolioReviewPanel() {
             </div>
           ) : null}
 
+          {!review.fullyPriced ? (
+            <div style={muted}>
+              Some live prices were unavailable — affected values show &ldquo;—&rdquo;.
+            </div>
+          ) : null}
+
           {/* Per-holding actions */}
-          <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
-            {review.holdings.map((h) => (
-              <ReviewRow key={h.symbol} h={h} />
-            ))}
-          </div>
+          {review.holdings.length === 0 ? (
+            <div style={muted}>
+              No holdings to review yet. Add positions above and STOCVEST will read each one.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
+              {review.holdings.map((h) => (
+                <ReviewRow key={h.symbol} h={h} />
+              ))}
+            </div>
+          )}
 
           {/* Concentration */}
           {review.concentration.length > 0 ? (
@@ -182,7 +209,7 @@ export function PortfolioReviewPanel() {
 function ReviewRow({ h }: { h: HoldingReview }) {
   const { colors } = useTheme();
   const badge: React.CSSProperties = {
-    background: ACTION_COLORS[h.action],
+    background: actionColor(h.action, colors),
     color: "#fff",
     borderRadius: borderRadius.sm,
     padding: `2px ${spacing[2]}`,
@@ -228,6 +255,30 @@ function ReviewRow({ h }: { h: HoldingReview }) {
       ) : null}
       {h.taxLotHint ? (
         <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>{h.taxLotHint}</div>
+      ) : null}
+      {h.holderRead?.headline || (h.holderRead?.actions?.length ?? 0) > 0 ? (
+        <div
+          data-testid={`holder-read-${h.symbol}`}
+          style={{
+            fontSize: typography.scale.xs,
+            color: colors.text,
+            marginTop: spacing[1],
+            display: "flex",
+            flexDirection: "column",
+            gap: 2
+          }}
+        >
+          {h.holderRead?.headline ? <strong>{h.holderRead.headline}</strong> : null}
+          {(h.holderRead?.actions?.length ?? 0) > 0 ? (
+            <ul style={{ margin: 0, paddingLeft: spacing[4] }}>
+              {h.holderRead!.actions!.map((a, i) => (
+                <li key={i} style={{ color: colors.textMuted }}>
+                  {a}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
       {h.aiRead ? (
         <div style={{ fontSize: typography.scale.sm, color: colors.text, marginTop: spacing[1] }}>

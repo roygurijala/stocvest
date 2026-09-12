@@ -182,17 +182,22 @@ def apply_stock_split(holding: PortfolioHolding, *, ratio: float) -> PortfolioHo
         raise ValueError("split ratio must be a number.")
     if ratio <= 0:
         raise ValueError("split ratio must be > 0.")
-    adjusted = tuple(
-        HoldingLot(
-            lot_id=lot.lot_id,
-            quantity=round(lot.quantity * ratio, 6),
-            cost_basis=round(lot.cost_basis / ratio, 6),
-            purchase_date=lot.purchase_date,
-            note=lot.note,
+    adjusted: list[HoldingLot] = []
+    for lot in holding.lots:
+        new_qty = round(lot.quantity * ratio, 6)
+        # Derive the per-share cost from the (unchanged) total cost so a lot's total cost
+        # is preserved exactly for any ratio, not just clean ones (avoids sub-cent drift).
+        new_cost = round(lot.total_cost / new_qty, 6) if new_qty > 0 else 0.0
+        adjusted.append(
+            HoldingLot(
+                lot_id=lot.lot_id,
+                quantity=new_qty,
+                cost_basis=new_cost,
+                purchase_date=lot.purchase_date,
+                note=lot.note,
+            )
         )
-        for lot in holding.lots
-    )
-    return PortfolioHolding(symbol=holding.symbol, lots=adjusted)
+    return PortfolioHolding(symbol=holding.symbol, lots=tuple(adjusted))
 
 
 DEFAULT_BENCHMARK_SYMBOL = "SPY"

@@ -8,8 +8,7 @@ import { fetchBffSnapshotsBatched, lookupSnapshot } from "@/lib/api/fetch-bff-sn
 import {
   applyHoldingSplitClient,
   deleteHoldingClient,
-  fetchHoldingsClient,
-  fetchPortfolioSettingsClient,
+  loadPortfolioBundleClient,
   savePortfolioSettingsClient,
   upsertHoldingClient
 } from "@/lib/api/fetch-holdings-client";
@@ -88,9 +87,13 @@ export function MyPortfolioClient() {
   const [settings, setSettings] = useState<PortfolioSettings>({ ...DEFAULT_PORTFOLIO_SETTINGS });
   const [prices, setPrices] = useState<Map<string, number | null>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [draft, setDraft] = useState<HoldingDraft | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [savingHolding, setSavingHolding] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [deletingSymbol, setDeletingSymbol] = useState<string | null>(null);
   const [splitFor, setSplitFor] = useState<string | null>(null);
   const [splitRatio, setSplitRatio] = useState("2");
   const [splitError, setSplitError] = useState<string | null>(null);
@@ -103,18 +106,28 @@ export function MyPortfolioClient() {
 
   const reload = useCallback(async () => {
     setLoading(true);
-    const [h, s] = await Promise.all([fetchHoldingsClient(), fetchPortfolioSettingsClient()]);
-    setHoldings(h);
-    setSettings(s);
-    setCashInput(String(s.cashBalance ?? 0));
-    setTargetInput(s.targetPositionPct != null ? String(s.targetPositionPct) : "");
-    setBenchInput(s.benchmarkSymbol || "SPY");
+    const { holdings: h, settings: s, error } = await loadPortfolioBundleClient();
+    setLoadError(error);
+    if (!error) {
+      setHoldings(h);
+      setSettings(s);
+      setCashInput(String(s.cashBalance ?? 0));
+      setTargetInput(s.targetPositionPct != null ? String(s.targetPositionPct) : "");
+      setBenchInput(s.benchmarkSymbol || "SPY");
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // If an open edit/split target disappears (e.g. deleted), dismiss the stale form.
+  useEffect(() => {
+    const symbols = new Set(holdings.map((h) => h.symbol));
+    if (splitFor && !symbols.has(splitFor)) setSplitFor(null);
+    if (draft?.existing && !symbols.has(draft.symbol)) setDraft(null);
+  }, [holdings, splitFor, draft]);
 
   // Fetch live quotes for held symbols + the benchmark.
   useEffect(() => {
@@ -150,6 +163,7 @@ export function MyPortfolioClient() {
 
   async function handleSaveSettings() {
     setSavingSettings(true);
+    setSettingsError(null);
     const cash = Number(cashInput);
     const target = targetInput.trim() === "" ? null : Number(targetInput);
     const payload: PortfolioSettings = {
@@ -160,11 +174,12 @@ export function MyPortfolioClient() {
     };
     const saved = await savePortfolioSettingsClient(payload);
     if (saved) setSettings(saved);
+    else setSettingsError("Could not save settings. Please try again.");
     setSavingSettings(false);
   }
 
   async function handleSaveHolding() {
-    if (!draft) return;
+    if (!draft || savingHolding) return;
     setFormError(null);
     const symbol = draft.symbol.trim().toUpperCase();
     if (!symbol) {
@@ -199,7 +214,9 @@ export function MyPortfolioClient() {
       setFormError("Add at least one lot.");
       return;
     }
+    setSavingHolding(true);
     const saved = await upsertHoldingClient({ symbol, lots });
+    setSavingHolding(false);
     if (!saved) {
       setFormError("Could not save. Check the values and try again.");
       return;
@@ -209,8 +226,16 @@ export function MyPortfolioClient() {
   }
 
   async function handleDelete(symbol: string) {
+    if (deletingSymbol) return;
+    const confirmed =
+      typeof window === "undefined" ||
+      window.confirm(`Remove ${symbol} from your portfolio? This can't be undone.`);
+    if (!confirmed) return;
+    setDeletingSymbol(symbol);
     const ok = await deleteHoldingClient(symbol);
+    setDeletingSymbol(null);
     if (ok) await reload();
+    else setLoadError(true);
   }
 
   async function handleApplySplit() {
@@ -291,6 +316,30 @@ export function MyPortfolioClient() {
         </p>
       </header>
 
+      {loadError ? (
+        <div
+          data-testid="portfolio-load-error"
+          role="alert"
+          style={{
+            background: colors.surface,
+            border: `1px solid ${colors.bearish}`,
+            borderRadius: borderRadius.lg,
+            padding: `${spacing[2]} ${spacing[3]}`,
+            color: colors.bearish,
+            fontSize: typography.scale.sm,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: spacing[3]
+          }}
+        >
+          <span>Couldn&apos;t load your portfolio. Your data is safe — this is a connection issue.</span>
+          <button type="button" style={btn("ghost")} onClick={() => void reload()}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+
       {/* Summary strip */}
       <div
         style={{
@@ -302,26 +351,28 @@ export function MyPortfolioClient() {
         <div style={card}>
           <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Total value</div>
           <div style={{ fontSize: typography.scale.lg, color: colors.text, fontWeight: 700 }}>
-            {fmtUsd(view.totalValue)}
+            {loading ? "…" : fmtUsd(view.totalValue)}
           </div>
           <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
-            {fmtUsd(view.investedValue)} invested + {fmtUsd(view.cashBalance)} cash
+            {loading
+              ? "\u00a0"
+              : `${fmtUsd(view.investedValue)} invested + ${fmtUsd(view.cashBalance)} cash`}
           </div>
         </div>
         <div style={card}>
           <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Unrealized P/L</div>
           <div style={{ fontSize: typography.scale.lg, color: plColor(view.unrealizedPl), fontWeight: 700 }}>
-            {fmtUsd(view.unrealizedPl)}
+            {loading ? "…" : fmtUsd(view.unrealizedPl)}
           </div>
           <div style={{ fontSize: typography.scale.xs, color: plColor(view.unrealizedPl) }}>
-            {fmtPct(view.unrealizedPlPct)}
-            {view.fullyPriced ? "" : " · some prices unavailable"}
+            {loading ? "\u00a0" : fmtPct(view.unrealizedPlPct)}
+            {loading || view.fullyPriced ? "" : " · some prices unavailable"}
           </div>
         </div>
         <div style={card}>
           <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Cost basis</div>
           <div style={{ fontSize: typography.scale.lg, color: colors.text, fontWeight: 700 }}>
-            {fmtUsd(view.investedCost)}
+            {loading ? "…" : fmtUsd(view.investedCost)}
           </div>
           <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
             {view.holdingsCount} holding{view.holdingsCount === 1 ? "" : "s"}
@@ -387,13 +438,18 @@ export function MyPortfolioClient() {
           <button
             data-testid="settings-save"
             type="button"
-            style={btn("primary")}
+            style={{ ...btn("primary"), opacity: savingSettings ? 0.6 : 1 }}
             disabled={savingSettings}
             onClick={() => void handleSaveSettings()}
           >
             {savingSettings ? "Saving…" : "Save settings"}
           </button>
         </div>
+        {settingsError ? (
+          <div style={{ color: colors.bearish, fontSize: typography.scale.sm, marginTop: spacing[2] }}>
+            {settingsError}
+          </div>
+        ) : null}
       </div>
 
       {/* Holdings table */}
@@ -482,10 +538,11 @@ export function MyPortfolioClient() {
                       <button
                         type="button"
                         data-testid={`delete-${r.symbol}`}
-                        style={btn("danger")}
+                        style={{ ...btn("danger"), opacity: deletingSymbol === r.symbol ? 0.6 : 1 }}
+                        disabled={deletingSymbol === r.symbol}
                         onClick={() => void handleDelete(r.symbol)}
                       >
-                        Delete
+                        {deletingSymbol === r.symbol ? "Removing…" : "Delete"}
                       </button>
                     </td>
                   </tr>
@@ -656,10 +713,16 @@ export function MyPortfolioClient() {
           ) : null}
 
           <div style={{ display: "flex", gap: spacing[2], marginTop: spacing[3] }}>
-            <button data-testid="form-save" type="button" style={btn("primary")} onClick={() => void handleSaveHolding()}>
-              Save holding
+            <button
+              data-testid="form-save"
+              type="button"
+              style={{ ...btn("primary"), opacity: savingHolding ? 0.6 : 1 }}
+              disabled={savingHolding}
+              onClick={() => void handleSaveHolding()}
+            >
+              {savingHolding ? "Saving…" : "Save holding"}
             </button>
-            <button type="button" style={btn("ghost")} onClick={() => setDraft(null)}>
+            <button type="button" style={btn("ghost")} disabled={savingHolding} onClick={() => setDraft(null)}>
               Cancel
             </button>
           </div>
