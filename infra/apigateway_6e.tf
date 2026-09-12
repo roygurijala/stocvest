@@ -154,6 +154,8 @@ locals {
     "PUT /v1/holdings/settings"    = { module_key = "holdings", authorizer = true }
     "DELETE /v1/holdings/{symbol}" = { module_key = "holdings", authorizer = true }
 
+    "GET /v1/portfolio-review" = { module_key = "portfolio_review", authorizer = true }
+
     "GET /v1/pdt/status" = { module_key = "pdt", authorizer = true }
 
     "POST /v1/scanner/gaps"             = { module_key = "scanner", authorizer = true }

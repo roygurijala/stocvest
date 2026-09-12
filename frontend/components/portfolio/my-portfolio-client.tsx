@@ -13,6 +13,7 @@ import {
   upsertHoldingClient
 } from "@/lib/api/fetch-holdings-client";
 import { buildPortfolioView, type PortfolioView } from "@/lib/portfolio/holdings-present";
+import { PortfolioReviewPanel } from "@/components/portfolio/portfolio-review-panel";
 import {
   DEFAULT_PORTFOLIO_SETTINGS,
   type Holding,
@@ -313,6 +314,9 @@ export function MyPortfolioClient() {
           </div>
         </div>
       </div>
+
+      {/* Daily review — the "manage my portfolio" read */}
+      <PortfolioReviewPanel />
 
       {/* Settings */}
       <div style={card}>

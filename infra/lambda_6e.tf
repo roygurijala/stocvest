@@ -24,6 +24,7 @@ locals {
     "journal",
     "trade_plans",
     "holdings",
+    "portfolio_review",
     "pdt",
     "authorizer",
     "websocket",
@@ -306,7 +307,7 @@ resource "aws_lambda_function" "api" {
   role          = aws_iam_role.lambda_api_execution.arn
   handler       = "handler.lambda_handler"
   runtime       = "python3.11"
-  timeout       = each.key == "scanner" ? 300 : each.key == "signal_resolution" ? 120 : each.key == "news_consumer" ? 120 : each.key == "geo_themes" ? 30 : each.key == "macro_warmer" ? 60 : each.key == "sector_daily_cache" ? 120 : each.key == "market_pulse_refresher" ? 15 : each.key == "laggard_jobs" ? 120 : each.key == "news_event_study_report" ? 300 : 60
+  timeout       = each.key == "scanner" ? 300 : each.key == "signal_resolution" ? 120 : each.key == "news_consumer" ? 120 : each.key == "geo_themes" ? 30 : each.key == "macro_warmer" ? 60 : each.key == "sector_daily_cache" ? 120 : each.key == "market_pulse_refresher" ? 15 : each.key == "laggard_jobs" ? 120 : each.key == "news_event_study_report" ? 300 : each.key == "portfolio_review" ? 180 : 60
   memory_size   = each.key == "geo_themes" ? 256 : each.key == "orb_compute" ? 256 : each.key == "macro_warmer" ? 256 : each.key == "sector_daily_cache" ? 512 : each.key == "market_pulse_refresher" ? 256 : each.key == "laggard_jobs" ? 256 : 512
 
   filename         = data.archive_file.api_lambda_placeholder.output_path
@@ -353,7 +354,10 @@ resource "aws_lambda_function" "api" {
       each.key == "signal_resolution" ? {
         STOCVEST_DAY_PROFIT_TARGET_EXIT_ENABLED = var.day_profit_target_exit_enabled ? "1" : "0"
       } : {},
-      each.key == "signals" ? {
+      # portfolio_review composites each holding through the Long-Term engine, so it
+      # must run with the SAME signal feature flags as the signals lambda for parity
+      # with the deep-dive verdict/holder-read the review is built on.
+      contains(["signals", "portfolio_review"], each.key) ? {
         STOCVEST_DISABLE_REDIS                    = "0"
         STOCVEST_NEWS_SENTIMENT_CACHE_ENABLED     = var.news_sentiment_cache_enabled ? "1" : "0"
         STOCVEST_NEWS_SENTIMENT_PRIME_ENABLED     = var.news_sentiment_prime_enabled ? "1" : "0"
