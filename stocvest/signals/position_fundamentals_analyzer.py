@@ -32,8 +32,9 @@ class PositionFundamentalsContext:
     quarters_beating: int = 0
     quarters_missing: int = 0
     sector_bucket: str | None = None
-    #: Fundamentals v2 (EV/Sales TTM + bank FCF/current-ratio suppression). Ship-dark flag;
-    #: when False the F1/F3/F4 scorers are byte-identical to v1.
+    #: Fundamentals v2 (EV/Sales TTM + bank FCF/current-ratio suppression). Graduated to ON
+    #: by default via config (2026-09-12); when False the F1/F3/F4 scorers are byte-identical
+    #: to v1. This dataclass default stays False so unit tests opt in explicitly.
     fundamentals_v2: bool = False
 
 
