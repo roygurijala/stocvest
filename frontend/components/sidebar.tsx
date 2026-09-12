@@ -27,7 +27,8 @@ import {
   Target,
   Timer,
   TrendingUp,
-  Users
+  Users,
+  Wallet
 } from "lucide-react";
 import { logoutAction } from "@/app/login/actions";
 import { clearAssistantSession } from "@/lib/assistant/session-reset";
@@ -81,6 +82,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ id: string; label: string; items: Rea
       { href: "/dashboard/setup-evolution", label: "Setup evolution", icon: History },
       { href: "/dashboard/setup-outcomes", label: "Setup outcomes", icon: ClipboardList },
       { href: "/dashboard/plans", label: "Trade plans", icon: Target },
+      { href: "/dashboard/my-portfolio", label: "My Portfolio", icon: Wallet },
       { href: "/dashboard/earnings", label: "Earnings", icon: CalendarDays },
       { href: "/dashboard/portfolio", label: "Portfolio", icon: Briefcase, feature: "brokersEnabled" },
       { href: "/dashboard/options", label: "Options", icon: Layers, feature: "options" },
