@@ -296,3 +296,12 @@ User-scoped frozen planning snapshots. **Planning only — never a broker order.
 - `PUT /v1/trade-plans/sync` — body **`{ "plans": [ ...plan JSON ] }`** (≤24). Server merges client + server plans **per `mode:symbol`, newest `committedAt` wins**, caps at 24, returns the merged set. This is the `localStorage`↔server reconciliation path.
 - `DELETE /v1/trade-plans/{plan_id}` — removes one plan; **404** when not found.
 - `POST /v1/trade-plans/thesis-alerts` — body **`{ "assessments": [ ... ] }`**; emits best-effort **self-notification** emails when a tracked plan's live assessment diverges from its committed thesis; returns **`{ "sent": <int> }`**. (Client-asserted; server-side verification is an open question — see `CONTEXT.md` §3 / `BACKLOG.md`.)
+
+### 4.16 Manual portfolio holdings (PORTFOLIO-MGMT, `holdings` Lambda — deploy pending)
+
+User-declared holdings for the STOCVEST-managed **personal** portfolio — **manual entry, not a broker link** (distinct from the paused broker `portfolio` Lambda §4.5). All routes **authenticated**; identity from the JWT — a body carrying **`userId`** / **`user_id`** is rejected (`400`). Lot notes are sanitized server-side. Caps: **100** holdings per user (`MAX_HOLDINGS_PER_USER`), **50** lots per symbol (`MAX_LOTS_PER_SYMBOL`). DynamoDB **`Holdings`** (one item per user). Holding JSON (camelCase): **`symbol`**, **`lots`** (each: **`lotId`**, **`quantity`** > 0, **`costBasis`** ≥ 0 price/share, **`purchaseDate`** ISO `YYYY-MM-DD`, optional **`note`**); responses also include derived **`totalQuantity`**, **`averageCost`**, **`totalCost`**.
+
+- `GET /v1/holdings` — returns the caller's holdings (array, one per symbol, sorted by symbol).
+- `PUT /v1/holdings` — upsert one symbol's holding (body = holding JSON incl. its full lot set); returns the stored holding.
+- `PUT /v1/holdings/sync` — body **`{ "holdings": [ ...holding JSON ] }`** (≤100); replaces the whole portfolio and returns it (deduped per symbol, last wins).
+- `DELETE /v1/holdings/{symbol}` — removes a symbol; **404** when not found.

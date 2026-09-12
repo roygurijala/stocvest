@@ -23,6 +23,7 @@ locals {
     "scanner",
     "journal",
     "trade_plans",
+    "holdings",
     "pdt",
     "authorizer",
     "websocket",
@@ -59,6 +60,7 @@ locals {
     DYNAMODB_SECTOR_CACHE_TABLE                    = aws_dynamodb_table.sector_cache.name
     STOCVEST_TRADE_JOURNAL_TABLE                   = aws_dynamodb_table.trade_journal.name
     STOCVEST_TRADE_PLANS_TABLE                     = aws_dynamodb_table.trade_plans.name
+    STOCVEST_HOLDINGS_TABLE                        = aws_dynamodb_table.holdings.name
     STOCVEST_PDT_STATE_TABLE                       = aws_dynamodb_table.pdt_state.name
     STOCVEST_EMAIL_SENDER                          = "signals@stocvest.ai"
     STOCVEST_PUBLIC_APP_URL                        = "https://stocvest.ai"
@@ -102,6 +104,7 @@ locals {
       aws_dynamodb_table.parameter_proposal,
       aws_dynamodb_table.trade_journal,
       aws_dynamodb_table.trade_plans,
+      aws_dynamodb_table.holdings,
       aws_dynamodb_table.pdt_state,
       aws_dynamodb_table.sector_cache,
       aws_dynamodb_table.audit_events,

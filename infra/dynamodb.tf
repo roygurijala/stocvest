@@ -399,6 +399,22 @@ resource "aws_dynamodb_table" "trade_plans" {
   })
 }
 
+# Manual portfolio holdings — one item per user; keys match DynamoDBHoldingsStore (userId + holdings).
+resource "aws_dynamodb_table" "holdings" {
+  name         = "Holdings"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-holdings"
+  })
+}
+
 # PDT rolling state per user; keys match DynamoDBPDTStateStore (userId, dayTradeDates, pdtExempt).
 resource "aws_dynamodb_table" "pdt_state" {
   name         = "PDTState"
