@@ -356,6 +356,8 @@ class AlertPreferences(BaseModel):
     on_watchlist_maturation: bool = False
     on_execution_actionable: bool = True
     on_tracked_plan_thesis: bool = False
+    # PORTFOLIO-MGMT — opt-in (default OFF) for the daily post-close portfolio digest email.
+    on_portfolio_digest: bool = False
     watchlist_only: bool = False
     quiet_hours_enabled: bool = False
     quiet_hours_start: str = "22:00"

@@ -100,6 +100,135 @@ class EmailService:
             _LOG.warning("Postmark send_trial_reminder_email failed: %s", exc)
             return False
 
+    def send_portfolio_digest_email(
+        self,
+        *,
+        to_email: str,
+        review: dict[str, Any],
+    ) -> bool:
+        """Send the daily post-close portfolio digest. ``review`` is ``PortfolioReview.to_api()``."""
+        try:
+            settings = get_settings()
+            sender = (settings.stocvest_email_sender or "").strip()
+            token = (settings.postmark_server_token or "").strip()
+            if not sender or not token or not (to_email or "").strip():
+                _LOG.warning("portfolio digest skipped: missing sender, Postmark token, or recipient")
+                return False
+            base = (settings.stocvest_public_app_url or "https://stocvest.ai").rstrip("/")
+            holdings = review.get("holdings") or []
+            subj = f"STOCVEST · Your portfolio review — {len(holdings)} holding(s)"
+            body_html = self._build_portfolio_digest_html(review, base_url=base)
+            ok = send_postmark_html_email(
+                server_token=token,
+                sender=sender,
+                to_email=to_email.strip(),
+                subject=subj,
+                html_body=body_html,
+                message_stream=settings.postmark_message_stream,
+            )
+            if not ok:
+                _LOG.warning("Postmark send_portfolio_digest_email failed for %s", to_email.strip())
+            return ok
+        except Exception as exc:  # noqa: BLE001 — delivery errors must not propagate
+            _LOG.warning("Postmark send_portfolio_digest_email failed: %s", exc)
+            return False
+
+    @staticmethod
+    def _fmt_usd(value: Any) -> str:
+        if not isinstance(value, (int, float)):
+            return "—"
+        return f"${float(value):,.2f}"
+
+    @staticmethod
+    def _fmt_pct(value: Any) -> str:
+        if not isinstance(value, (int, float)):
+            return "—"
+        sign = "+" if float(value) > 0 else ""
+        return f"{sign}{float(value):.1f}%"
+
+    @staticmethod
+    def _fmt_weight(value: Any) -> str:
+        if not isinstance(value, (int, float)):
+            return "—"
+        return f"{float(value):.1f}%"
+
+    def _digest_row_html(self, h: dict[str, Any]) -> str:
+        symbol = html.escape(str(h.get("symbol") or ""))
+        action = html.escape(str(h.get("actionLabel") or ""))
+        pl = html.escape(self._fmt_pct(h.get("unrealizedPlPct")))
+        weight = html.escape(self._fmt_weight(h.get("weightPct")))
+        return (
+            "<tr>"
+            f"<td style='padding:8px 12px;color:#0f1c2e;font-size:14px;font-weight:700;'>{symbol}</td>"
+            f"<td style='padding:8px 12px;color:#0077c8;font-size:14px;font-weight:600;'>{action}</td>"
+            f"<td style='padding:8px 12px;color:#0f1c2e;font-size:14px;'>{pl}</td>"
+            f"<td style='padding:8px 12px;color:#5c6f82;font-size:14px;'>{weight}</td>"
+            "</tr>"
+        )
+
+    def _build_portfolio_digest_html(self, review: dict[str, Any], *, base_url: str) -> str:
+        holdings = review.get("holdings") or []
+        # Per-holding action rows (symbol · action · P/L · weight).
+        rows_html = "".join(self._digest_row_html(h) for h in holdings if isinstance(h, dict))
+        table_html = (
+            "<table style='width:100%;border-collapse:collapse;margin:0 0 12px;background:#f8fafc;border-radius:8px;'>"
+            "<tr>"
+            "<th style='text-align:left;padding:6px 12px;color:#5c6f82;font-size:12px;'>Symbol</th>"
+            "<th style='text-align:left;padding:6px 12px;color:#5c6f82;font-size:12px;'>Action</th>"
+            "<th style='text-align:left;padding:6px 12px;color:#5c6f82;font-size:12px;'>P/L</th>"
+            "<th style='text-align:left;padding:6px 12px;color:#5c6f82;font-size:12px;'>Weight</th>"
+            "</tr>"
+            f"{rows_html}</table>"
+            if rows_html
+            else "<p style='font-size:14px;color:#5c6f82;'>No holdings to review.</p>"
+        )
+
+        # Summary line.
+        bench = review.get("benchmark") or {}
+        summary = (
+            f"<p style='font-size:15px;line-height:1.55;color:#1a2b3c;margin:0 0 12px;'>"
+            f"Total value <strong>{html.escape(self._fmt_usd(review.get('totalMarketValue')))}</strong> · "
+            f"Unrealized P/L <strong>{html.escape(self._fmt_pct(review.get('unrealizedPlPct')))}</strong>"
+            + (
+                f" · vs {html.escape(str(bench.get('benchmarkSymbol') or 'SPY'))} "
+                f"<strong>{html.escape(self._fmt_pct(bench.get('benchmarkReturnPct')))}</strong>"
+                if bench
+                else ""
+            )
+            + "</p>"
+        )
+
+        # Concentration + consider-adding (compact bullet lists).
+        def _bullets(title: str, items: list[str]) -> str:
+            if not items:
+                return ""
+            lis = "".join(f"<li style='font-size:13px;color:#1a2b3c;'>{html.escape(x)}</li>" for x in items)
+            return (
+                f"<p style='font-size:13px;font-weight:700;color:#0f1c2e;margin:12px 0 4px;'>{html.escape(title)}</p>"
+                f"<ul style='margin:0;padding-left:18px;'>{lis}</ul>"
+            )
+
+        conc = [str(c.get("message") or "") for c in (review.get("concentration") or []) if c.get("message")]
+        adds = [
+            f"{c.get('symbol')} ({c.get('tier')}) — {c.get('why')}"
+            for c in (review.get("considerAdding") or [])
+            if c.get("symbol")
+        ]
+        extras = _bullets("Concentration", conc) + _bullets("Consider adding", adds)
+
+        return self._email_shell(
+            headline="Your STOCVEST portfolio review",
+            body_html=summary + table_html + extras,
+            cta_href=html.escape(f"{base_url}/dashboard/my-portfolio"),
+            cta_label="Open My Portfolio",
+            footer_note=(
+                "You are receiving this because you enabled the daily portfolio digest in your alert "
+                "preferences."
+            ),
+            prefs_url=f"{base_url}/dashboard/settings#alerts",
+            disclaimer=str(review.get("disclaimer") or "Signal data only. Not investment advice."),
+        )
+
     def _build_trial_reminder_html(
         self,
         *,

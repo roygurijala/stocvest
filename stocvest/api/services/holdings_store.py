@@ -8,7 +8,7 @@ inside). This backs the manual portfolio the daily review reads.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Iterator, Protocol
 
 from stocvest.models.portfolio_holding import (
     MAX_HOLDINGS_PER_USER,
@@ -21,6 +21,7 @@ from stocvest.utils.config import get_settings
 class DynamoTableLike(Protocol):
     def get_item(self, *, Key: dict[str, Any]) -> dict[str, Any]: ...
     def put_item(self, *, Item: dict[str, Any]) -> dict[str, Any]: ...
+    def scan(self, **kwargs: Any) -> dict[str, Any]: ...
 
 
 class HoldingsStore(Protocol):
@@ -30,6 +31,7 @@ class HoldingsStore(Protocol):
     def remove_holding(self, user_id: str, symbol: str) -> bool: ...
     def get_settings(self, user_id: str) -> PortfolioSettings: ...
     def save_settings(self, user_id: str, settings: PortfolioSettings) -> None: ...
+    def iter_users_with_holdings(self) -> Iterator[str]: ...
 
 
 def _dedupe(holdings: tuple[PortfolioHolding, ...]) -> tuple[PortfolioHolding, ...]:
@@ -70,6 +72,11 @@ class InMemoryHoldingsStore:
 
     def save_settings(self, user_id: str, settings: PortfolioSettings) -> None:
         self._settings_by_user[user_id] = settings
+
+    def iter_users_with_holdings(self) -> Iterator[str]:
+        for uid, holdings in self._by_user.items():
+            if holdings:
+                yield uid
 
 
 @dataclass
@@ -157,6 +164,32 @@ class DynamoDBHoldingsStore:
         item = self._get_item(user_id)
         holdings = self._holdings_from_item(item, self.holdings_key)
         self._put_item(user_id, holdings=holdings, settings=settings)
+
+    def iter_users_with_holdings(self) -> Iterator[str]:
+        """Scan the Holdings table, yielding userIds that have ≥1 holding.
+
+        Used by the daily digest job. Projects only the key + holdings so the scan stays
+        cheap; skips rows whose holdings list is empty/missing. Paginated over
+        ``LastEvaluatedKey`` like the other user-scan jobs (`trial/user_directory.py`).
+        """
+        last_key: dict[str, Any] | None = None
+        while True:
+            kwargs: dict[str, Any] = {
+                "ProjectionExpression": "#uid, #h",
+                "ExpressionAttributeNames": {"#uid": self.user_key, "#h": self.holdings_key},
+            }
+            if last_key:
+                kwargs["ExclusiveStartKey"] = last_key
+            resp = self.table.scan(**kwargs)
+            for item in resp.get("Items") or []:
+                if not isinstance(item, dict):
+                    continue
+                uid = str(item.get(self.user_key) or "").strip()
+                if uid and item.get(self.holdings_key):
+                    yield uid
+            last_key = resp.get("LastEvaluatedKey")
+            if not last_key:
+                break
 
 
 def build_default_holdings_store() -> HoldingsStore:

@@ -69,6 +69,7 @@ locals {
     PHONE_VERIFICATION_REQUIRED                    = "false"
     TRIAL_SMS_ENABLED                              = "false"
     TRIAL_REMINDERS_ENABLED                        = "false"
+    PORTFOLIO_DIGEST_ENABLED                       = "false"
     TRIAL_DURATION_DAYS                            = "14"
     DYNAMODB_AUDIT_EVENTS_TABLE                    = aws_dynamodb_table.audit_events.name
     # Cognito identifiers needed by the D10 Admin hub
