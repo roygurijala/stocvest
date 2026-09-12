@@ -147,12 +147,13 @@ locals {
     "DELETE /v1/trade-plans/{plan_id}"   = { module_key = "trade_plans", authorizer = true }
     "POST /v1/trade-plans/thesis-alerts" = { module_key = "trade_plans", authorizer = true }
 
-    "GET /v1/holdings"             = { module_key = "holdings", authorizer = true }
-    "PUT /v1/holdings"             = { module_key = "holdings", authorizer = true }
-    "PUT /v1/holdings/sync"        = { module_key = "holdings", authorizer = true }
-    "GET /v1/holdings/settings"    = { module_key = "holdings", authorizer = true }
-    "PUT /v1/holdings/settings"    = { module_key = "holdings", authorizer = true }
-    "DELETE /v1/holdings/{symbol}" = { module_key = "holdings", authorizer = true }
+    "GET /v1/holdings"                 = { module_key = "holdings", authorizer = true }
+    "PUT /v1/holdings"                 = { module_key = "holdings", authorizer = true }
+    "PUT /v1/holdings/sync"            = { module_key = "holdings", authorizer = true }
+    "GET /v1/holdings/settings"        = { module_key = "holdings", authorizer = true }
+    "PUT /v1/holdings/settings"        = { module_key = "holdings", authorizer = true }
+    "DELETE /v1/holdings/{symbol}"     = { module_key = "holdings", authorizer = true }
+    "POST /v1/holdings/{symbol}/split" = { module_key = "holdings", authorizer = true }
 
     "GET /v1/portfolio-review" = { module_key = "portfolio_review", authorizer = true }
 

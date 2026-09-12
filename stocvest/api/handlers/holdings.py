@@ -38,9 +38,11 @@ def _symbol_from_event(event: LambdaEvent) -> str | None:
     if raw and not str(raw).startswith("{"):
         return str(raw).strip().upper()
     rk = http_route_descriptor(event)
-    for prefix in ("DELETE /v1/holdings/", "PUT /v1/holdings/"):
+    for prefix in ("DELETE /v1/holdings/", "PUT /v1/holdings/", "POST /v1/holdings/"):
         if rk.startswith(prefix):
             rest = rk[len(prefix) :].split("?")[0].strip()
+            # Strip a trailing action segment (e.g. ".../split").
+            rest = rest.split("/")[0]
             if rest and not rest.startswith("{") and rest not in ("sync", "settings"):
                 return rest.upper()
     return None
@@ -136,6 +138,51 @@ def holdings_settings_put_handler(event: LambdaEvent, context: LambdaContext) ->
         return bad_request(f"Invalid portfolio settings: {exc}")
 
 
+def _split_ratio_from_body(payload: dict[str, Any]) -> float:
+    """Resolve a split ratio from either ``{ratio}`` or ``{numerator, denominator}``.
+
+    ``ratio`` is new-shares-per-old-share (2:1 forward = 2.0, 1:10 reverse = 0.1). When
+    given as a fraction, ``ratio = numerator / denominator`` (2:1 → num 2, den 1).
+    """
+    if payload.get("userId") is not None or payload.get("user_id") is not None:
+        raise ValueError("Do not submit user id; identity is taken from your session.")
+    ratio_raw = payload.get("ratio")
+    if ratio_raw is not None:
+        ratio = float(ratio_raw)
+    else:
+        num = payload.get("numerator")
+        den = payload.get("denominator")
+        if num is None or den is None:
+            raise ValueError("Provide either 'ratio' or both 'numerator' and 'denominator'.")
+        num_f = float(num)
+        den_f = float(den)
+        if num_f <= 0 or den_f <= 0:
+            raise ValueError("numerator and denominator must be > 0.")
+        ratio = num_f / den_f
+    if ratio <= 0:
+        raise ValueError("split ratio must be > 0.")
+    return ratio
+
+
+def holdings_split_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    _ = context
+    request_context = build_request_context(event)
+    if not request_context.user_id:
+        return unauthorized("Authenticated user is required.")
+    symbol = _symbol_from_event(event)
+    if not symbol:
+        return bad_request("symbol is required.")
+    try:
+        payload = parse_json_body(event)
+        ratio = _split_ratio_from_body(payload)
+    except (TypeError, ValueError, KeyError) as exc:
+        return bad_request(f"Invalid split: {exc}")
+    updated = get_holdings_store().apply_split(request_context.user_id, symbol, ratio)
+    if updated is None:
+        return not_found("Holding not found.")
+    return ok(updated.to_api())
+
+
 def holdings_delete_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     _ = context
     request_context = build_request_context(event)
@@ -162,6 +209,8 @@ def holdings_dispatch_handler(event: LambdaEvent, context: LambdaContext) -> dic
         return holdings_sync_handler(event, context)
     if rk == "PUT /v1/holdings":
         return holdings_upsert_handler(event, context)
+    if rk.upper().startswith("POST") and rk.rstrip("/").endswith("/split"):
+        return holdings_split_handler(event, context)
     if rk.upper().startswith("DELETE"):
         return holdings_delete_handler(event, context)
     _LOG.warning("holdings_dispatch unknown route: %s", rk)

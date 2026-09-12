@@ -14,6 +14,7 @@ from stocvest.models.portfolio_holding import (
     MAX_HOLDINGS_PER_USER,
     PortfolioHolding,
     PortfolioSettings,
+    apply_stock_split,
 )
 from stocvest.utils.config import get_settings
 
@@ -32,6 +33,7 @@ class HoldingsStore(Protocol):
     def get_settings(self, user_id: str) -> PortfolioSettings: ...
     def save_settings(self, user_id: str, settings: PortfolioSettings) -> None: ...
     def iter_users_with_holdings(self) -> Iterator[str]: ...
+    def apply_split(self, user_id: str, symbol: str, ratio: float) -> PortfolioHolding | None: ...
 
 
 def _dedupe(holdings: tuple[PortfolioHolding, ...]) -> tuple[PortfolioHolding, ...]:
@@ -77,6 +79,15 @@ class InMemoryHoldingsStore:
         for uid, holdings in self._by_user.items():
             if holdings:
                 yield uid
+
+    def apply_split(self, user_id: str, symbol: str, ratio: float) -> PortfolioHolding | None:
+        sym = symbol.strip().upper()
+        held = next((h for h in self.list_holdings(user_id) if h.symbol == sym), None)
+        if held is None:
+            return None
+        adjusted = apply_stock_split(held, ratio=ratio)
+        self.upsert_holding(user_id, adjusted)
+        return adjusted
 
 
 @dataclass
@@ -190,6 +201,19 @@ class DynamoDBHoldingsStore:
             last_key = resp.get("LastEvaluatedKey")
             if not last_key:
                 break
+
+    def apply_split(self, user_id: str, symbol: str, ratio: float) -> PortfolioHolding | None:
+        sym = symbol.strip().upper()
+        item = self._get_item(user_id)
+        settings = PortfolioSettings.from_dynamo_item(item.get(self.settings_key))
+        current = self._holdings_from_item(item, self.holdings_key)
+        held = next((h for h in current if h.symbol == sym), None)
+        if held is None:
+            return None
+        adjusted = apply_stock_split(held, ratio=ratio)
+        rest = tuple(h for h in current if h.symbol != sym)
+        self._put_item(user_id, holdings=_dedupe(rest + (adjusted,)), settings=settings)
+        return adjusted
 
 
 def build_default_holdings_store() -> HoldingsStore:

@@ -33,6 +33,24 @@ export async function upsertHoldingClient(holding: HoldingInput): Promise<Holdin
   return parseJson<Holding>(res);
 }
 
+/**
+ * Record a stock split for a held symbol. `ratio` is new-shares-per-old-share
+ * (2:1 forward = 2, 1:10 reverse = 0.1). Returns the adjusted holding, or null.
+ */
+export async function applyHoldingSplitClient(
+  symbol: string,
+  ratio: number
+): Promise<Holding | null> {
+  const res = await fetch(`/api/stocvest/holdings/${encodeURIComponent(symbol)}/split`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ratio }),
+    cache: "no-store"
+  }).catch(() => null);
+  if (!res?.ok) return null;
+  return parseJson<Holding>(res);
+}
+
 export async function deleteHoldingClient(symbol: string): Promise<boolean> {
   const res = await fetch(`/api/stocvest/holdings/${encodeURIComponent(symbol)}`, {
     method: "DELETE",

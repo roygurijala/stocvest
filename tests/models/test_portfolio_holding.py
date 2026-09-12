@@ -9,6 +9,7 @@ from stocvest.models.portfolio_holding import (
     HoldingLot,
     PortfolioHolding,
     PortfolioSettings,
+    apply_stock_split,
 )
 
 pytestmark = pytest.mark.unit
@@ -136,3 +137,39 @@ def test_settings_round_trip_through_dynamo_item() -> None:
 def test_settings_rejects_invalid(bad: dict[str, object]) -> None:
     with pytest.raises(ValueError):
         PortfolioSettings.from_api(bad)
+
+
+def test_apply_stock_split_forward_preserves_total_cost_and_dates() -> None:
+    holding = PortfolioHolding.from_api(
+        {
+            "symbol": "AAPL",
+            "lots": [
+                _lot(lotId="a", quantity=10, costBasis=180.0, purchaseDate="2023-01-02"),
+                _lot(lotId="b", quantity=5, costBasis=200.0, purchaseDate="2024-03-04"),
+            ],
+        }
+    )
+    split = apply_stock_split(holding, ratio=2.0)  # 2:1 forward
+    assert split.total_quantity == 30  # 20 + 10
+    assert split.total_cost == holding.total_cost  # 1800 + 1000 = 2800, unchanged
+    by_id = {lot.lot_id: lot for lot in split.lots}
+    assert by_id["a"].quantity == 20 and by_id["a"].cost_basis == 90.0
+    assert by_id["a"].purchase_date == "2023-01-02"  # tax holding period untouched
+    assert by_id["b"].quantity == 10 and by_id["b"].cost_basis == 100.0
+
+
+def test_apply_stock_split_reverse() -> None:
+    holding = PortfolioHolding.from_api(
+        {"symbol": "AAPL", "lots": [_lot(quantity=100, costBasis=5.0)]}
+    )
+    split = apply_stock_split(holding, ratio=0.1)  # 1:10 reverse
+    assert split.total_quantity == 10
+    assert split.lots[0].cost_basis == 50.0
+    assert split.total_cost == holding.total_cost
+
+
+@pytest.mark.parametrize("bad", [0, -1, -0.5])
+def test_apply_stock_split_rejects_nonpositive_ratio(bad: float) -> None:
+    holding = PortfolioHolding.from_api({"symbol": "AAPL", "lots": [_lot()]})
+    with pytest.raises(ValueError):
+        apply_stock_split(holding, ratio=bad)

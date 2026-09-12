@@ -169,6 +169,32 @@ class PortfolioHolding:
         return cls.from_api(item)
 
 
+def apply_stock_split(holding: PortfolioHolding, *, ratio: float) -> PortfolioHolding:
+    """Return a new holding with every lot adjusted for a stock split.
+
+    ``ratio`` is new-shares-per-old-share: a **2:1** forward split is ``2.0`` (shares
+    double, cost/share halves); a **1:10** reverse split is ``0.1`` (shares ÷10,
+    cost/share ×10). This is exact split arithmetic — **each lot's total cost, its
+    ``purchase_date`` (tax holding period), lot id and note are preserved**; only the
+    per-share quantity and cost basis change. Pure; no advice, no network.
+    """
+    if not isinstance(ratio, (int, float)) or isinstance(ratio, bool):
+        raise ValueError("split ratio must be a number.")
+    if ratio <= 0:
+        raise ValueError("split ratio must be > 0.")
+    adjusted = tuple(
+        HoldingLot(
+            lot_id=lot.lot_id,
+            quantity=round(lot.quantity * ratio, 6),
+            cost_basis=round(lot.cost_basis / ratio, 6),
+            purchase_date=lot.purchase_date,
+            note=lot.note,
+        )
+        for lot in holding.lots
+    )
+    return PortfolioHolding(symbol=holding.symbol, lots=adjusted)
+
+
 DEFAULT_BENCHMARK_SYMBOL = "SPY"
 
 
