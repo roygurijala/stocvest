@@ -326,6 +326,13 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             event=event, response=holdings_dispatch_handler(event, context), module=module
         )
 
+    if module == "portfolio_review":
+        from stocvest.api.handlers.portfolio_review import portfolio_review_dispatch_handler
+
+        return _with_cors_and_audit(
+            event=event, response=portfolio_review_dispatch_handler(event, context), module=module
+        )
+
     if module == "pdt":
         from stocvest.api.handlers.pdt import pdt_status_handler
 
