@@ -6,6 +6,7 @@ import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import { fetchBffSnapshotsBatched, lookupSnapshot } from "@/lib/api/fetch-bff-snapshots";
 import {
+  applyHoldingSplitClient,
   deleteHoldingClient,
   fetchHoldingsClient,
   fetchPortfolioSettingsClient,
@@ -90,6 +91,10 @@ export function MyPortfolioClient() {
   const [draft, setDraft] = useState<HoldingDraft | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [splitFor, setSplitFor] = useState<string | null>(null);
+  const [splitRatio, setSplitRatio] = useState("2");
+  const [splitError, setSplitError] = useState<string | null>(null);
+  const [applyingSplit, setApplyingSplit] = useState(false);
 
   // Editable settings mirror (so typing doesn't fire saves).
   const [cashInput, setCashInput] = useState("0");
@@ -206,6 +211,26 @@ export function MyPortfolioClient() {
   async function handleDelete(symbol: string) {
     const ok = await deleteHoldingClient(symbol);
     if (ok) await reload();
+  }
+
+  async function handleApplySplit() {
+    if (!splitFor) return;
+    setSplitError(null);
+    const ratio = Number(splitRatio);
+    if (!Number.isFinite(ratio) || ratio <= 0) {
+      setSplitError("Enter a ratio greater than 0 (e.g. 2 for a 2:1 split, 0.1 for a 1:10 reverse).");
+      return;
+    }
+    setApplyingSplit(true);
+    const updated = await applyHoldingSplitClient(splitFor, ratio);
+    setApplyingSplit(false);
+    if (!updated) {
+      setSplitError("Could not apply the split. Check the ratio and try again.");
+      return;
+    }
+    setSplitFor(null);
+    setSplitRatio("2");
+    await reload();
   }
 
   const benchPrice = prices.get(settings.benchmarkSymbol.toUpperCase());
@@ -444,6 +469,18 @@ export function MyPortfolioClient() {
                       </button>
                       <button
                         type="button"
+                        data-testid={`split-${r.symbol}`}
+                        style={{ ...btn("ghost"), marginRight: spacing[2] }}
+                        onClick={() => {
+                          setSplitFor(r.symbol);
+                          setSplitRatio("2");
+                          setSplitError(null);
+                        }}
+                      >
+                        Split
+                      </button>
+                      <button
+                        type="button"
                         data-testid={`delete-${r.symbol}`}
                         style={btn("danger")}
                         onClick={() => void handleDelete(r.symbol)}
@@ -458,6 +495,58 @@ export function MyPortfolioClient() {
           </div>
         )}
       </div>
+
+      {/* Record stock split */}
+      {splitFor ? (
+        <div style={card} data-testid="split-form">
+          <div style={{ fontSize: typography.scale.sm, color: colors.text, fontWeight: 600, marginBottom: spacing[2] }}>
+            Record a stock split for {splitFor}
+          </div>
+          <p style={{ fontSize: typography.scale.xs, color: colors.textMuted, margin: `0 0 ${spacing[3]}` }}>
+            Enter new shares per old share: <strong>2</strong> for a 2:1 forward split, <strong>3</strong> for 3:1,
+            or <strong>0.1</strong> for a 1:10 reverse split. Your total cost and purchase dates stay the same — only
+            the share count and per-share cost adjust.
+          </p>
+          <div style={{ display: "flex", gap: spacing[2], alignItems: "flex-end", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, width: 160 }}>
+              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Ratio (new : old)</span>
+              <input
+                data-testid="split-ratio"
+                style={input}
+                type="number"
+                min={0}
+                step="any"
+                value={splitRatio}
+                onChange={(e) => setSplitRatio(e.target.value)}
+              />
+            </label>
+            <button
+              data-testid="split-apply"
+              type="button"
+              style={btn("primary")}
+              disabled={applyingSplit}
+              onClick={() => void handleApplySplit()}
+            >
+              {applyingSplit ? "Applying…" : "Apply split"}
+            </button>
+            <button
+              type="button"
+              style={btn("ghost")}
+              onClick={() => {
+                setSplitFor(null);
+                setSplitError(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {splitError ? (
+            <div style={{ color: colors.bearish, fontSize: typography.scale.sm, marginTop: spacing[2] }}>
+              {splitError}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Add / edit form */}
       {draft ? (

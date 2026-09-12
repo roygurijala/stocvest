@@ -129,3 +129,25 @@ def test_iter_users_with_holdings_dynamo_skips_empty() -> None:
     # Settings-only row => holdings list is empty and must be skipped.
     store.save_settings("u2", PortfolioSettings(cash_balance=500.0))
     assert sorted(store.iter_users_with_holdings()) == ["u1"]
+
+
+def test_apply_split_in_memory_preserves_settings() -> None:
+    store = InMemoryHoldingsStore(_by_user={})
+    store.upsert_holding("u1", _holding("AAPL", qty=10, cost=100.0))
+    store.save_settings("u1", PortfolioSettings(cash_balance=1000.0))
+    updated = store.apply_split("u1", "aapl", 2.0)
+    assert updated is not None
+    assert updated.total_quantity == 20
+    assert updated.average_cost == 50.0
+    assert store.list_holdings("u1")[0].total_quantity == 20  # persisted
+    assert store.get_settings("u1").cash_balance == 1000.0  # untouched
+
+
+def test_apply_split_dynamo_preserves_settings_and_missing_symbol() -> None:
+    store = DynamoDBHoldingsStore(table=_FakeTable())
+    store.upsert_holding("u1", _holding("AAPL", qty=10, cost=100.0))
+    store.save_settings("u1", PortfolioSettings(cash_balance=250.0))
+    assert store.apply_split("u1", "NOPE", 2.0) is None  # symbol not held
+    updated = store.apply_split("u1", "AAPL", 2.0)
+    assert updated is not None and updated.total_quantity == 20
+    assert store.get_settings("u1").cash_balance == 250.0
