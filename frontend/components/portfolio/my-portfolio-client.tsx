@@ -215,10 +215,10 @@ export function MyPortfolioClient() {
       return;
     }
     setSavingHolding(true);
-    const saved = await upsertHoldingClient({ symbol, lots });
+    const result = await upsertHoldingClient({ symbol, lots });
     setSavingHolding(false);
-    if (!saved) {
-      setFormError("Could not save. Check the values and try again.");
+    if (!result.ok) {
+      setFormError(result.message);
       return;
     }
     setDraft(null);

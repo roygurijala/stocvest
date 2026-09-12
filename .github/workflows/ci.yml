@@ -124,7 +124,8 @@ jobs:
         run: |
           # Keep in sync with `local.api_handler_modules` in infra/lambda_6e.tf
           for mod in \
-            health market_data signals signal_resolution brokers portfolio scanner journal trade_plans pdt \
+            health market_data signals signal_resolution brokers portfolio scanner journal trade_plans \
+            holdings portfolio_review pdt \
             authorizer websocket news_consumer geo_themes orb_compute macro_warmer \
             sector_daily_cache market_pulse_refresher laggard_jobs news_event_study_report; do
             aws lambda update-function-code \
