@@ -9,6 +9,7 @@ export const APP_PAGE_TITLE_BY_PATH: Record<string, string> = {
   "/dashboard/setup-evolution": "Setup evolution",
   "/dashboard/setup-outcomes": "Setup outcomes",
   "/dashboard/plans": "Trade plans",
+  "/dashboard/my-portfolio": "My Portfolio",
   "/dashboard/portfolio": "Portfolio",
   "/dashboard/options": "Options",
   "/dashboard/crypto": "Crypto",
