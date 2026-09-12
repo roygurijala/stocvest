@@ -22,6 +22,28 @@ export async function fetchHoldingsClient(): Promise<Holding[]> {
   return (await parseJson<Holding[]>(res)) ?? [];
 }
 
+/**
+ * Load holdings + settings together and report whether the fetch actually failed,
+ * so the UI can distinguish "empty portfolio" from "couldn't reach the server"
+ * instead of silently rendering zeros. Values fall back to safe defaults on error.
+ */
+export async function loadPortfolioBundleClient(): Promise<{
+  holdings: Holding[];
+  settings: PortfolioSettings;
+  error: boolean;
+}> {
+  const [hRes, sRes] = await Promise.all([
+    fetch("/api/stocvest/holdings", { method: "GET", cache: "no-store" }).catch(() => null),
+    fetch("/api/stocvest/holdings/settings", { method: "GET", cache: "no-store" }).catch(() => null)
+  ]);
+  const error = !hRes?.ok || !sRes?.ok;
+  const holdings = hRes?.ok ? (await parseJson<Holding[]>(hRes)) ?? [] : [];
+  const settings = sRes?.ok
+    ? (await parseJson<PortfolioSettings>(sRes)) ?? { ...DEFAULT_PORTFOLIO_SETTINGS }
+    : { ...DEFAULT_PORTFOLIO_SETTINGS };
+  return { holdings, settings, error };
+}
+
 export async function upsertHoldingClient(holding: HoldingInput): Promise<Holding | null> {
   const res = await fetch("/api/stocvest/holdings", {
     method: "PUT",

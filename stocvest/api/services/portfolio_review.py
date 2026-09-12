@@ -502,10 +502,24 @@ async def build_portfolio_review(
     ai_read_fn: AiReadFn | None = None,
     as_of: date | None = None,
     concurrency: int = 6,
+    advice_enabled: bool | None = None,
 ) -> PortfolioReview:
-    """Compose the full daily review. All external data comes through injected fns."""
+    """Compose the full daily review. All external data comes through injected fns.
+
+    ``advice_enabled`` gates the *advisory* output (per-holding Buy/Hold/Trim/Sell
+    actions, holder-read stance, sizing suggestions, concentration trim flags, and the
+    "consider adding" list). It defaults to ``stocvest_personal_advice_mode_enabled``
+    (the legal basis for buy/sell language in the single-operator build). When the flag
+    is OFF — the required posture before any external release — every action degrades to
+    an informational ``REVIEW`` and the advisory extras are suppressed, so only factual
+    valuation (P/L, weights, benchmark) is returned.
+    """
     _ = (user_id, user_email)  # reserved for AI-read wiring in the endpoint layer
     as_of = as_of or datetime.now(timezone.utc).date()
+    if advice_enabled is None:
+        from stocvest.utils.config import get_settings
+
+        advice_enabled = bool(get_settings().stocvest_personal_advice_mode_enabled)
     holdings = list(holdings)
     compose = compose_fn or _default_compose
     fetch_snapshots = snapshot_fn or _default_snapshots
@@ -519,9 +533,13 @@ async def build_portfolio_review(
         )
 
     symbols = [h.symbol for h in holdings]
+    bench_sym = settings.benchmark_symbol
 
-    # 1) Mark prices (one batch) + per-symbol composite (bounded concurrency).
-    snap_map = await _safe_snapshots(fetch_snapshots, symbols)
+    # 1) Mark prices — one batch covering holdings + the benchmark (so the benchmark
+    #    price reuses this fetch instead of a second snapshot round-trip) — plus the
+    #    per-symbol composite (bounded concurrency).
+    price_symbols = symbols + ([bench_sym] if bench_sym not in symbols else [])
+    snap_map = await _safe_snapshots(fetch_snapshots, price_symbols)
     bodies = await _compose_all(compose, symbols, concurrency=concurrency)
 
     # 2) Value each holding; total value includes cash so weights are portfolio-wide.
@@ -546,15 +564,23 @@ async def build_portfolio_review(
     # 3) Per-holding review rows.
     reviews: list[HoldingReview] = []
     concentration: list[ConcentrationFlag] = []
+    remaining_cash = settings.cash_balance  # drawn down across BUY_MORE rows (no over-allocation)
     for (h, price, mkt_value), body in zip(priced, bodies):
         body = body if isinstance(body, dict) else {}
         status = str(body.get("status") or "").strip().lower()
         verdict = str(body.get("signal_summary") or body.get("verdict") or "").strip().lower()
         confidence = _num(body.get("signal_strength"))
-        holder_read = build_position_holder_read(body) if body else None
+        # Holder-read is owner-oriented management guidance (ship-dark elsewhere) — only
+        # surface it when advice is enabled, matching the deep-dive's gating.
+        holder_read = build_position_holder_read(body) if (body and advice_enabled) else None
         stance = str((holder_read or {}).get("stance") or "").strip().lower() or None
 
-        action = derive_action(verdict=verdict, holder_stance=stance, status=status)
+        # Signal-first action — suppressed to an informational REVIEW when advice is off.
+        action = (
+            derive_action(verdict=verdict, holder_stance=stance, status=status)
+            if advice_enabled
+            else ReviewAction.REVIEW
+        )
 
         weight_pct = round(mkt_value / total_value * 100.0, 2) if total_value > 0 else None
         target = settings.target_position_pct
@@ -569,27 +595,35 @@ async def build_portfolio_review(
             unrealized_pl = None
             unrealized_pl_pct = None
 
-        rationale = _rationale_lines(
-            action=action, verdict=verdict, stance=stance, status=status,
-            overweight=overweight, unrealized_pl_pct=unrealized_pl_pct, target=target,
-        )
+        if not advice_enabled:
+            rationale = [
+                "Informational valuation only — advisory actions are disabled in this mode."
+            ]
+        else:
+            rationale = _rationale_lines(
+                action=action, verdict=verdict, stance=stance, status=status,
+                overweight=overweight, unrealized_pl_pct=unrealized_pl_pct, target=target,
+            )
 
         add_amt: float | None = None
         reduce_amt: float | None = None
         if action == ReviewAction.BUY_MORE:
-            add_amt = suggested_add_amount(mkt_value, total_value, target, settings.cash_balance)
+            # Cap by cash still un-suggested to earlier BUY_MORE rows (no aggregate over-allocation).
+            add_amt = suggested_add_amount(mkt_value, total_value, target, remaining_cash)
             # Sizing gate: at/over target or no cash → the "buy more" downgrades to hold.
             if add_amt == 0.0:
                 action = ReviewAction.HOLD
                 rationale.append(
                     "Already at/over target weight (or no cash available) — holding rather than adding."
                 )
+            elif add_amt is not None:
+                remaining_cash = round(max(0.0, remaining_cash - add_amt), 2)
         elif action in (ReviewAction.TRIM, ReviewAction.SELL):
             reduce_amt = suggested_reduce_amount(mkt_value, total_value, target)
 
         hint, lt, st = tax_lot_hint(h, action, as_of=as_of)
 
-        if overweight and weight_pct is not None:
+        if advice_enabled and overweight and weight_pct is not None:
             concentration.append(
                 ConcentrationFlag(
                     symbol=h.symbol,
@@ -638,14 +672,17 @@ async def build_portfolio_review(
         port_pl = None
         port_pl_pct = None
 
-    # 6) Benchmark (money-weighted vs SPY / configured symbol).
+    # 6) Benchmark (money-weighted vs SPY / configured symbol). The current benchmark
+    #    price reuses the batched snapshot fetched above; only daily bars are fetched here.
     benchmark = await _build_benchmark(
-        holdings=holdings, settings=settings, fetch_snapshots=fetch_snapshots,
-        fetch_spy_bars=fetch_spy_bars, as_of=as_of,
+        holdings=holdings, settings=settings, fetch_spy_bars=fetch_spy_bars, as_of=as_of,
+        benchmark_current=resolve_current_price(snap_map.get(bench_sym)),
     )
 
-    # 7) "Consider adding" — gem candidates the user does not already hold.
-    consider = _consider_adding(scan_fn, held={h.symbol for h in holdings})
+    # 7) "Consider adding" — gem candidates the user does not already hold (advice-gated).
+    consider = (
+        _consider_adding(scan_fn, held={h.symbol for h in holdings}) if advice_enabled else []
+    )
 
     _LOG.info(
         "portfolio_review built holdings=%d actions=%s concentration=%d consider=%d",
@@ -724,9 +761,9 @@ async def _build_benchmark(
     *,
     holdings: list[PortfolioHolding],
     settings: PortfolioSettings,
-    fetch_snapshots: SnapshotFn,
     fetch_spy_bars: SpyBarsFn,
     as_of: date,
+    benchmark_current: float | None,
 ) -> BenchmarkComparison | None:
     lots: list[tuple[float, str]] = [
         (lot.total_cost, lot.purchase_date) for h in holdings for lot in h.lots
@@ -741,15 +778,13 @@ async def _build_benchmark(
         earliest = as_of
     try:
         bars = await fetch_spy_bars(bench_sym, earliest)
-        bench_snap = await _safe_snapshots(fetch_snapshots, [bench_sym])
     except Exception as exc:  # noqa: BLE001 — benchmark is best-effort
         _LOG.warning("portfolio_review benchmark fetch failed: %s", exc)
         return None
-    spy_current = resolve_current_price(bench_snap.get(bench_sym))
     return compute_benchmark_comparison(
         lots=lots,
         spy_close_on=_build_spy_close_lookup(bars or []),
-        spy_current=spy_current,
+        spy_current=benchmark_current,
         benchmark_symbol=bench_sym,
     )
 
@@ -854,13 +889,26 @@ def build_portfolio_review_sync(
     settings: PortfolioSettings,
     user_id: str | None = None,
     user_email: str | None = None,
+    snapshot_fn: SnapshotFn | None = None,
+    spy_bars_fn: SpyBarsFn | None = None,
+    scan_fn: ScanFn | None = None,
+    advice_enabled: bool | None = None,
 ) -> PortfolioReview:
-    """Blocking wrapper for the Lambda handler (own asyncio loop)."""
+    """Blocking wrapper for the Lambda handler (own asyncio loop).
+
+    Optional provider fns let callers (e.g. the daily digest job) share cached
+    data — a single benchmark-bars fetch, one position-scan snapshot — across many
+    users in one run instead of re-fetching per user.
+    """
     return asyncio.run(
         build_portfolio_review(
             holdings=holdings,
             settings=settings,
             user_id=user_id,
             user_email=user_email,
+            snapshot_fn=snapshot_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=scan_fn,
+            advice_enabled=advice_enabled,
         )
     )

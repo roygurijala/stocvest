@@ -133,3 +133,43 @@ def test_disabled_flag_short_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert result.scanned == 0
     assert not mailer.sent
+
+
+def test_personal_advice_mode_off_short_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STOCVEST_PERSONAL_ADVICE_MODE_ENABLED", "false")
+    get_settings.cache_clear()
+    hstore, astore, pstore = _stores()
+    mailer = _Mailer()
+    result = run_portfolio_digest_tick(
+        holdings_store=hstore,
+        alert_store=astore,
+        profile_store=pstore,
+        email_service=mailer,
+        review_builder=_stub_review,
+    )
+    assert result.scanned == 0
+    assert not mailer.sent
+
+
+def test_idempotent_marks_and_skips_second_run() -> None:
+    from datetime import datetime, timezone
+
+    hstore, astore, pstore = _stores()
+    mailer = _Mailer()
+    now = datetime(2026, 9, 11, 21, 5, tzinfo=timezone.utc)
+
+    first = run_portfolio_digest_tick(
+        holdings_store=hstore, alert_store=astore, profile_store=pstore,
+        email_service=mailer, review_builder=_stub_review, now=now,
+    )
+    assert first.sent == 1
+    # Marked with today's date so a retry/double-fire is skipped, not re-sent.
+    assert pstore.get_profile("u1").last_portfolio_digest_date == "2026-09-11"
+
+    second = run_portfolio_digest_tick(
+        holdings_store=hstore, alert_store=astore, profile_store=pstore,
+        email_service=mailer, review_builder=_stub_review, now=now,
+    )
+    assert second.sent == 0
+    assert second.skipped_already_sent == 1
+    assert len(mailer.sent) == 1  # no duplicate email

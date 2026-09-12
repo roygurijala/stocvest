@@ -54,7 +54,8 @@ function alertHistoryTypeLabel(raw: string | null | undefined): string {
     signal_expired: "Expired",
     watchlist_maturation: "Maturation",
     execution_actionable: "Execution actionable",
-    tracked_plan_thesis: "Tracked plan thesis"
+    tracked_plan_thesis: "Tracked plan thesis",
+    portfolio_digest: "Portfolio digest"
   };
   return map[t] ?? t.replace(/_/g, " ");
 }

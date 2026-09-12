@@ -133,6 +133,12 @@ export function PositionOwnerCard({ owner, colors }: Props) {
           <div style={statValue}>{fmtUsd(owner.averageCost)}</div>
         </div>
         <div>
+          <div style={statLabel}>Current price</div>
+          <div style={statValue} data-testid="position-owner-price">
+            {fmtUsd(owner.currentPrice)}
+          </div>
+        </div>
+        <div>
           <div style={statLabel}>Market value</div>
           <div style={statValue}>{fmtUsd(owner.marketValue)}</div>
         </div>

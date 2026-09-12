@@ -262,6 +262,9 @@ class UserProfile(BaseModel):
     trial_ends_at: str | None = None
     trial_reminder_day10_sent_at: str | None = None
     trial_reminder_day14_sent_at: str | None = None
+    # PORTFOLIO-MGMT — ISO date (YYYY-MM-DD) the daily portfolio digest was last sent,
+    # so the post-close job is idempotent across scheduler retries / double-fires.
+    last_portfolio_digest_date: str | None = None
     # Light personalization for the assistant: the user's preferred trading desk
     # ("swing" | "day"), inferred from explicit desk language in their questions.
     # Used to resolve ambiguous discovery/opportunity queries without re-asking.

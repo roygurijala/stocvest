@@ -578,7 +578,9 @@ async def build_position_composite_response(
     # this name, attach an owner context (YOUR cost basis, unrealized P/L, tax
     # holding-period, and the signal-first action) built from this very composite body.
     # Additive + best-effort: never fails the composite, and absent for non-holders.
-    if user_id:
+    # Gated on personal-advice mode (the owner card surfaces a buy/hold/trim/sell action);
+    # omitted entirely — like the rest of the position advice surface — before external release.
+    if user_id and settings.stocvest_personal_advice_mode_enabled:
         try:
             from stocvest.api.services.holdings_store import get_holdings_store
             from stocvest.api.services.portfolio_review import build_owner_position_context

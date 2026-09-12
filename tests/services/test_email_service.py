@@ -257,3 +257,16 @@ def test_send_portfolio_digest_sends_with_token(monkeypatch: pytest.MonkeyPatch)
         es = EmailService()
         assert es.send_portfolio_digest_email(to_email="u@example.com", review=_digest_review()) is True
         mock_send.assert_called_once()
+
+
+def test_send_portfolio_digest_publishes_send_outcome(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Digest sends feed the same EmailSendOutcome metric/alarm as alert emails."""
+    monkeypatch.setenv("POSTMARK_SERVER_TOKEN", "pm-test-token")
+    monkeypatch.setenv("STOCVEST_EMAIL_SENDER", "signals@stocvest.ai")
+    get_settings.cache_clear()
+    with patch("stocvest.services.email_service.send_postmark_html_email", return_value=False), patch(
+        "stocvest.services.email_service.publish_email_send_outcome"
+    ) as mock_metric:
+        es = EmailService()
+        assert es.send_portfolio_digest_email(to_email="u@example.com", review=_digest_review()) is False
+        mock_metric.assert_called_once_with(success=False)
