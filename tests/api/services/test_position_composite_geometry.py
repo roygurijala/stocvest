@@ -9,6 +9,7 @@ import pytest
 from stocvest.api.services.geometry_tradeability import geometry_tradeability
 from stocvest.api.services.position_composite_geometry import (
     _entry_for_geometry,
+    _position_entry_zone,
     _position_signal_complete,
     build_position_composite_geometry_fields,
     compute_weekly_atr,
@@ -161,6 +162,27 @@ def test_high_vol_geometry_wider_stop() -> None:
 def test_entry_for_geometry_prefers_last() -> None:
     zone = {"low": 160.0, "high": 175.0}
     assert _entry_for_geometry(180.0, zone) == 180.0
+
+
+@pytest.mark.unit
+def test_position_entry_zone_anchors_on_sma50_not_spot() -> None:
+    # Extended name (AAPL-shaped): spot far above the 50-week trend. The band must anchor on
+    # the SMA50 (discount below / premium above), NOT stretch up to spot, so the top is well
+    # below current price and the width stays bounded (no perpetual "wait for a tiny dip").
+    zone = _position_entry_zone(last=332.58, weekly_sma50=281.54, range_lo=120.0, range_hi=360.0)
+    assert zone["low"] == pytest.approx(281.54 * 0.96, rel=1e-4)
+    assert zone["high"] == pytest.approx(281.54 * 1.02, rel=1e-4)
+    # Top sits far below spot (not pinned at last * 0.995) and the band is ~6% wide, not ~22%.
+    assert zone["high"] < 332.58 * 0.9
+    assert (zone["high"] - zone["low"]) / zone["low"] < 0.08
+
+
+@pytest.mark.unit
+def test_position_entry_zone_falls_back_to_spot_without_sma50() -> None:
+    # No 50-week history → anchor on spot so the band still brackets a usable entry.
+    zone = _position_entry_zone(last=100.0, weekly_sma50=None, range_lo=None, range_hi=None)
+    assert zone["low"] == pytest.approx(96.0, rel=1e-4)
+    assert zone["high"] == pytest.approx(102.0, rel=1e-4)
 
 
 @pytest.mark.unit

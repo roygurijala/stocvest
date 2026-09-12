@@ -338,6 +338,29 @@ describe("deep-dive-present", () => {
     expect(lines.at(-1)).toContain("Do not enter at current price");
   });
 
+  test("buildEntryZoneRrWarning long-desk copy frames the anchor, not a dip target", () => {
+    const lines = buildEntryZoneRrWarning({
+      position: "above",
+      currentPrice: 332.58,
+      entryLow: 270.28,
+      entryHigh: 287.13,
+      currentRr: 0.4,
+      zoneEdgeRr: null,
+      chosenLabel: "T1",
+      minRr: 1.5,
+      isPositionLane: true
+    });
+    const text = lines.join(" ");
+    // Frames the band as the 50-week-anchored accumulation zone, explicitly NOT a forecast.
+    expect(text).toContain("long-term accumulation zone");
+    expect(text).toContain("anchored on the 50-week trend");
+    expect(text).toContain("not a forecast");
+    // Explains the real blocker (extended + thin R/R) and does NOT imply a small dip.
+    expect(text).toContain("Extended above the long-term trend");
+    expect(text).not.toContain("wait for price to reach the entry zone");
+    expect(text).toContain("0.4:1");
+  });
+
   test("scenarioGeometryTrackBounds centers current between stop and planned T1 when T2 extends range", () => {
     const bounds = scenarioGeometryTrackBounds({
       stopPrice: 62.44,
