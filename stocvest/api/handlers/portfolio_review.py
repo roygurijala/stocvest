@@ -16,17 +16,64 @@ the authenticated owner, and the service never logs those values.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.response import not_found, ok, unauthorized
 from stocvest.api.services.holdings_store import get_holdings_store
 from stocvest.api.services.portfolio_review import build_portfolio_review
+from stocvest.api.services.user_profile_store import get_user_profile_store
 from stocvest.api.shared import build_request_context
 from stocvest.api.types import LambdaContext, LambdaEvent
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
+
+
+def _bullets(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [x for x in value if isinstance(x, dict)][:6]
+
+
+def _build_ai_read_fn(user_id: str) -> Callable[[str, dict[str, Any]], Awaitable[str | None]] | None:
+    """Per-holding AI Investment Read, reusing the gated deep-dive narrator.
+
+    Returns ``None`` (no AI enrichment) unless the caller is entitled to AI
+    explanations, so free accounts pay no LLM cost and the review stays deterministic.
+    Narration is keyed/cached by the composite's ``pillar_snapshot_hash`` (reused until
+    the underlying pillars change), and the copy guard keeps it non-advisory in product
+    mode / personal-stance-only in personal mode — identical to the Position deep-dive.
+    """
+    try:
+        profile = get_user_profile_store().get_profile(user_id)
+    except Exception as exc:  # noqa: BLE001 — profile lookup is best-effort
+        _LOG.warning("portfolio_review profile lookup failed: %s", exc)
+        return None
+    if profile is None or not profile.has_ai_explanations:
+        return None
+
+    from stocvest.signals.ai_explanations import AIExplanationService
+
+    svc = AIExplanationService()
+
+    async def _fn(symbol: str, body: dict[str, Any]) -> str | None:
+        packet = body.get("position_thesis_packet")
+        packet = packet if isinstance(packet, dict) else {}
+        verdict = str(body.get("signal_summary") or body.get("verdict") or "neutral")
+        result = await svc.explain_position_setup_read(
+            symbol=symbol,
+            verdict=verdict,
+            bull_case=_bullets(packet.get("bull_case")),
+            bear_case=_bullets(packet.get("bear_case")),
+            open_questions=_bullets(packet.get("open_questions")),
+            pillar_snapshot_hash=str(packet.get("pillar_snapshot_hash") or ""),
+            user_profile=profile,
+            fundamentals_covered=bool(packet.get("fundamentals_covered", True)),
+        )
+        return result.text
+
+    return _fn
 
 
 def portfolio_review_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -43,6 +90,7 @@ def portfolio_review_handler(event: LambdaEvent, context: LambdaContext) -> dict
             settings=settings,
             user_id=request_context.user_id,
             user_email=request_context.email,
+            ai_read_fn=_build_ai_read_fn(request_context.user_id),
         )
     )
     return ok(review.to_api())
