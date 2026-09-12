@@ -574,6 +574,28 @@ async def build_position_composite_response(
             current_price=last_px if last_px and last_px > 0 else None,
         )
 
+    # PORTFOLIO-MGMT Slice 3b — portfolio-aware deep-dive. When the caller already holds
+    # this name, attach an owner context (YOUR cost basis, unrealized P/L, tax
+    # holding-period, and the signal-first action) built from this very composite body.
+    # Additive + best-effort: never fails the composite, and absent for non-holders.
+    if user_id:
+        try:
+            from stocvest.api.services.holdings_store import get_holdings_store
+            from stocvest.api.services.portfolio_review import build_owner_position_context
+
+            held = next(
+                (h for h in get_holdings_store().list_holdings(user_id) if h.symbol == sym),
+                None,
+            )
+            if held is not None:
+                response_body["position_owner"] = build_owner_position_context(
+                    body=response_body,
+                    holding=held,
+                    current_price=last_px if last_px and last_px > 0 else None,
+                )
+        except Exception as exc:  # noqa: BLE001 — owner context is best-effort
+            _LOG.warning("position_owner attach failed symbol=%s err=%s", sym, exc)
+
     return response_body
 
 

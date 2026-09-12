@@ -24,11 +24,13 @@ import { DeepDiveLaneToggle } from "@/components/dashboard/trading-room/deep-div
 import { PositionSetupRead } from "@/components/dashboard/trading-room/position-setup-read";
 import { PositionHolderRead } from "@/components/dashboard/trading-room/position-holder-read";
 import { PositionAnalystPanel } from "@/components/dashboard/trading-room/position-analyst-panel";
+import { PositionOwnerCard } from "@/components/dashboard/trading-room/position-owner-card";
 import {
   buildPositionThesisSummary,
   parsePositionAnalystPanel,
   parsePositionFundamentals,
   parsePositionHolderRead,
+  parsePositionOwner,
   parsePositionThesisPacket
 } from "@/lib/dashboard/trading-room/position-fundamentals-present";
 import type { DeepDiveLane, FeedLane } from "@/lib/dashboard/trading-room/feed-model";
@@ -1532,6 +1534,14 @@ export function DeepDive({
     [activeLane, composite]
   );
 
+  const positionOwner = useMemo(
+    () =>
+      activeLane === "position" && composite
+        ? parsePositionOwner(composite as Record<string, unknown>)
+        : null,
+    [activeLane, composite]
+  );
+
   const signalValidDays = useMemo(() => {
     if (!composite || isInsufficient) return null;
     const raw = (composite as Record<string, unknown>).signal_valid_days;
@@ -1948,6 +1958,9 @@ export function DeepDive({
                   signalSummary={layerSignalSummary}
                   layerAlignmentLine={layerAlignmentLine}
                 />
+                {isPositionLane && positionOwner ? (
+                  <PositionOwnerCard owner={positionOwner} colors={colors} />
+                ) : null}
                 {isPositionLane ? (
                   positionFundamentals ? (
                     <PositionSetupRead

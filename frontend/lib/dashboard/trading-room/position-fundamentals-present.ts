@@ -172,6 +172,72 @@ export function parsePositionHolderRead(
   };
 }
 
+export type PositionOwnerAction = "buy_more" | "hold" | "trim" | "sell" | "review";
+
+/** PORTFOLIO-MGMT — owner context for a symbol the caller already holds (`position_owner`). */
+export type PositionOwner = {
+  symbol: string;
+  quantity: number | null;
+  averageCost: number | null;
+  currentPrice: number | null;
+  marketValue: number | null;
+  unrealizedPl: number | null;
+  unrealizedPlPct: number | null;
+  action: PositionOwnerAction;
+  actionLabel: string;
+  holderStance: string | null;
+  taxLotHint: string | null;
+  longTermLots: number;
+  shortTermLots: number;
+  lotCount: number;
+  earliestPurchaseDate: string | null;
+  disclaimer: string;
+};
+
+const OWNER_ACTIONS: PositionOwnerAction[] = ["buy_more", "hold", "trim", "sell", "review"];
+
+function numFloat(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function intOr0(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : 0;
+}
+
+/**
+ * Parse the portfolio-aware owner context. Present only when the authenticated caller
+ * holds the deep-dived symbol; returns null otherwise so non-holders see nothing.
+ */
+export function parsePositionOwner(
+  body: Record<string, unknown> | null | undefined
+): PositionOwner | null {
+  const raw = body?.position_owner;
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const symbol = str(o.symbol).toUpperCase();
+  if (!symbol) return null;
+  let action = str(o.action).toLowerCase() as PositionOwnerAction;
+  if (!OWNER_ACTIONS.includes(action)) action = "review";
+  return {
+    symbol,
+    quantity: numFloat(o.quantity),
+    averageCost: numFloat(o.average_cost),
+    currentPrice: numFloat(o.current_price),
+    marketValue: numFloat(o.market_value),
+    unrealizedPl: numFloat(o.unrealized_pl),
+    unrealizedPlPct: numFloat(o.unrealized_pl_pct),
+    action,
+    actionLabel: str(o.action_label) || action,
+    holderStance: str(o.holder_stance) || null,
+    taxLotHint: str(o.tax_lot_hint) || null,
+    longTermLots: intOr0(o.long_term_lots),
+    shortTermLots: intOr0(o.short_term_lots),
+    lotCount: intOr0(o.lot_count),
+    earliestPurchaseDate: str(o.earliest_purchase_date) || null,
+    disclaimer: str(o.disclaimer)
+  };
+}
+
 /**
  * POS-AI-13 (display-only) — parse the ship-dark Long Term analyst panel
  * (`position_analyst`, same shape as the ticker news panel's analyst block).
