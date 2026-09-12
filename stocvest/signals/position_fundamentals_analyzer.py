@@ -36,6 +36,10 @@ class PositionFundamentalsContext:
     #: by default via config (2026-09-12); when False the F1/F3/F4 scorers are byte-identical
     #: to v1. This dataclass default stays False so unit tests opt in explicitly.
     fundamentals_v2: bool = False
+    #: F4 valuation PEG upgrade (growth-adjusted P/E + graded EV/Sales). Graduated to ON by
+    #: default via config (2026-09-12); when False the F4 scorer is byte-identical to prior.
+    #: This dataclass default stays False so unit tests opt in explicitly.
+    valuation_peg: bool = False
 
 
 def prepare_snapshot(snapshot: PositionFundamentalsSnapshot) -> PositionFundamentalsSnapshot:
@@ -120,6 +124,7 @@ class PositionFundamentalsAnalyzer:
                 f2_verdict=f2.verdict,
                 f2_score=f2.score,
                 fundamentals_v2=ctx.fundamentals_v2,
+                valuation_peg=ctx.valuation_peg,
             ),
             score_f5_earnings_quality(
                 snap,

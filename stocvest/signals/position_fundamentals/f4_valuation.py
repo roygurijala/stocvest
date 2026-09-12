@@ -11,8 +11,10 @@ from stocvest.signals.position_fundamentals.common import (
     normalize_positive_multiple,
     pillar_data_quality,
     prioritize_chips,
+    quarter_offset_value,
     series_values,
     unavailable_pillar,
+    yoy_ratio,
 )
 from stocvest.signals.position_fundamentals.sector_overrides import SectorOverrideFlags
 from stocvest.signals.position_fundamentals.types import (
@@ -24,6 +26,86 @@ from stocvest.signals.signal_math_contract import LAYER_SCORE_NEUTRAL
 
 VALUE_TRAP_PE_MAX = 15.0
 VALUE_TRAP_SCORE_CAP = 55
+
+#: Cap on the EPS-growth rate (fractional) used in the PEG denominator. A one-off earnings
+#: spike off a low base can otherwise manufacture an artificially "cheap" PEG; capping the
+#: denominator keeps a 50% print and a 200% print from both reading as near-zero PEG.
+PEG_GROWTH_CAP = 0.50
+
+
+def _eps_value(row: object) -> float | None:
+    """Diluted EPS preferred; fall back to basic EPS."""
+    eps_diluted = getattr(row, "eps_diluted", None)
+    if eps_diluted is not None:
+        return eps_diluted
+    return getattr(row, "eps", None)
+
+
+def _ttm_eps_growth(snapshot: PositionFundamentalsSnapshot) -> float | None:
+    """TTM-EPS YoY growth (fractional): last-4Q EPS sum vs the prior-4Q sum.
+
+    Smoother than a single-quarter YoY. Needs 8 quarters; falls back to single-quarter
+    YoY (needs 5) when only 5-7 quarters exist. Returns None when EPS is missing or the
+    YoY sign guard trips (see ``yoy_ratio``), so PEG callers cleanly fall back.
+    """
+    income = sorted(snapshot.income_statements, key=lambda r: r.as_of_date, reverse=True)
+    if len(income) >= 8:
+        cur = [_eps_value(r) for r in income[:4]]
+        prior = [_eps_value(r) for r in income[4:8]]
+        if all(v is not None for v in cur) and all(v is not None for v in prior):
+            return yoy_ratio(sum(cur), sum(prior))  # type: ignore[arg-type]
+    latest, prior_q = quarter_offset_value(income, _eps_value, offset=4)
+    return yoy_ratio(latest, prior_q)
+
+
+def _score_peg(
+    base: float,
+    pe: float | None,
+    eps_growth: float | None,
+) -> tuple[float, list[str], bool]:
+    """Growth-adjusted P/E (PEG). Returns (base, chips, applied).
+
+    ``applied`` is False when PEG is not usable (no P/E, or non-positive/absent growth),
+    signalling the caller to fall back to the own-8Q-median P/E read. When applied, this
+    REPLACES the own-history P/E delta so P/E is never scored twice.
+    """
+    chips: list[str] = []
+    if pe is None or eps_growth is None or eps_growth <= 0:
+        return base, chips, False
+    growth = min(eps_growth, PEG_GROWTH_CAP)
+    peg = pe / (growth * 100.0)
+    if peg <= 1.0:
+        base = apply_score_delta(base, 10)
+        chips.append(f"PEG {peg:.1f} — cheap for its growth")
+    elif peg <= 1.5:
+        base = apply_score_delta(base, 5)
+        chips.append(f"PEG {peg:.1f} — reasonable for growth")
+    elif peg <= 2.0:
+        chips.append(f"PEG {peg:.1f} — fair vs growth")
+    elif peg <= 3.0:
+        base = apply_score_delta(base, -5)
+        chips.append(f"PEG {peg:.1f} — full vs growth")
+    else:
+        base = apply_score_delta(base, -10)
+        chips.append(f"PEG {peg:.1f} — expensive vs growth")
+    return base, chips, True
+
+
+def _ev_sales_graded_delta(ev_metric: float) -> tuple[int, bool]:
+    """Monotonic EV/Sales ladder (delta, is_rich). Replaces the single -6 cliff at 8x."""
+    if ev_metric < 2.0:
+        return 6, False
+    if ev_metric < 4.0:
+        return 4, False
+    if ev_metric < 6.0:
+        return 2, False
+    if ev_metric < 8.0:
+        return 0, False
+    if ev_metric < 11.0:
+        return -2, True
+    if ev_metric < 15.0:
+        return -4, True
+    return -6, True
 
 
 def _score_vs_history(
@@ -109,6 +191,7 @@ def score_f4_valuation(
     f2_verdict: str = "neutral",
     f2_score: int | None = None,
     fundamentals_v2: bool = False,
+    valuation_peg: bool = False,
 ) -> PositionPillarResult:
     flags = sector_flags or SectorOverrideFlags()
     ratios = sorted(snapshot.ratios, key=lambda r: r.as_of_date, reverse=True)
@@ -131,12 +214,18 @@ def score_f4_valuation(
     if latest_pe is None and metrics:
         latest_pe = normalize_positive_multiple(metrics[0].pe_ratio)
 
-    pe_hist = series_values(
-        ratios[:8],
-        lambda r: normalize_positive_multiple(r.price_earnings_ratio),
-    )
-    base, pe_chips = _score_vs_history(base, latest_pe, pe_hist, label="P/E")
-    chips.extend(pe_chips)
+    pe_applied_via_peg = False
+    if valuation_peg:
+        eps_growth = _ttm_eps_growth(snapshot)
+        base, peg_chips, pe_applied_via_peg = _score_peg(base, latest_pe, eps_growth)
+        chips.extend(peg_chips)
+    if not pe_applied_via_peg:
+        pe_hist = series_values(
+            ratios[:8],
+            lambda r: normalize_positive_multiple(r.price_earnings_ratio),
+        )
+        base, pe_chips = _score_vs_history(base, latest_pe, pe_hist, label="P/E")
+        chips.extend(pe_chips)
 
     pfcf_hist = series_values(
         ratios[:8],
@@ -165,7 +254,13 @@ def score_f4_valuation(
         else:
             ev_metric = normalize_positive_multiple(metrics[0].ev_to_sales)
         if ev_metric is not None:
-            if ev_metric <= 3.0:
+            if valuation_peg:
+                ev_delta, ev_rich = _ev_sales_graded_delta(ev_metric)
+                if ev_delta != 0:
+                    base = apply_score_delta(base, ev_delta)
+                suffix = f"{ev_suffix} — rich" if ev_rich else ev_suffix
+                chips.append(f"EV/Sales {ev_metric:.1f}{suffix}")
+            elif ev_metric <= 3.0:
                 base = apply_score_delta(base, 6)
                 chips.append(f"EV/Sales {ev_metric:.1f}{ev_suffix}")
             elif ev_metric >= 8.0:

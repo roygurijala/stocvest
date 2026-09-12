@@ -392,6 +392,20 @@ class Settings(BaseSettings):
         True,
         alias="STOCVEST_POSITION_FUNDAMENTALS_V2_ENABLED",
     )
+    # F4 valuation PEG upgrade (graduated 2026-09-12; default ON → set env to "false" to
+    # revert to the byte-identical prior F4 behavior). Two changes, both scoped to F4:
+    #   (1) P/E is graded growth-adjusted (PEG = P/E ÷ TTM-EPS-YoY%) instead of only vs the
+    #       stock's own 8Q median. When a usable PEG exists it REPLACES the own-history P/E
+    #       delta (no double-count); it falls back to the own-history read when EPS growth is
+    #       non-positive/unavailable or history is too thin. Growth used in the denominator is
+    #       capped so a one-off spike can't manufacture an artificially cheap PEG.
+    #   (2) EV/Sales is graded (a monotonic ladder) rather than a single -6 cliff at 8x, so
+    #       two rich names no longer collapse onto the same penalty (fixed AAPL & GOOG both
+    #       reading F4 = 44/100).
+    stocvest_position_valuation_peg_enabled: bool = Field(
+        True,
+        alias="STOCVEST_POSITION_VALUATION_PEG_ENABLED",
+    )
     # Position holder / position-management read (ship dark; default OFF). Adds an
     # OWNER-oriented read ("if you already hold this") with explicit management actions
     # (tighten stop, reduce, add-only-on-pullback) derived deterministically from the
