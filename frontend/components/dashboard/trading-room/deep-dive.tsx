@@ -67,6 +67,7 @@ import {
 import {
   buildBriefMetaLine,
   buildEntryZoneRrWarning,
+  buildGeometryBlockExplanation,
   buildPlainSummary,
   buildRichBrief,
   resolveDeepDiveDirection,
@@ -848,9 +849,10 @@ export function DeepDive({
       rows: layerRows,
       bias: setupBias,
       alignmentRatio: compositeAlignmentRatio,
-      compositeDirection: parseCompositeDirectionFields(composite as Record<string, unknown>)
+      compositeDirection: parseCompositeDirectionFields(composite as Record<string, unknown>),
+      mode: activeLane
     }).displayLine;
-  }, [isInsufficient, layerRows, setupBias, compositeAlignmentRatio, composite]);
+  }, [isInsufficient, layerRows, setupBias, compositeAlignmentRatio, composite, activeLane]);
 
   const layerSignalSummary = useMemo(() => {
     if (!isInsufficient && typeof (composite as Record<string, unknown>).signal_summary === "string") {
@@ -939,9 +941,10 @@ export function DeepDive({
       mode: feedLane,
       rows: layerRows,
       bias: setupBias,
-      alignmentRatio: compositeAlignmentRatio
+      alignmentRatio: compositeAlignmentRatio,
+      deskMode: activeLane
     });
-  }, [composite, isInsufficient, feedLane, layerRows, setupBias, compositeAlignmentRatio]);
+  }, [composite, isInsufficient, feedLane, activeLane, layerRows, setupBias, compositeAlignmentRatio]);
 
   // Publish full-depth per-symbol context to the Assistant while this deep dive is open — the
   // same context the Signals desk publishes (decision, layers, readiness, R/R, regime, causal
@@ -1088,6 +1091,12 @@ export function DeepDive({
     if (isInsufficient) return null;
     const raw = (composite as Record<string, unknown>).geometry_block_reason;
     return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  }, [composite, isInsufficient]);
+
+  const geometryMissingFields = useMemo(() => {
+    if (isInsufficient) return [] as string[];
+    const raw = (composite as Record<string, unknown>).missing_fields;
+    return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string") : [];
   }, [composite, isInsufficient]);
 
   const geometryHonesty = useMemo(() => {
@@ -1602,9 +1611,10 @@ export function DeepDive({
     return buildBriefMetaLine({
       bias: setupBias,
       rows: layerRows,
-      timingFlagCount: setupJudgment.tradeability.flags.length
+      timingFlagCount: setupJudgment.tradeability.flags.length,
+      mode: activeLane
     });
-  }, [setupJudgment, setupBias, layerRows]);
+  }, [setupJudgment, setupBias, layerRows, activeLane]);
 
   return (
     <div
@@ -1871,9 +1881,14 @@ export function DeepDive({
           >
             Not tradable at current structure
             {geometryBlockReason ? ` (${geometryBlockReason.replace(/_/g, " ")})` : ""}
-            {isPositionLane && signalStructureBroken
-              ? " — weekly structure is broken; wait for it to stabilize above the weekly trend before considering entry."
-              : " — wait for a pullback that clears desk geometry."}
+            {buildGeometryBlockExplanation({
+              isPositionLane,
+              structureBroken: signalStructureBroken,
+              blockReason: geometryBlockReason,
+              missingFields: geometryMissingFields,
+              currentRr,
+              deskMinRr
+            })}
           </p>
         ) : null}
         {briefMeta ? (

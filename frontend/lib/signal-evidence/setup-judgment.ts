@@ -8,12 +8,14 @@ import {
   type AlignmentDisplayTier
 } from "@/lib/alignment-display-tier";
 import {
+  layerAlignmentTotalForMode,
   layerRowEligibleForAlignmentCount,
   parseCompositeDirectionFields,
   resolveSignalsLayerAlignment,
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
+import type { CompositeDeskMode } from "@/lib/signal-math/contract";
 
 export type SetupPhaseId = "early" | "expansion" | "extended" | "exhaustion";
 export type TradeabilityBand = "strong" | "moderate" | "weak";
@@ -60,6 +62,7 @@ function reconcileSetupJudgmentProcess(
     bias: SignalsSetupBias;
     rows: SignalsLayerRowInput[];
     alignmentRatio?: number | null;
+    deskMode?: CompositeDeskMode | null;
   }
 ): SetupJudgment {
   const dir = parseCompositeDirectionFields(composite ?? undefined);
@@ -67,7 +70,8 @@ function reconcileSetupJudgmentProcess(
     rows: input.rows,
     bias: input.bias,
     alignmentRatio: input.alignmentRatio ?? null,
-    compositeDirection: dir
+    compositeDirection: dir,
+    mode: input.deskMode ?? null
   });
   const layersAligned =
     input.bias === "Neutral" && dir != null ? dir.directional : biasAlignment.aligned;
@@ -133,14 +137,18 @@ function parseFlags(raw: unknown): TradeabilityFlag[] {
   return out;
 }
 
-export function parseSetupJudgment(body: unknown): SetupJudgment | null {
+export function parseSetupJudgment(
+  body: unknown,
+  deskMode?: CompositeDeskMode | null
+): SetupJudgment | null {
   if (!body || typeof body !== "object") return null;
   const root = (body as { setup_judgment?: unknown }).setup_judgment ?? body;
   if (!root || typeof root !== "object") return null;
   const proc = (root as { process?: unknown }).process;
   if (!proc || typeof proc !== "object") return null;
   const aligned = Number((proc as { layers_aligned?: number }).layers_aligned);
-  const total = Number((proc as { layers_total?: number }).layers_total) || 6;
+  const total =
+    Number((proc as { layers_total?: number }).layers_total) || layerAlignmentTotalForMode(deskMode);
   if (!Number.isFinite(aligned)) return null;
   const tierRaw = String((proc as { tier?: string }).tier || "").trim();
   const tier = resolveAlignmentDisplayTier({
@@ -269,11 +277,13 @@ export function deriveSetupJudgment(input: {
   alignmentRatio?: number | null;
   technicalReasoning?: string | null;
   unlockWatchFor?: string | null;
+  deskMode?: CompositeDeskMode | null;
 }): SetupJudgment {
   const alignment = resolveSignalsLayerAlignment({
     rows: input.rows,
     bias: input.bias,
-    alignmentRatio: input.alignmentRatio ?? null
+    alignmentRatio: input.alignmentRatio ?? null,
+    mode: input.deskMode ?? null
   });
   const tier = resolveAlignmentDisplayTier({
     layersAligned: alignment.aligned,
@@ -332,9 +342,10 @@ export function resolveSetupJudgmentFromComposite(
     rows: SignalsLayerRowInput[];
     bias: SignalsSetupBias;
     alignmentRatio?: number | null;
+    deskMode?: CompositeDeskMode | null;
   }
 ): SetupJudgment | null {
-  const parsed = parseSetupJudgment(composite);
+  const parsed = parseSetupJudgment(composite, input.deskMode ?? null);
   const layers = Array.isArray(composite?.layers) ? (composite!.layers as Record<string, unknown>[]) : [];
   const tech = layers.find((r) => String(r.layer || "").toLowerCase() === "technical");
   const reasoning = tech ? String(tech.reasoning || "") : "";
@@ -355,7 +366,8 @@ export function resolveSetupJudgmentFromComposite(
       bias: input.bias,
       alignmentRatio: input.alignmentRatio ?? null,
       technicalReasoning: reasoning,
-      unlockWatchFor: unlock || null
+      unlockWatchFor: unlock || null,
+      deskMode: input.deskMode ?? null
     });
   return reconcileSetupJudgmentProcess(derived, composite ?? undefined, input);
 }

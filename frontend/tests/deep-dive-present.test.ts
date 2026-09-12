@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
   buildBriefAlignmentLine,
+  buildBriefMetaLine,
   buildEntryZoneRrWarning,
+  buildGeometryBlockExplanation,
   buildPlainSummary,
   buildRichBrief,
   dedupeWatchForAgainstBlocker,
@@ -54,6 +56,94 @@ describe("deep-dive-present", () => {
     expect(line).toContain("Technical, Sector, Market Internals");
     expect(line).toContain("neutral — not contradicting");
     expect(line).not.toContain("5 of 6");
+  });
+
+  test("long/position desk counts 7 layers (fundamentals) not 6", () => {
+    const positionRows: SignalsLayerRowInput[] = [
+      { key: "fundamentals", name: "Fundamentals", status: "Bullish", score: 62, explanation: "" },
+      { key: "technical", name: "Technical", status: "Bullish", score: 60, explanation: "" },
+      { key: "news", name: "News", status: "Bullish", score: 58, explanation: "" },
+      { key: "macro", name: "Macro", status: "Neutral", score: 50, explanation: "" },
+      { key: "sector", name: "Sector", status: "Bullish", score: 57, explanation: "" },
+      { key: "geopolitical", name: "Geopolitical", status: "Bullish", score: 55, explanation: "" },
+      { key: "internals", name: "Market Internals", status: "Neutral", score: 50, explanation: "" }
+    ];
+    const alignLine = buildBriefAlignmentLine("Bullish", positionRows, "position");
+    expect(alignLine).toContain("5 of 7 layers confirm the bullish thesis");
+    expect(alignLine).not.toContain("of 6");
+
+    const meta = buildBriefMetaLine({
+      bias: "Bullish",
+      rows: positionRows,
+      timingFlagCount: 0,
+      mode: "position"
+    });
+    expect(meta).toContain("5 of 7 layers confirm");
+    expect(meta).toContain("Macro neutral");
+    expect(meta).not.toContain("of 6");
+
+    // Default (swing/day) denominator stays six.
+    expect(buildBriefMetaLine({ bias: "Bearish", rows: bearishRows, timingFlagCount: 0 })).toContain(
+      "3 of 6 layers confirm"
+    );
+  });
+
+  test("buildGeometryBlockExplanation names what is holding the setup back", () => {
+    const incomplete = buildGeometryBlockExplanation({
+      isPositionLane: true,
+      structureBroken: false,
+      blockReason: "incomplete",
+      missingFields: ["stop_level", "target_1"],
+      currentRr: null,
+      deskMinRr: 1.5
+    });
+    expect(incomplete).toContain("the trade plan isn't complete yet");
+    expect(incomplete).toContain("no valid protective stop");
+    expect(incomplete).toContain("no measured upside target");
+    expect(incomplete).not.toContain("clears desk geometry");
+
+    const rr = buildGeometryBlockExplanation({
+      isPositionLane: true,
+      structureBroken: false,
+      blockReason: "rr_below_desk_min",
+      missingFields: [],
+      currentRr: 1.1,
+      deskMinRr: 1.5
+    });
+    expect(rr).toContain("reward-to-risk (~1.1×)");
+    expect(rr).toContain("1.5×");
+
+    const tightStop = buildGeometryBlockExplanation({
+      isPositionLane: true,
+      structureBroken: false,
+      blockReason: "stop_too_tight_for_position",
+      missingFields: [],
+      currentRr: null,
+      deskMinRr: 1.5
+    });
+    expect(tightStop).toContain("too close to entry for a long-term hold");
+
+    // Broken weekly structure keeps its specific guidance.
+    const broken = buildGeometryBlockExplanation({
+      isPositionLane: true,
+      structureBroken: true,
+      blockReason: "incomplete",
+      missingFields: ["stop_level"],
+      currentRr: null,
+      deskMinRr: 1.5
+    });
+    expect(broken).toContain("weekly structure is broken");
+
+    // Unknown reason falls back to the legacy phrasing (no regression).
+    const fallback = buildGeometryBlockExplanation({
+      isPositionLane: false,
+      structureBroken: false,
+      blockReason: null,
+      missingFields: [],
+      currentRr: null,
+      deskMinRr: 2
+    });
+    expect(fallback).toContain("wait for a pullback that clears desk geometry");
   });
 
   test("buildRichBrief uses current R/R wording", () => {

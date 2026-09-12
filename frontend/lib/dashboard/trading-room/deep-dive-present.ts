@@ -11,6 +11,7 @@ import {
   type SignalsLayerRowInput,
   type SignalsSetupBias
 } from "@/lib/signals-page-present";
+import type { CompositeDeskMode } from "@/lib/signal-math/contract";
 
 export type TradeDirection = "long" | "short" | "neutral";
 export type EntryZonePosition = "inside" | "above" | "below";
@@ -165,8 +166,12 @@ export function scenarioGeometryIsShort(
   return stopPrice > targetPrice;
 }
 
-export function buildBriefAlignmentLine(bias: SignalsSetupBias, rows: SignalsLayerRowInput[]): string {
-  const { aligned, total } = countLayerAlignment(rows, bias);
+export function buildBriefAlignmentLine(
+  bias: SignalsSetupBias,
+  rows: SignalsLayerRowInput[],
+  mode?: CompositeDeskMode | null
+): string {
+  const { aligned, total } = countLayerAlignment(rows, bias, mode);
   if (bias === "Neutral") {
     return `${aligned} of ${total} layers read neutral or mixed — no dominant desk bias.`;
   }
@@ -193,8 +198,9 @@ export function buildBriefMetaLine(input: {
   bias: SignalsSetupBias;
   rows: SignalsLayerRowInput[];
   timingFlagCount: number;
+  mode?: CompositeDeskMode | null;
 }): string {
-  const { aligned, total } = countLayerAlignment(input.rows, input.bias);
+  const { aligned, total } = countLayerAlignment(input.rows, input.bias, input.mode);
   const layersPart = `${aligned} of ${total} layers confirm${input.bias === "Neutral" ? " consistency" : ""}`;
   const macroRow = input.rows.find((r) => r.key === "macro");
   const macroPart = macroRow ? `Macro ${macroRow.status?.toLowerCase() ?? "n/a"}` : null;
@@ -203,6 +209,79 @@ export function buildBriefMetaLine(input: {
       ? `${input.timingFlagCount} timing caution${input.timingFlagCount === 1 ? "" : "s"}`
       : null;
   return [layersPart, macroPart, flagsPart].filter(Boolean).join(" · ");
+}
+
+/** Plain-language copy for each incomplete-geometry `missing_fields` entry (backend contract). */
+const GEOMETRY_MISSING_FIELD_COPY: Record<string, string> = {
+  entry_zone: "a clean entry zone hasn't formed yet",
+  stop_level: "there's no valid protective stop yet",
+  target_1: "no measured upside target has printed yet",
+  risk_reward: "the reward-to-risk can't be measured yet",
+  risk_reward_below_min: "the reward-to-risk is below the desk minimum",
+  weekly_atr_or_price: "weekly price/volatility history is still incomplete"
+};
+
+function joinWithAnd(parts: string[]): string {
+  if (parts.length <= 1) return parts.join("");
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * Explain *what is holding a not-tradable setup back*, in plain words, from the composite's
+ * own `geometry_block_reason` + `missing_fields` (no invented thresholds). Returns a trailing
+ * clause that begins with " — " so it can follow "Not tradable at current structure (reason)".
+ */
+export function buildGeometryBlockExplanation(input: {
+  isPositionLane: boolean;
+  structureBroken: boolean;
+  blockReason: string | null;
+  missingFields: string[];
+  currentRr: number | null;
+  deskMinRr: number;
+}): string {
+  const GENERIC = " — wait for a pullback that clears desk geometry.";
+  if (input.isPositionLane && input.structureBroken) {
+    return " — weekly structure is broken; wait for it to stabilize above the weekly trend before considering entry.";
+  }
+
+  const reason = (input.blockReason || "").trim().toLowerCase();
+  const hold = input.isPositionLane ? "long-term hold" : "swing entry";
+  const rrGate =
+    input.deskMinRr > 0 ? `${input.deskMinRr.toFixed(1)}×` : "the desk minimum";
+  const rrNow =
+    input.currentRr != null && input.currentRr > 0 ? `~${input.currentRr.toFixed(1)}×` : null;
+
+  switch (reason) {
+    case "incomplete":
+    case "insufficient_data": {
+      const fields = input.missingFields
+        .map((f) => GEOMETRY_MISSING_FIELD_COPY[f.trim().toLowerCase()])
+        .filter((v): v is string => Boolean(v));
+      if (fields.length > 0) {
+        return ` — the trade plan isn't complete yet: ${joinWithAnd(fields)}.`;
+      }
+      return " — the trade plan (entry, stop, and target) isn't complete yet.";
+    }
+    case "no_clean_entry":
+      return " — price isn't offering a clean entry here; the stop/target structure would be too messy to trade.";
+    case "geometry_insufficient":
+      return " — the stop/target structure isn't complete yet (it needs a defined entry, protective stop, and first target).";
+    case "stop_too_tight_for_position":
+    case "stop_too_tight_for_swing":
+      return ` — the protective stop sits too close to entry for a ${hold}; it needs more room (about 2× the weekly ATR) so normal noise doesn't stop you out.`;
+    case "rr_below_desk_min":
+      return rrNow
+        ? ` — the reward-to-risk (${rrNow}) is below the ${rrGate} the desk requires before it's worth the risk.`
+        : ` — the reward-to-risk is below the ${rrGate} the desk requires before it's worth the risk.`;
+    case "neutral_verdict":
+      return " — the layers are too mixed right now to commit to a direction.";
+    case "composite_error":
+    case "missing_composite":
+      return " — the analysis is still loading; check back in a moment.";
+    default:
+      return GENERIC;
+  }
 }
 
 export function buildEntryZoneRrWarning(input: {
@@ -363,7 +442,7 @@ export function buildRichBrief(input: {
     s1 = noInsightOpener(variant, input.symbol, dir, desk);
   }
 
-  const s2 = buildBriefAlignmentLine(input.setupBias, input.layerRows);
+  const s2 = buildBriefAlignmentLine(input.setupBias, input.layerRows, input.activeLane);
   const s3 = input.causalSummary?.trim() ?? "";
   const s4 =
     input.causalChainLabel && input.causalChainLabel.length < 80
