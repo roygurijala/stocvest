@@ -377,16 +377,19 @@ class Settings(BaseSettings):
         False,
         alias="STOCVEST_POSITION_VOLUME_CONFIRM_ENABLED",
     )
-    # Position fundamentals v2 (ship dark; default OFF → F1/F3/F4 byte-identical when off).
-    # Fixes two fundamentals-accuracy defects surfaced on SOFI:
+    # Position fundamentals v2 (graduated 2026-09-12; default ON → set env to "false" to
+    # revert to the byte-identical v1 F1/F3/F4 behavior). Fixes two fundamentals-accuracy
+    # defects (surfaced on SOFI, and confirmed on AAPL where EV/Sales read 38.5x vs a true
+    # ~9.6x):
     #   (1) F4 EV/Sales used FMP's *quarterly* evToSales (EV ÷ single-quarter revenue),
-    #       overstating the multiple ~4x (SOFI 14.8 vs TTM 4.2) and over-penalizing growth;
-    #       v2 derives EV/Sales from enterprise value ÷ trailing-4Q revenue.
+    #       overstating the multiple ~4x (SOFI 14.8 vs TTM 4.2, AAPL 38.5 vs TTM ~9.6) and
+    #       over-penalizing growth; v2 derives EV/Sales from enterprise value ÷ trailing-4Q
+    #       revenue (skips the read when <4 quarters / EV unavailable rather than mislead).
     #   (2) F1 "Negative FCF" and F3 "current ratio" penalties fire for banks/lenders where
     #       FCF (loan originations) and current ratio are structurally non-meaningful; v2
     #       suppresses those generic penalties for bank buckets (surfaced as context chips).
     stocvest_position_fundamentals_v2_enabled: bool = Field(
-        False,
+        True,
         alias="STOCVEST_POSITION_FUNDAMENTALS_V2_ENABLED",
     )
     # Position holder / position-management read (ship dark; default OFF). Adds an
