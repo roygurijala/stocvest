@@ -200,6 +200,8 @@ class Settings(BaseSettings):
     # ── Journal + PDT persistence ────────────────────────────────
     trade_journal_table: str = Field("", alias="STOCVEST_TRADE_JOURNAL_TABLE")
     trade_plans_table: str = Field("", alias="STOCVEST_TRADE_PLANS_TABLE")
+    # Manual portfolio holdings (per-lot) — STOCVEST-managed personal portfolio.
+    holdings_table: str = Field("", alias="STOCVEST_HOLDINGS_TABLE")
     pdt_state_table: str = Field("", alias="STOCVEST_PDT_STATE_TABLE")
     dynamodb_day_trading_setups: str = Field("", alias="DYNAMODB_DAY_TRADING_SETUPS")
     dynamodb_alerts: str = Field("", alias="DYNAMODB_ALERTS")
