@@ -1266,7 +1266,8 @@ export function DeepDive({
       currentRr,
       zoneEdgeRr: scenario.worstCaseRr,
       chosenLabel: scenario.chosenLabel,
-      minRr: deskMinRr
+      minRr: deskMinRr,
+      isPositionLane
     });
     const chase = buildEntryDistanceWarning({
       distanceTier: scenario.entryDistanceTier ?? null,
@@ -1275,7 +1276,7 @@ export function DeepDive({
     });
     if (chase) lines.push(chase);
     return lines.length > 0 ? lines : null;
-  }, [scenario, currentRr, deskMinRr]);
+  }, [scenario, currentRr, deskMinRr, isPositionLane]);
 
   const scenarioRrFixGuidance = useMemo(() => {
     if (!scenario || setupBias === "Neutral") return null;

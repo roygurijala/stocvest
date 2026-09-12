@@ -293,13 +293,29 @@ export function buildEntryZoneRrWarning(input: {
   zoneEdgeRr: number | null;
   chosenLabel: string;
   minRr: number;
+  /**
+   * Long-term (position) desk: the zone is a *structural accumulation band anchored on the
+   * 50-week trend*, not a spot-hugging range, so the copy explains what the gap means (the
+   * stock is extended above / below its long-term trend) instead of implying a small dip.
+   */
+  isPositionLane?: boolean;
 }): string[] {
   if (input.position === "inside") return [];
   const zone = `$${input.entryLow.toFixed(2)}–$${input.entryHigh.toFixed(2)}`;
   const gate = `${input.minRr.toFixed(1)}:1`;
+  const zoneLabel = input.isPositionLane
+    ? `long-term accumulation zone (${zone}, anchored on the 50-week trend)`
+    : `entry zone (${zone})`;
   const lines: string[] = [
-    `Current price ($${input.currentPrice.toFixed(2)}) is ${input.position === "above" ? "above" : "below"} the entry zone (${zone}).`
+    `Current price ($${input.currentPrice.toFixed(2)}) is ${input.position === "above" ? "above" : "below"} the ${zoneLabel}.`
   ];
+  if (input.isPositionLane) {
+    lines.push(
+      input.position === "above"
+        ? "That band is where a fresh long-term entry would sit relative to the trend — not a forecast that price will drop there."
+        : "That band tracks the 50-week trend — price trading under it means the long-term structure isn't confirmed yet."
+    );
+  }
   if (input.currentRr != null) {
     const clears = input.currentRr >= input.minRr;
     lines.push(
@@ -308,10 +324,18 @@ export function buildEntryZoneRrWarning(input: {
   }
   if (input.zoneEdgeRr != null) {
     lines.push(
-      `R/R from entry zone ${input.position === "above" ? "top" : "bottom"} → ${input.chosenLabel}: ${input.zoneEdgeRr.toFixed(1)}:1 — ${input.zoneEdgeRr >= input.minRr ? "clears gate if zone is reached" : "still below gate at zone edge"}.`
+      `R/R from ${input.isPositionLane ? "the zone" : "entry zone"} ${input.position === "above" ? "top" : "bottom"} → ${input.chosenLabel}: ${input.zoneEdgeRr.toFixed(1)}:1 — ${input.zoneEdgeRr >= input.minRr ? "clears gate if zone is reached" : "still below gate at zone edge"}.`
     );
   }
-  lines.push("Do not enter at current price — wait for price to reach the entry zone.");
+  if (input.isPositionLane) {
+    lines.push(
+      input.position === "above"
+        ? "Extended above the long-term trend and the reward-to-risk is thin here — not a spot to start a new position, but no dip target is implied."
+        : "Long-term structure isn't confirmed yet — wait for the trend to stabilize before starting a position."
+    );
+  } else {
+    lines.push("Do not enter at current price — wait for price to reach the entry zone.");
+  }
   return lines;
 }
 

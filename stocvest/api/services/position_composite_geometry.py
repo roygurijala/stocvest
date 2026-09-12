@@ -111,6 +111,13 @@ def _analyst_median_target(levels: list[float] | None, *, entry: float, use_long
     return None
 
 
+#: Long-term accumulation-zone widths around the structural anchor (weekly SMA50): a modest
+#: discount below the trend to a smaller premium above it. Deliberately bounded so the zone
+#: reads as a structural band, not a spot-hugging range.
+_POSITION_ZONE_DISCOUNT = 0.04
+_POSITION_ZONE_PREMIUM = 0.02
+
+
 def _position_entry_zone(
     *,
     last: float,
@@ -118,16 +125,29 @@ def _position_entry_zone(
     range_lo: float | None,
     range_hi: float | None,
 ) -> dict[str, float]:
+    """Long-term accumulation band anchored on the *weekly SMA50* (the long-term trend).
+
+    The band is a bounded structural zone — a modest discount below the anchor to a smaller
+    premium above it — and is intentionally **not** tied to spot. An earlier revision set the
+    top to ``last * 0.995`` and the bottom to ``SMA50 * 0.96``, which produced two artifacts on
+    names trading above their 50-week average: (1) the top was pinned ~0.5% below spot, so the
+    card perpetually told the user to "wait for a ~0.5% dip"; and (2) the band stretched from
+    the 50-week trend all the way up to spot (~22% wide on an extended name like AAPL), making
+    the low edge look like a price target. Anchoring purely on structure fixes both: when price
+    is far above this band the desk honestly reads "extended above the long-term trend" and the
+    low edge is transparently the 50-week anchor, not a forecast. The reference entry used for
+    stop/target/R-R still prefers ``last`` (see ``_entry_for_geometry``), so this affects the
+    displayed zone + the price-inside-zone execution gate only, not the R-R math.
+    """
     anchor = weekly_sma50 if weekly_sma50 is not None and weekly_sma50 > 0 else last
-    width_pct = 0.04
-    lo = round(min(anchor * (1.0 - width_pct), last * 0.985), 4)
-    hi = round(max(anchor * (1.0 + width_pct * 0.5), last * 0.995), 4)
+    lo = round(anchor * (1.0 - _POSITION_ZONE_DISCOUNT), 4)
+    hi = round(anchor * (1.0 + _POSITION_ZONE_PREMIUM), 4)
     if range_lo is not None and range_hi is not None and range_hi > range_lo:
         lo = round(max(lo, range_lo), 4)
         hi = round(min(hi, range_hi), 4)
     if hi <= lo:
-        lo = round(last * 0.97, 4)
-        hi = round(last * 1.01, 4)
+        lo = round(anchor * 0.97, 4)
+        hi = round(anchor * 1.03, 4)
     return {"low": lo, "high": hi}
 
 
