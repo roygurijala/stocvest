@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import type {
   PositionOwner,
@@ -163,6 +164,20 @@ export function PositionOwnerCard({ owner, colors }: Props) {
           </p>
         ) : null}
       </div>
+
+      <Link
+        href="/dashboard/my-portfolio"
+        data-testid="position-owner-manage-link"
+        style={{
+          alignSelf: "flex-start",
+          fontSize: typography.scale.xs,
+          fontWeight: 600,
+          color: colors.accent,
+          textDecoration: "none"
+        }}
+      >
+        Manage in My Portfolio →
+      </Link>
 
       {owner.disclaimer ? (
         <p
