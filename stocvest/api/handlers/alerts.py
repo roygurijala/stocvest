@@ -22,6 +22,7 @@ _BOOL_KEYS = frozenset(
         "on_watchlist_maturation",
         "on_execution_actionable",
         "on_tracked_plan_thesis",
+        "on_portfolio_digest",
         "watchlist_only",
         "quiet_hours_enabled",
     }

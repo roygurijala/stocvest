@@ -281,9 +281,9 @@ Terraform table **`AuditEvents`**: **`pk`** = `user#{userId|anon}`, **`sk`** = `
 
 ### 4.14 User alerts — preferences + delivery history (brokers Lambda)
 
-- `GET /v1/alerts/preferences` — **authenticated**; returns **`AlertPreferences`** JSON (snake_case keys).
+- `GET /v1/alerts/preferences` — **authenticated**; returns **`AlertPreferences`** JSON (snake_case keys). Includes **`on_portfolio_digest`** (bool, default **false**) — opt-in for the daily post-close portfolio digest email (PORTFOLIO-MGMT Slice 3a; gated behind master **`email_enabled`**).
 
-- `PATCH /v1/alerts/preferences` — **authenticated**; partial JSON body merges into stored preferences.
+- `PATCH /v1/alerts/preferences` — **authenticated**; partial JSON body merges into stored preferences (accepts **`on_portfolio_digest`**).
 
 - `GET /v1/alerts/history` — **authenticated**. Query **`limit`**: integer **1–50**, default **20**. Optional **`alert_type`**: a valid **`AlertType`** value (e.g. **`watchlist_maturation`**, **`signal_fired`**). Optional **`symbols`**: comma-separated tickers (uppercased server-side; each token alphanumeric plus **`.`** / **`-`**, max length **12**, up to **50** tokens). When **`alert_type`** and/or **`symbols`** is set, the service reads up to **50** newest rows, applies filters in order (**type** then **symbol**), then returns at most **`limit`** rows. Invalid **`alert_type`** → **400** (`Invalid alert_type: '…'`). When both filters are omitted, returns the newest **`limit`** rows of any type.
 

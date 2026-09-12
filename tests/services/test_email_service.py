@@ -198,3 +198,62 @@ def test_html_execution_actionable_shows_stop_and_take_profit() -> None:
     assert "Take profit" in html_out
     assert "$23.09" in html_out
     assert "$45.00" in html_out
+
+
+def _digest_review() -> dict:
+    return {
+        "holdings": [
+            {"symbol": "AAPL", "actionLabel": "Hold", "unrealizedPlPct": 12.3, "weightPct": 45.0},
+            {"symbol": "MSFT", "actionLabel": "Trim", "unrealizedPlPct": -4.1, "weightPct": 30.0},
+        ],
+        "totalMarketValue": 12345.67,
+        "unrealizedPlPct": 8.2,
+        "benchmark": {"benchmarkSymbol": "SPY", "benchmarkReturnPct": 5.0},
+        "concentration": [{"message": "AAPL is 45% of the portfolio"}],
+        "considerAdding": [{"symbol": "NVDA", "tier": "gem", "why": "cheap + strong"}],
+        "disclaimer": "Signal data only. Not investment advice.",
+    }
+
+
+def test_portfolio_digest_html_renders_holdings_and_summary() -> None:
+    es = EmailService()
+    html_out = es._build_portfolio_digest_html(_digest_review(), base_url="https://stocvest.ai")
+    assert "AAPL" in html_out and "MSFT" in html_out
+    assert "Hold" in html_out and "Trim" in html_out
+    assert "$12,345.67" in html_out
+    assert "+8.2%" in html_out
+    assert "SPY" in html_out and "+5.0%" in html_out
+    assert "45% of the portfolio" in html_out
+    assert "NVDA" in html_out
+    assert "my-portfolio" in html_out
+    assert "Manage alert preferences" in html_out
+    assert "Not investment advice" in html_out
+
+
+def test_portfolio_digest_html_handles_empty_holdings() -> None:
+    es = EmailService()
+    html_out = es._build_portfolio_digest_html(
+        {"holdings": [], "totalMarketValue": 0.0, "unrealizedPlPct": None, "disclaimer": "x"},
+        base_url="https://stocvest.ai",
+    )
+    assert "No holdings to review" in html_out
+
+
+def test_send_portfolio_digest_skips_without_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("POSTMARK_SERVER_TOKEN", raising=False)
+    monkeypatch.setenv("STOCVEST_EMAIL_SENDER", "signals@stocvest.ai")
+    get_settings.cache_clear()
+    with patch("stocvest.services.email_service.send_postmark_html_email") as mock_send:
+        es = EmailService()
+        assert es.send_portfolio_digest_email(to_email="u@example.com", review=_digest_review()) is False
+        mock_send.assert_not_called()
+
+
+def test_send_portfolio_digest_sends_with_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("POSTMARK_SERVER_TOKEN", "pm-test-token")
+    monkeypatch.setenv("STOCVEST_EMAIL_SENDER", "signals@stocvest.ai")
+    get_settings.cache_clear()
+    with patch("stocvest.services.email_service.send_postmark_html_email", return_value=True) as mock_send:
+        es = EmailService()
+        assert es.send_portfolio_digest_email(to_email="u@example.com", review=_digest_review()) is True
+        mock_send.assert_called_once()

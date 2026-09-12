@@ -91,6 +91,10 @@ class _FakeTable:
         self._items[Item["userId"]] = Item
         return {}
 
+    def scan(self, **kwargs: dict) -> dict:
+        # Ignores projection; returns all stored items (single unpaginated page).
+        return {"Items": list(self._items.values())}
+
 
 def test_dynamo_settings_and_holdings_do_not_clobber_each_other() -> None:
     store = DynamoDBHoldingsStore(table=_FakeTable())
@@ -108,3 +112,20 @@ def test_dynamo_settings_and_holdings_do_not_clobber_each_other() -> None:
     # And removing a holding preserves settings too.
     assert store.remove_holding("u1", "AAPL") is True
     assert store.get_settings("u1").target_position_pct == 8.0
+
+
+def test_iter_users_with_holdings_in_memory() -> None:
+    store = InMemoryHoldingsStore(_by_user={})
+    store.upsert_holding("u1", _holding("AAPL"))
+    store.upsert_holding("u2", _holding("MSFT"))
+    # A user with only settings (no holdings) must not be yielded.
+    store.save_settings("u3", PortfolioSettings(cash_balance=100.0))
+    assert sorted(store.iter_users_with_holdings()) == ["u1", "u2"]
+
+
+def test_iter_users_with_holdings_dynamo_skips_empty() -> None:
+    store = DynamoDBHoldingsStore(table=_FakeTable())
+    store.upsert_holding("u1", _holding("AAPL"))
+    # Settings-only row => holdings list is empty and must be skipped.
+    store.save_settings("u2", PortfolioSettings(cash_balance=500.0))
+    assert sorted(store.iter_users_with_holdings()) == ["u1"]

@@ -327,6 +327,13 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
         )
 
     if module == "portfolio_review":
+        # PORTFOLIO-MGMT Slice 3a — EventBridge post-close digest tick reuses this module
+        # (it already has Holdings-table access + signals feature flags + a 180s timeout).
+        if isinstance(event, dict) and event.get("portfolio_digest_tick") is True:
+            from stocvest.workers.portfolio_digest import portfolio_digest_handler
+
+            return portfolio_digest_handler(event, context)
+
         from stocvest.api.handlers.portfolio_review import portfolio_review_dispatch_handler
 
         return _with_cors_and_audit(
