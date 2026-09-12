@@ -7,6 +7,8 @@ Backs the STOCVEST-managed personal portfolio (distinct from the paused broker
 - ``PUT  /v1/holdings``              → upsert one symbol's holding (its full lot set)
 - ``PUT  /v1/holdings/sync``         → replace the whole portfolio in one call
 - ``DELETE /v1/holdings/{symbol}``   → remove a symbol
+- ``GET  /v1/holdings/settings``     → portfolio settings (cash, target sizing, benchmark)
+- ``PUT  /v1/holdings/settings``     → update portfolio settings
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ from stocvest.models.portfolio_holding import (
     MAX_HOLDINGS_PER_USER,
     HoldingLot,
     PortfolioHolding,
+    PortfolioSettings,
 )
 from stocvest.utils.logging import get_logger
 
@@ -38,7 +41,7 @@ def _symbol_from_event(event: LambdaEvent) -> str | None:
     for prefix in ("DELETE /v1/holdings/", "PUT /v1/holdings/"):
         if rk.startswith(prefix):
             rest = rk[len(prefix) :].split("?")[0].strip()
-            if rest and not rest.startswith("{") and rest != "sync":
+            if rest and not rest.startswith("{") and rest not in ("sync", "settings"):
                 return rest.upper()
     return None
 
@@ -108,6 +111,31 @@ def holdings_sync_handler(event: LambdaEvent, context: LambdaContext) -> dict[st
         return bad_request(f"Invalid holdings sync: {exc}")
 
 
+def holdings_settings_get_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    _ = context
+    request_context = build_request_context(event)
+    if not request_context.user_id:
+        return unauthorized("Authenticated user is required.")
+    settings = get_holdings_store().get_settings(request_context.user_id)
+    return ok(settings.to_api())
+
+
+def holdings_settings_put_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    _ = context
+    request_context = build_request_context(event)
+    if not request_context.user_id:
+        return unauthorized("Authenticated user is required.")
+    try:
+        payload = parse_json_body(event)
+        if payload.get("userId") is not None or payload.get("user_id") is not None:
+            raise ValueError("Do not submit user id; identity is taken from your session.")
+        settings = PortfolioSettings.from_api(payload)
+        get_holdings_store().save_settings(request_context.user_id, settings)
+        return ok(settings.to_api())
+    except (TypeError, ValueError, KeyError) as exc:
+        return bad_request(f"Invalid portfolio settings: {exc}")
+
+
 def holdings_delete_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     _ = context
     request_context = build_request_context(event)
@@ -124,6 +152,10 @@ def holdings_delete_handler(event: LambdaEvent, context: LambdaContext) -> dict[
 
 def holdings_dispatch_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     rk = http_route_descriptor(event)
+    if rk == "GET /v1/holdings/settings" or rk.startswith("GET /v1/holdings/settings?"):
+        return holdings_settings_get_handler(event, context)
+    if rk == "PUT /v1/holdings/settings":
+        return holdings_settings_put_handler(event, context)
     if rk == "GET /v1/holdings" or rk.startswith("GET /v1/holdings?"):
         return holdings_list_handler(event, context)
     if rk == "PUT /v1/holdings/sync":

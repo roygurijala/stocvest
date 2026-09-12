@@ -8,6 +8,7 @@ from stocvest.models.portfolio_holding import (
     MAX_LOTS_PER_SYMBOL,
     HoldingLot,
     PortfolioHolding,
+    PortfolioSettings,
 )
 
 pytestmark = pytest.mark.unit
@@ -94,3 +95,44 @@ def test_holding_rejects_too_many_lots() -> None:
 def test_holding_accepts_iso_datetime_purchase_date() -> None:
     lot = HoldingLot.from_api(_lot(purchaseDate="2024-03-02T15:30:00Z"))
     assert lot.purchase_date == "2024-03-02"
+
+
+def test_settings_defaults() -> None:
+    s = PortfolioSettings.from_api(None)
+    assert s.cash_balance == 0.0
+    assert s.target_position_pct is None
+    assert s.benchmark_symbol == "SPY"
+    assert s.to_api() == {
+        "cashBalance": 0.0,
+        "targetPositionPct": None,
+        "benchmarkSymbol": "SPY",
+    }
+
+
+def test_settings_parses_and_normalizes() -> None:
+    s = PortfolioSettings.from_api(
+        {"cashBalance": 12345.678, "targetPositionPct": 5, "benchmarkSymbol": "qqq"}
+    )
+    assert s.cash_balance == 12345.68  # rounded to cents
+    assert s.target_position_pct == 5.0
+    assert s.benchmark_symbol == "QQQ"
+
+
+def test_settings_round_trip_through_dynamo_item() -> None:
+    s = PortfolioSettings(cash_balance=2500.0, target_position_pct=8.0, benchmark_symbol="IWM")
+    restored = PortfolioSettings.from_dynamo_item(s.to_dynamo_item())
+    assert restored == s
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"cashBalance": -1},
+        {"targetPositionPct": 0},
+        {"targetPositionPct": 100.1},
+        {"benchmarkSymbol": "not a ticker!"},
+    ],
+)
+def test_settings_rejects_invalid(bad: dict[str, object]) -> None:
+    with pytest.raises(ValueError):
+        PortfolioSettings.from_api(bad)

@@ -305,3 +305,5 @@ User-declared holdings for the STOCVEST-managed **personal** portfolio — **man
 - `PUT /v1/holdings` — upsert one symbol's holding (body = holding JSON incl. its full lot set); returns the stored holding.
 - `PUT /v1/holdings/sync` — body **`{ "holdings": [ ...holding JSON ] }`** (≤100); replaces the whole portfolio and returns it (deduped per symbol, last wins).
 - `DELETE /v1/holdings/{symbol}` — removes a symbol; **404** when not found.
+- `GET /v1/holdings/settings` — portfolio-level settings; returns **`{ cashBalance, targetPositionPct, benchmarkSymbol }`** (defaults `{ 0, null, "SPY" }` when never set). Cash + settings live in the same per-user `Holdings` item as the holdings; writing settings never clobbers holdings and vice versa.
+- `PUT /v1/holdings/settings` — body **`{ cashBalance ≥ 0, targetPositionPct (0,100] | null, benchmarkSymbol }`** (a client-supplied `userId`/`user_id` is rejected `400`); returns the stored settings. `targetPositionPct` is the target weight per position as a % of total portfolio value (holdings-at-cost + cash); `null` means no target (guidance stays directional, no suggested amounts).

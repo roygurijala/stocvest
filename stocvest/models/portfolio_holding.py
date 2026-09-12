@@ -167,3 +167,67 @@ class PortfolioHolding:
     @classmethod
     def from_dynamo_item(cls, item: dict[str, Any]) -> PortfolioHolding:
         return cls.from_api(item)
+
+
+DEFAULT_BENCHMARK_SYMBOL = "SPY"
+
+
+@dataclass(frozen=True)
+class PortfolioSettings:
+    """Portfolio-level preferences that shape the daily review's sizing guidance.
+
+    - ``cash_balance`` — dry powder available to deploy; bounds "buy more" / "add new".
+    - ``target_position_pct`` — target weight per position as a % of total portfolio
+      value (holdings at cost + cash). ``None`` means "no target set" (guidance stays
+      directional, without suggested amounts).
+    - ``benchmark_symbol`` — what the portfolio's return is compared against.
+
+    Pure data — no advice, no network. This is *not* PII beyond what holdings already
+    are; still, cash is financial data and must never be logged (see log_privacy rule).
+    """
+
+    cash_balance: float = 0.0
+    target_position_pct: float | None = None
+    benchmark_symbol: str = DEFAULT_BENCHMARK_SYMBOL
+
+    def to_api(self) -> dict[str, Any]:
+        return {
+            "cashBalance": self.cash_balance,
+            "targetPositionPct": self.target_position_pct,
+            "benchmarkSymbol": self.benchmark_symbol,
+        }
+
+    def to_dynamo_item(self) -> dict[str, Any]:
+        return _to_decimals(self.to_api())
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any] | None) -> PortfolioSettings:
+        raw = raw or {}
+        cash_raw = raw.get("cashBalance", raw.get("cash_balance", 0.0))
+        cash = float(cash_raw if cash_raw is not None else 0.0)
+        if cash < 0:
+            raise ValueError("cashBalance must be >= 0.")
+
+        tgt_raw = raw.get("targetPositionPct", raw.get("target_position_pct"))
+        target: float | None
+        if tgt_raw is None or (isinstance(tgt_raw, str) and not tgt_raw.strip()):
+            target = None
+        else:
+            target = float(tgt_raw)
+            if not (0 < target <= 100):
+                raise ValueError("targetPositionPct must be in (0, 100].")
+
+        bench_raw = raw.get("benchmarkSymbol", raw.get("benchmark_symbol"))
+        benchmark = str(bench_raw or DEFAULT_BENCHMARK_SYMBOL).strip().upper()
+        if not benchmark or not benchmark.replace(".", "").isalnum():
+            raise ValueError("benchmarkSymbol must be a plain ticker.")
+
+        return cls(
+            cash_balance=round(cash, 2),
+            target_position_pct=(round(target, 4) if target is not None else None),
+            benchmark_symbol=benchmark,
+        )
+
+    @classmethod
+    def from_dynamo_item(cls, item: dict[str, Any] | None) -> PortfolioSettings:
+        return cls.from_api(item)
