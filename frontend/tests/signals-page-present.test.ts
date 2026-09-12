@@ -48,6 +48,18 @@ describe("signals-page-present", () => {
     expect(a.total).toBe(6);
   });
 
+  test("countLayerAlignment total is desk-aware (position desk = 7 layers)", () => {
+    expect(countLayerAlignment(bearishRows, "Bearish", "swing").total).toBe(6);
+    expect(countLayerAlignment(bearishRows, "Bearish", "day").total).toBe(6);
+    const positionRows: SignalsLayerRowInput[] = [
+      { key: "fundamentals", name: "Fundamentals", status: "Bullish", explanation: "", score: 60 },
+      ...bearishRows.map((r) => ({ ...r, status: "Bullish" as const }))
+    ];
+    const pos = countLayerAlignment(positionRows, "Bullish", "position");
+    expect(pos.total).toBe(7);
+    expect(pos.aligned).toBe(7);
+  });
+
   test("resolveCompositeLayerAlignment matches Signals display line", () => {
     const neutralRows: SignalsLayerRowInput[] = bearishRows.map((r) => ({
       ...r,

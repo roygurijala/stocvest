@@ -31,7 +31,12 @@ import {
   minRiskRewardForVerdict,
   resolveTradeConvictionTier
 } from "@/lib/trade-conviction-tier";
-import { SIGNAL_LAYER_COUNT, ratioToLayerCount } from "@/lib/signal-math/contract";
+import {
+  SIGNAL_LAYER_COUNT,
+  ratioToLayerCount,
+  signalLayerCountForMode,
+  type CompositeDeskMode
+} from "@/lib/signal-math/contract";
 
 export type SignalsSetupBias = "Bullish" | "Bearish" | "Neutral";
 
@@ -262,20 +267,29 @@ export function layerRowEligibleForAlignmentCount(row: SignalsLayerRowInput): bo
 /** Six-layer total — sourced from the Signal Math Contract so it never drifts. */
 export const SIGNAL_LAYER_ALIGN_TOTAL = SIGNAL_LAYER_COUNT;
 
-/** Map composite `alignment_ratio` (0–1) to a whole-layer X/6 count (Signal Math Contract). */
+/** Map composite `alignment_ratio` (0–1) to a whole-layer X/N count (Signal Math Contract). */
 export function alignedLayersFromAlignmentRatio(
   alignmentRatio: number | null | undefined,
-  total = SIGNAL_LAYER_ALIGN_TOTAL
+  total: number = SIGNAL_LAYER_ALIGN_TOTAL
 ): number | null {
   if (alignmentRatio == null || !Number.isFinite(alignmentRatio)) return null;
   return ratioToLayerCount(alignmentRatio, total);
 }
 
+/**
+ * Layer alignment denominator for a desk. Swing/day use the canonical six-layer set;
+ * the position (long-term) desk adds scored fundamentals for seven (Signal Math Contract).
+ */
+export function layerAlignmentTotalForMode(mode?: CompositeDeskMode | null): number {
+  return mode ? signalLayerCountForMode(mode) : SIGNAL_LAYER_ALIGN_TOTAL;
+}
+
 export function countLayerAlignment(
   rows: SignalsLayerRowInput[],
-  bias: SignalsSetupBias
+  bias: SignalsSetupBias,
+  mode?: CompositeDeskMode | null
 ): { aligned: number; total: number; label: string } {
-  const total = SIGNAL_LAYER_ALIGN_TOTAL;
+  const total = layerAlignmentTotalForMode(mode);
   if (bias === "Neutral") {
     const neutralish = rows.filter(
       (r) =>
@@ -308,6 +322,7 @@ export function resolveSignalsLayerAlignment(input: {
   bias: SignalsSetupBias;
   alignmentRatio?: number | null;
   compositeDirection?: CompositeDirectionFields | null;
+  mode?: CompositeDeskMode | null;
 }): { aligned: number; total: number; label: string } {
   const dir = input.compositeDirection;
   if (input.bias === "Neutral" && dir) {
@@ -326,18 +341,18 @@ export function resolveSignalsLayerAlignment(input: {
     return { aligned: dir.consistency, total: dir.total, label };
   }
   if (input.bias === "Neutral") {
-    const fromRatio = alignedLayersFromAlignmentRatio(input.alignmentRatio);
+    const total = layerAlignmentTotalForMode(input.mode);
+    const fromRatio = alignedLayersFromAlignmentRatio(input.alignmentRatio, total);
     if (fromRatio != null) {
-      const total = SIGNAL_LAYER_ALIGN_TOTAL;
       return {
         aligned: fromRatio,
         total,
         label: fromRatio >= 4 ? "Mostly neutral" : "Mixed direction"
       };
     }
-    return countLayerAlignment(input.rows, input.bias);
+    return countLayerAlignment(input.rows, input.bias, input.mode);
   }
-  return countLayerAlignment(input.rows, input.bias);
+  return countLayerAlignment(input.rows, input.bias, input.mode);
 }
 
 /** Canonical X/6 + display line for composite-backed surfaces (Signals, Evidence, Scenario). */
@@ -347,12 +362,14 @@ export function resolveCompositeLayerAlignment(input: {
   alignmentRatio?: number | null;
   maturationState?: string | null;
   compositeDirection?: CompositeDirectionFields | null;
+  mode?: CompositeDeskMode | null;
 }): { aligned: number; total: number; label: string; displayLine: string } {
   const alignment = resolveSignalsLayerAlignment({
     rows: input.rows,
     bias: input.bias,
     alignmentRatio: input.alignmentRatio,
-    compositeDirection: input.compositeDirection
+    compositeDirection: input.compositeDirection,
+    mode: input.mode
   });
   return {
     ...alignment,
