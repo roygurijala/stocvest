@@ -16,6 +16,10 @@ from stocvest.api.services.position_scan import (
     reset_position_scan_cache_for_tests,
     run_position_scan_async,
 )
+from stocvest.api.services.position_scan_store import (
+    InMemoryPositionScanStore,
+    reset_position_scan_store_for_tests,
+)
 from stocvest.signals.position_gem_gates import TIER_GEM, TIER_MONITOR
 
 pytestmark = pytest.mark.unit
@@ -174,6 +178,7 @@ def test_snapshot_sync_caches_and_forces(monkeypatch: pytest.MonkeyPatch) -> Non
     import datetime as _dt
 
     reset_position_scan_cache_for_tests()
+    reset_position_scan_store_for_tests(InMemoryPositionScanStore())
     calls = {"n": 0}
 
     def fake_scan(**_kwargs) -> PositionScanSnapshot:
@@ -196,3 +201,33 @@ def test_snapshot_sync_caches_and_forces(monkeypatch: pytest.MonkeyPatch) -> Non
     assert cached3 is False and calls["n"] == 2
 
     reset_position_scan_cache_for_tests()
+    reset_position_scan_store_for_tests(None)
+
+
+def test_snapshot_sync_hydrates_from_store_without_rescan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cold in-process cache must serve the persisted weekly snapshot, not compose 25 names."""
+    import datetime as _dt
+
+    reset_position_scan_cache_for_tests()
+    store = InMemoryPositionScanStore()
+    stored = PositionScanSnapshot(
+        generated_at=_dt.datetime(2026, 9, 8, tzinfo=_dt.timezone.utc),
+        universe_size=25,
+        candidates=rank_candidates([_body("HIGH", fund_score=90, rs=5.0)]),
+    )
+    store.put(stored)
+    reset_position_scan_store_for_tests(store)
+    calls = {"n": 0}
+
+    def fake_scan(**_kwargs) -> PositionScanSnapshot:
+        calls["n"] += 1
+        raise AssertionError("request path must not live-scan when a store snapshot exists")
+
+    monkeypatch.setattr(scan_mod, "run_position_scan", fake_scan)
+    snap, cached = get_position_scan_snapshot_sync()
+    assert cached is True and calls["n"] == 0
+    assert snap.universe_size == 25
+    assert [c.symbol for c in snap.candidates] == ["HIGH"]
+
+    reset_position_scan_cache_for_tests()
+    reset_position_scan_store_for_tests(None)
