@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
 import pytest
@@ -262,7 +262,7 @@ def test_earnings_within_window_surfaces_watch_item() -> None:
     b["earnings_risk"] = "watch"
     b["earnings_days_away"] = 5
     b["upcoming_earnings_date"] = "2026-09-17"
-    packet = build_position_thesis_packet(b)
+    packet = build_position_thesis_packet(b, as_of=date(2026, 9, 12))
     texts = " ".join(q.text for q in packet.open_questions).lower()
     assert "earnings in 5 days" in texts
     assert "2026-09-17" in texts
@@ -306,7 +306,7 @@ def test_msft_46d_earnings_never_says_tomorrow() -> None:
     b["upcoming_earnings_date"] = "2026-10-28"
     b["earnings_days_away"] = 46
     b["earnings_risk"] = "normal"
-    packet = build_position_thesis_packet(b)
+    packet = build_position_thesis_packet(b, as_of=date(2026, 9, 12))
     texts = " ".join(q.text for q in packet.open_questions).lower()
     assert "tomorrow" not in texts
     assert "imminent" not in texts
@@ -331,7 +331,7 @@ def test_earnings_today_not_tomorrow() -> None:
     b["earnings_risk"] = "imminent"
     b["earnings_days_away"] = 0
     b["upcoming_earnings_date"] = "2026-09-12"
-    packet = build_position_thesis_packet(b)
+    packet = build_position_thesis_packet(b, as_of=date(2026, 9, 12))
     texts = " ".join(q.text for q in packet.open_questions).lower()
     assert "today" in texts
     assert "tomorrow" not in texts
@@ -356,3 +356,17 @@ def test_fund_vehicle_does_not_ask_for_filings() -> None:
     assert "operating company" in " ".join(q.text.lower() for q in packet.open_questions)
     assert "reads neutral on fundamentals" not in read
     assert "10-k" in read or "vehicle" in read
+
+
+def test_omitted_as_of_still_reconciles_stale_days_against_utc_today() -> None:
+    """Forgetting as_of must not keep a stale day count when a report date is present."""
+    b = _body()
+    b["upcoming_earnings_date"] = "2026-10-28"
+    b["earnings_days_away"] = 64
+    packet = build_position_thesis_packet(b)
+    expected = (date(2026, 10, 28) - datetime.now(timezone.utc).date()).days
+    if expected >= 0:
+        assert packet.earnings_days_away == expected
+        assert packet.earnings_days_away != 64
+    else:
+        assert packet.earnings_days_away is None

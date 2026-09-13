@@ -7,6 +7,7 @@ inside). This backs the manual portfolio the daily review reads.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Protocol
@@ -41,7 +42,32 @@ class HoldingsStore(Protocol):
     # on the same per-user item as the holdings, so any holdings/settings write (a full
     # item rewrite) drops it automatically — the cache is never served for stale holdings.
     def get_cached_review(self, user_id: str) -> tuple[dict[str, Any] | None, str | None]: ...
-    def put_cached_review(self, user_id: str, review: dict[str, Any], cached_at: str) -> None: ...
+    def put_cached_review(
+        self,
+        user_id: str,
+        review: dict[str, Any],
+        cached_at: str,
+        *,
+        source: str | None = None,
+    ) -> None: ...
+
+
+def holdings_settings_fingerprint(
+    holdings: tuple[PortfolioHolding, ...] | list[PortfolioHolding],
+    settings: PortfolioSettings,
+) -> str:
+    """Stable hash of the holdings + settings a review was computed from.
+
+    Stored beside the cached review so a background compute that finishes *after*
+    a holdings/settings/split write cannot be served (``put_item`` drops the cache,
+    but ``update_item`` can write it back). Compare on read; mismatch → cache miss.
+    """
+    payload = {
+        "holdings": [h.to_api() for h in sorted(holdings, key=lambda row: row.symbol)],
+        "settings": settings.to_api(),
+    }
+    raw = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def _dedupe(holdings: tuple[PortfolioHolding, ...]) -> tuple[PortfolioHolding, ...]:
@@ -57,7 +83,9 @@ def _dedupe(holdings: tuple[PortfolioHolding, ...]) -> tuple[PortfolioHolding, .
 class InMemoryHoldingsStore:
     _by_user: dict[str, tuple[PortfolioHolding, ...]]
     _settings_by_user: dict[str, PortfolioSettings] = field(default_factory=dict)
-    _review_cache_by_user: dict[str, tuple[dict[str, Any], str]] = field(default_factory=dict)
+    _review_cache_by_user: dict[str, tuple[dict[str, Any], str, str | None]] = field(
+        default_factory=dict
+    )
 
     def list_holdings(self, user_id: str) -> tuple[PortfolioHolding, ...]:
         return self._by_user.get(user_id, ())
@@ -106,10 +134,22 @@ class InMemoryHoldingsStore:
         entry = self._review_cache_by_user.get(user_id)
         if entry is None:
             return None, None
-        return entry[0], entry[1]
+        review, cached_at, source = entry
+        if source:
+            current = holdings_settings_fingerprint(self.list_holdings(user_id), self.get_settings(user_id))
+            if source != current:
+                return None, None
+        return review, cached_at
 
-    def put_cached_review(self, user_id: str, review: dict[str, Any], cached_at: str) -> None:
-        self._review_cache_by_user[user_id] = (review, cached_at)
+    def put_cached_review(
+        self,
+        user_id: str,
+        review: dict[str, Any],
+        cached_at: str,
+        *,
+        source: str | None = None,
+    ) -> None:
+        self._review_cache_by_user[user_id] = (review, cached_at, source)
 
 
 @dataclass
@@ -120,6 +160,7 @@ class DynamoDBHoldingsStore:
     settings_key: str = "settings"
     review_cache_key: str = "reviewCache"
     review_cached_at_key: str = "reviewCachedAt"
+    review_cache_source_key: str = "reviewCacheSource"
 
     @classmethod
     def from_boto3_table(
@@ -251,20 +292,40 @@ class DynamoDBHoldingsStore:
             return None, None
         if not isinstance(review, dict):
             return None, None
+        stored_source = item.get(self.review_cache_source_key)
+        if stored_source:
+            holdings = self._holdings_from_item(item, self.holdings_key)
+            settings = PortfolioSettings.from_dynamo_item(item.get(self.settings_key))
+            current = holdings_settings_fingerprint(holdings, settings)
+            if str(stored_source) != current:
+                return None, None
         return review, (str(cached_at) if cached_at else None)
 
-    def put_cached_review(self, user_id: str, review: dict[str, Any], cached_at: str) -> None:
+    def put_cached_review(
+        self,
+        user_id: str,
+        review: dict[str, Any],
+        cached_at: str,
+        *,
+        source: str | None = None,
+    ) -> None:
         # Stored as a JSON string so the review's floats round-trip without DynamoDB's
         # Decimal coercion. Written with update_item so it never disturbs holdings/settings;
         # the next holdings/settings write is a full put_item that drops it (invalidation).
+        # ``source`` is the fingerprint of the holdings+settings used to compute the
+        # review — get_cached_review refuses a write that lost the race with a later save.
+        names = {"#rc": self.review_cache_key, "#ra": self.review_cached_at_key}
+        values: dict[str, Any] = {":rc": json.dumps(review), ":ra": cached_at}
+        expr = "SET #rc = :rc, #ra = :ra"
+        if source:
+            names["#rs"] = self.review_cache_source_key
+            values[":rs"] = source
+            expr += ", #rs = :rs"
         self.table.update_item(
             Key={self.user_key: user_id},
-            UpdateExpression="SET #rc = :rc, #ra = :ra",
-            ExpressionAttributeNames={
-                "#rc": self.review_cache_key,
-                "#ra": self.review_cached_at_key,
-            },
-            ExpressionAttributeValues={":rc": json.dumps(review), ":ra": cached_at},
+            UpdateExpression=expr,
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
         )
 
 
