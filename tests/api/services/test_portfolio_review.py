@@ -10,6 +10,7 @@ import pytest
 from stocvest.api.services.portfolio_review import (
     BenchmarkComparison,
     ReviewAction,
+    _SIZING_RULE,
     _build_spy_close_lookup,
     apply_stance_sizing,
     build_owner_position_context,
@@ -19,9 +20,11 @@ from stocvest.api.services.portfolio_review import (
     derive_action,
     resolve_current_price,
     resolve_effective_target_pct,
+    sizing_reason,
     suggested_add_amount,
     suggested_reduce_amount,
     tax_lot_hint,
+    unfilled_gap_dollars,
 )
 from stocvest.models.portfolio_holding import (
     HoldingLot,
@@ -233,6 +236,88 @@ def test_apply_stance_sizing_buy_more_no_cash_says_no_cash():
     assert "already at/over target" not in note.lower()
 
 
+def test_sizing_reason_sell_under_target():
+    reason = sizing_reason(
+        action=ReviewAction.SELL,
+        target_pct=9.0909,
+        weight_pct=4.2,
+        suggested_add=None,
+        suggested_reduce=7100.0,
+        portfolio_value=168000.0,
+        stance="defensive",
+    )
+    assert reason == (
+        "Sell overrides the target: reducing the full position even though "
+        "weight is below the ~9.1% target."
+    )
+
+
+def test_sizing_reason_hold_caution_under_target_names_unfilled_gap():
+    reason = sizing_reason(
+        action=ReviewAction.HOLD,
+        target_pct=9.1,
+        weight_pct=5.0,
+        suggested_add=None,
+        suggested_reduce=None,
+        portfolio_value=168000.0,
+        stance="caution",
+    )
+    gap = unfilled_gap_dollars(target_pct=9.1, weight_pct=5.0, portfolio_value=168000.0)
+    assert gap == round((9.1 - 5.0) / 100.0 * 168000.0, 2)
+    assert reason == (
+        "Hold + caution: not adding toward the ~9.1% target (thin R/R). "
+        f"Gap to target would be ~${gap:,.2f}."
+    )
+
+
+def test_sizing_reason_hold_over_target_trims_excess():
+    reason = sizing_reason(
+        action=ReviewAction.HOLD,
+        target_pct=9.1,
+        weight_pct=14.0,
+        suggested_add=None,
+        suggested_reduce=8200.0,
+        portfolio_value=168000.0,
+        stance="caution",
+    )
+    assert reason == "Over the ~9.1% target — trimming the excess only."
+
+
+def test_sizing_reason_buy_more_adds_gap():
+    reason = sizing_reason(
+        action=ReviewAction.BUY_MORE,
+        target_pct=9.1,
+        weight_pct=5.0,
+        suggested_add=400.0,
+        suggested_reduce=None,
+        portfolio_value=168000.0,
+        stance="constructive",
+    )
+    assert reason == "Under the ~9.1% target — adding the gap (cash-capped)."
+
+
+def test_sizing_reason_at_target_or_no_change():
+    at_target = sizing_reason(
+        action=ReviewAction.HOLD,
+        target_pct=9.1,
+        weight_pct=9.1,
+        suggested_add=None,
+        suggested_reduce=None,
+        portfolio_value=168000.0,
+        stance="constructive",
+    )
+    assert at_target == "At the ~9.1% target"
+    no_change = sizing_reason(
+        action=ReviewAction.REVIEW,
+        target_pct=None,
+        weight_pct=5.0,
+        suggested_add=None,
+        suggested_reduce=None,
+        portfolio_value=168000.0,
+    )
+    assert no_change == "No size change."
+
+
 # ── tax-lot hint ─────────────────────────────────────────────────────────────
 
 def test_tax_lot_hint_mixed_lots_on_sell():
@@ -363,6 +448,8 @@ def test_build_portfolio_review_end_to_end():
     payload = review.to_api()
     assert payload["holdings"][0]["action"] in {"hold", "sell", "buy_more", "trim", "review"}
     assert payload["disclaimer"]
+    assert payload["sizingRule"] == _SIZING_RULE
+    assert "sizingReason" in payload["holdings"][0]
 
 
 def test_owner_context_priced_bullish():
@@ -710,6 +797,64 @@ def test_hold_caution_under_target_does_not_add():
     assert row.overweight is False
     assert row.suggested_add_amount is None
     assert row.suggested_reduce_amount is None
+    assert row.weight_pct is not None and row.effective_target_pct is not None
+    gap = unfilled_gap_dollars(
+        target_pct=row.effective_target_pct,
+        weight_pct=row.weight_pct,
+        portfolio_value=review.total_market_value,
+    )
+    assert gap is not None and gap > 0
+    assert row.sizing_reason == (
+        f"Hold + caution: not adding toward the ~{row.effective_target_pct:.1f}% "
+        f"target (thin R/R). Gap to target would be ~${gap:,.2f}."
+    )
+    payload = review.to_api()
+    assert payload["holdings"][0]["sizingReason"] == row.sizing_reason
+    assert payload["holdings"][0]["suggestedAddAmount"] is None
+
+
+def test_sell_under_target_reduces_full_market_value():
+    """Bearish + defensive → SELL; reduce full MV even when weight is below target."""
+    holdings = (_holding("ARKQ", [(1, 10.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=900.0, target_position_pct=50.0)
+    prices = {"ARKQ": _Snap(last_trade_price=100.0), "SPY": _Snap(last_trade_price=500.0)}
+    bodies = {
+        "ARKQ": {
+            "status": "ok",
+            "signal_summary": "bearish",
+            "signal_structure_broken": True,
+            "risk_reward": 1.0,
+            "min_rr_desk": 2.0,
+        }
+    }
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    row = review.holdings[0]
+    assert row.action == ReviewAction.SELL
+    assert row.overweight is False
+    assert row.suggested_add_amount is None
+    assert row.suggested_reduce_amount == 100.0  # full MV, not the underweight gap
+    assert row.weight_pct is not None and row.effective_target_pct is not None
+    assert row.weight_pct < row.effective_target_pct
+    assert row.sizing_reason == (
+        "Sell overrides the target: reducing the full position even though "
+        f"weight is below the ~{row.effective_target_pct:.1f}% target."
+    )
+    payload = review.to_api()
+    assert payload["holdings"][0]["sizingReason"] == row.sizing_reason
+    assert payload["holdings"][0]["suggestedReduceAmount"] == 100.0
 
 
 def test_vehicle_overweight_uses_same_gap_not_f1f5():

@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, test, vi } from "vitest";
 import { PortfolioReviewPanel } from "@/components/portfolio/portfolio-review-panel";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { PortfolioReview } from "@/lib/portfolio/review-types";
+import { PORTFOLIO_REVIEW_SIZING_RULE } from "@/lib/portfolio/review-types";
 
 const fetchMock = vi.fn();
 vi.mock("@/lib/api/fetch-portfolio-review-client", () => ({
@@ -109,6 +110,7 @@ function sampleReview(): PortfolioReview {
     fullyPriced: true,
     effectiveTargetPct: 50,
     targetIsDefault: false,
+    sizingRule: PORTFOLIO_REVIEW_SIZING_RULE,
     disclaimer: "Informational review — not advice."
   };
 }
@@ -137,6 +139,39 @@ describe("PortfolioReviewPanel", () => {
     expect(screen.getByText(/add ~\$150/)).toBeInTheDocument();
     expect(screen.getByText(/reduce ~\$99/)).toBeInTheDocument();
     expect(screen.queryByTestId("review-default-target")).not.toBeInTheDocument();
+    expect(screen.getByTestId("review-sizing-rule")).toHaveTextContent(
+      /If the verdict is Sell, reduce the position even when it is below target/
+    );
+  });
+
+  test("shows a sell-under-target reason under the reduce badge", async () => {
+    const review = sampleReview();
+    review.holdings = [
+      {
+        ...review.holdings[1],
+        symbol: "ARKQ",
+        action: "sell",
+        actionLabel: "Sell",
+        weightPct: 4.2,
+        suggestedAddAmount: null,
+        suggestedReduceAmount: 7100,
+        sizingReason:
+          "Sell overrides the target: reducing the full position even though weight is below the ~9.1% target."
+      }
+    ];
+    fetchMock.mockResolvedValueOnce({ ok: true, review });
+    wrap(<PortfolioReviewPanel />);
+
+    fireEvent.click(screen.getByTestId("run-review"));
+
+    await waitFor(() => expect(screen.getByTestId("review-row-ARKQ")).toBeInTheDocument());
+    expect(screen.getByText(/reduce ~\$7,100/)).toBeInTheDocument();
+    expect(screen.getByTestId("sizing-reason-ARKQ")).toHaveTextContent(
+      /Sell overrides the target: reducing the full position even though weight is below the ~9\.1% target/
+    );
+    expect(screen.getByTestId("review-sizing-rule")).toHaveTextContent(
+      /If Hold\/Neutral and caution, do not add toward target/
+    );
   });
 
   test("shows a muted default-target line when the review uses the personal default", async () => {
