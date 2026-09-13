@@ -309,7 +309,13 @@ resource "aws_lambda_function" "api" {
   handler       = "handler.lambda_handler"
   runtime       = "python3.11"
   timeout       = each.key == "scanner" ? 300 : each.key == "signal_resolution" ? 120 : each.key == "news_consumer" ? 120 : each.key == "geo_themes" ? 30 : each.key == "macro_warmer" ? 60 : each.key == "sector_daily_cache" ? 120 : each.key == "market_pulse_refresher" ? 15 : each.key == "laggard_jobs" ? 120 : each.key == "news_event_study_report" ? 300 : each.key == "portfolio_review" ? 180 : 60
-  memory_size   = each.key == "geo_themes" ? 256 : each.key == "orb_compute" ? 256 : each.key == "macro_warmer" ? 256 : each.key == "sector_daily_cache" ? 512 : each.key == "market_pulse_refresher" ? 256 : each.key == "laggard_jobs" ? 256 : 512
+  # portfolio_review composites every holding through the Long-Term engine in one
+  # request. That work is CPU-bound and asyncio is single-threaded, so at 512 MB
+  # (~0.36 vCPU) an 11-holding portfolio took ~35-51s and blew past the API Gateway
+  # HTTP-API integration timeout (~29-30s) → 504 "Could not run the review". 1769 MB
+  # gives a full vCPU (~2x faster here; more memory plateaus since a single asyncio
+  # thread can't use extra cores), bringing a warm run to ~25s under the cap.
+  memory_size = each.key == "geo_themes" ? 256 : each.key == "orb_compute" ? 256 : each.key == "macro_warmer" ? 256 : each.key == "sector_daily_cache" ? 512 : each.key == "market_pulse_refresher" ? 256 : each.key == "laggard_jobs" ? 256 : each.key == "portfolio_review" ? 1769 : 512
 
   filename         = data.archive_file.api_lambda_placeholder.output_path
   source_code_hash = data.archive_file.api_lambda_placeholder.output_base64sha256
