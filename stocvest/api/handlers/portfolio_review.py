@@ -57,7 +57,7 @@ def _build_ai_read_fn(user_id: str) -> Callable[[str, dict[str, Any]], Awaitable
     if profile is None or not profile.has_ai_explanations:
         return None
 
-    from stocvest.signals.ai_explanations import AIExplanationService
+    from stocvest.signals.ai_explanations import AIExplanationService, position_review_read_kwargs
 
     svc = AIExplanationService()
 
@@ -65,6 +65,7 @@ def _build_ai_read_fn(user_id: str) -> Callable[[str, dict[str, Any]], Awaitable
         packet = body.get("position_thesis_packet")
         packet = packet if isinstance(packet, dict) else {}
         verdict = str(body.get("signal_summary") or body.get("verdict") or "neutral")
+        extras = position_review_read_kwargs(body)
         result = await svc.explain_position_setup_read(
             symbol=symbol,
             verdict=verdict,
@@ -73,7 +74,9 @@ def _build_ai_read_fn(user_id: str) -> Callable[[str, dict[str, Any]], Awaitable
             open_questions=_bullets(packet.get("open_questions")),
             pillar_snapshot_hash=str(packet.get("pillar_snapshot_hash") or ""),
             user_profile=profile,
-            fundamentals_covered=bool(packet.get("fundamentals_covered", True)),
+            fundamentals_covered=bool(packet.get("fundamentals_covered", True))
+            and not extras["is_fund_vehicle"],
+            **extras,
         )
         return result.text
 

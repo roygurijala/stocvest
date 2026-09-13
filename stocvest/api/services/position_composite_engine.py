@@ -32,7 +32,11 @@ from stocvest.api.services.swing_news_source import (
 from stocvest.api.services.sector_cache_dynamo import DynamoSectorCache
 from stocvest.config.parameter_store import ParameterStore
 from stocvest.config.signal_parameters import SignalParameters
-from stocvest.data.earnings_calendar import merge_earnings_horizon_into_response, resolve_upcoming_earnings_horizon
+from stocvest.data.earnings_calendar import (
+    POSITION_EARNINGS_WINDOW_DAYS,
+    merge_earnings_horizon_into_response,
+    resolve_upcoming_earnings_horizon,
+)
 from stocvest.data.fundamentals_provider import (
     FundamentalsProviderMock,
     fetch_position_fundamentals_snapshot,
@@ -250,7 +254,9 @@ async def build_position_composite_response(
             except (PolygonError, Exception) as exc:
                 _LOG.warning("position sector chain failed for %s: %s", sym, exc)
 
-        earnings_horizon = await resolve_upcoming_earnings_horizon(sym, polygon_client=client)
+        earnings_horizon = await resolve_upcoming_earnings_horizon(
+            sym, polygon_client=client, window_days=POSITION_EARNINGS_WINDOW_DAYS
+        )
 
     spy_weekly = aggregate_daily_to_weekly_bars(spy_daily_bars, "SPY")
     snap_for_tech = sym_snap if sym_snap is not None else Snapshot(symbol=sym)
@@ -364,6 +370,10 @@ async def build_position_composite_response(
             "mode": "position",
             "position_fundamentals": fundamentals.to_api_dict(),
         }
+        if ticker_ref is not None:
+            insufficient_body["instrument_type"] = ticker_ref.security_type
+            insufficient_body["is_fund_vehicle"] = ticker_ref.is_fund_vehicle()
+        merge_earnings_horizon_into_response(insufficient_body, earnings_horizon)
         insufficient_body["position_thesis_packet"] = build_position_thesis_packet(
             insufficient_body
         ).to_api_dict()
@@ -502,6 +512,9 @@ async def build_position_composite_response(
         layers=layers_out,
     )
     merge_earnings_horizon_into_response(response_body, earnings_horizon)
+    if ticker_ref is not None:
+        response_body["instrument_type"] = ticker_ref.security_type
+        response_body["is_fund_vehicle"] = ticker_ref.is_fund_vehicle()
 
     response_body["fundamental_context"] = None
     if user_id:

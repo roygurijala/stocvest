@@ -167,6 +167,7 @@ def test_ai_read_fn_narrates_for_paid_user(monkeypatch):
         async def explain_position_setup_read(self, **kwargs):
             assert kwargs["symbol"] == "AAPL"
             assert kwargs["verdict"] == "bullish"
+            assert kwargs["audience"] == "holder"
             return _Result()
 
     import stocvest.signals.ai_explanations as ai_mod

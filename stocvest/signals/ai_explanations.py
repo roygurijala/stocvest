@@ -29,6 +29,53 @@ from stocvest.utils.redis_client import get_sync_redis
 
 _LOG = get_logger(__name__)
 
+_HOLDER_ENTRY_PHRASES = (
+    "don't initiate",
+    "do not initiate",
+    "no position until",
+    "don't buy today",
+    "do not buy today",
+    "not a buy today",
+)
+
+
+def _holder_read_uses_entry_language(text: str | None) -> bool:
+    """True when a holder-audience read slips into entry/screening language."""
+    low = (text or "").strip().lower()
+    if not low:
+        return False
+    return any(phrase in low for phrase in _HOLDER_ENTRY_PHRASES)
+
+
+def _as_optional_int(value: object) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def position_review_read_kwargs(body: dict[str, Any]) -> dict[str, Any]:
+    """Extras the portfolio-review AI path forwards into ``explain_position_setup_read``."""
+    packet = body.get("position_thesis_packet")
+    packet = packet if isinstance(packet, dict) else {}
+    next_date = (
+        str(packet.get("next_earnings_date") or body.get("upcoming_earnings_date") or "").strip()
+        or None
+    )
+    days = _as_optional_int(packet.get("earnings_days_away"))
+    if days is None:
+        days = _as_optional_int(body.get("earnings_days_away"))
+    return {
+        "audience": "holder",
+        "is_fund_vehicle": bool(body.get("is_fund_vehicle") or packet.get("is_fund_vehicle")),
+        "next_earnings_date": next_date,
+        "earnings_days_away": days,
+        "review_action": str(body.get("review_action") or "").strip().lower() or None,
+        "holder_stance": str(body.get("holder_stance") or "").strip().lower() or None,
+    }
+
 ExplanationSource = Literal["ai", "deterministic"]
 
 _memory_cache: dict[str, tuple[float, "ExplanationResult"]] = {}
@@ -271,6 +318,12 @@ class AIExplanationService:
         pillar_snapshot_hash: str,
         user_profile: UserProfile,
         fundamentals_covered: bool = True,
+        audience: str = "entry",
+        is_fund_vehicle: bool = False,
+        next_earnings_date: str | None = None,
+        earnings_days_away: int | None = None,
+        review_action: str | None = None,
+        holder_stance: str | None = None,
     ) -> ExplanationResult:
         """Long-horizon Investment Read for the Position deep-dive (ADR-004 POS-AI-2).
 
@@ -282,8 +335,22 @@ class AIExplanationService:
         """
         sym = symbol.strip().upper()
         v = (verdict or "neutral").strip().lower() or "neutral"
+        aud = (audience or "entry").strip().lower()
+        if aud not in ("entry", "holder"):
+            aud = "entry"
+        vehicle = bool(is_fund_vehicle)
+        covered = bool(fundamentals_covered) and not vehicle
         det = self._deterministic_position_read(
-            sym, v, bull_case, bear_case, open_questions, fundamentals_covered=fundamentals_covered
+            sym,
+            v,
+            bull_case,
+            bear_case,
+            open_questions,
+            fundamentals_covered=covered,
+            audience=aud,
+            is_fund_vehicle=vehicle,
+            review_action=review_action,
+            holder_stance=holder_stance,
         )
 
         if not user_profile.has_ai_explanations:
@@ -293,41 +360,81 @@ class AIExplanationService:
 
         ny_date = _ny_calendar_date()
         h = (pillar_snapshot_hash or "nohash").strip() or "nohash"
-        key = f"stocvest:ai_explain:position_read:{sym}:{v}:{ny_date}:{h}"
+        key = f"stocvest:ai_explain:position_read:{sym}:{v}:{ny_date}:{h}:{aud}"
 
         hit = await self._cache_read(key)
         if hit is not None:
             return hit
 
-        # PERSONAL-MODE: allow a plain buy/watch/avoid stance for the operator's private tool
+        # PERSONAL-MODE: allow a plain stance for the operator's private tool
         # (still no hype, no return guarantees, no price targets/sizing). Product mode keeps
         # the strict POS-D12 "never give investment advice" instruction.
+        # Holder audience must never use entry language (buy/watch/avoid / don't initiate).
         personal_mode = bool(get_settings().stocvest_personal_advice_mode_enabled)
-        advice_clause = (
-            (
-                "This is a private tool for a single operator, so you MAY end with a clear "
-                "personal stance (buy / watch / avoid) grounded strictly in the points above — "
-                "but never hype, never guarantee returns, and give no price targets or "
-                "position-sizing. "
+        if aud == "holder":
+            advice_clause = (
+                (
+                    "The reader ALREADY HOLDS this name. You MAY end with a holder stance "
+                    "(hold / trim / add-on-weakness / review) grounded in the points above — "
+                    "never buy/watch/avoid, never 'don't initiate', never 'no position until', "
+                    "never 'don't buy today'. Align with the provided review_action and "
+                    "holder_stance. Never hype, never guarantee returns, no price targets or "
+                    "position-sizing. "
+                )
+                if personal_mode
+                else (
+                    "The reader ALREADY HOLDS this name. Never give investment advice: no "
+                    "buy/sell/hold directives, no price targets, no allocation. Do not write "
+                    "entry language ('don't initiate', 'no position until', 'don't buy today'). "
+                )
             )
-            if personal_mode
-            else (
-                "Never give investment advice: no buy/sell/hold, no price targets, no "
-                "allocation or position-sizing guidance. "
+            voice = (
+                "Write a holder-management Investment Read (trim / hold / add-on-weakness), "
+                "NOT an entry screen. "
             )
+        else:
+            advice_clause = (
+                (
+                    "This is a private tool for a single operator, so you MAY end with a clear "
+                    "personal stance (buy / watch / avoid) grounded strictly in the points above — "
+                    "but never hype, never guarantee returns, and give no price targets or "
+                    "position-sizing. "
+                )
+                if personal_mode
+                else (
+                    "Never give investment advice: no buy/sell/hold, no price targets, no "
+                    "allocation or position-sizing guidance. "
+                )
+            )
+            voice = (
+                "Write 3-5 sentences in a natural, varied voice — never a template. "
+            )
+        vehicle_clause = (
+            "This symbol is a fund/ETF vehicle — do not discuss 10-Ks, corporate filings, "
+            "or F1–F5 as if it were an operating company. "
+            if vehicle
+            else ""
+        )
+        earnings_clause = (
+            "Never claim earnings are today, tomorrow, or imminent unless earnings_days_away "
+            "is 0 (today) or 1 (tomorrow). If next_earnings_date is none, say the date is "
+            "unavailable — do not invent one. "
         )
 
         text_ai = await self._claude_text_or_none(
             system=(
                 "You are a long-horizon investment research analyst writing a short Investment "
                 "Read for the Long Term desk (multi-year quality holdings, NOT day/swing trades). "
-                "Write 3-5 sentences in a natural, varied voice — never a template. Narrate ONLY "
-                "the provided bull points, bear/watch points, and open questions; do not invent "
-                "data. Reference the specific pillars by name (F1 profitability/quality, F2 growth, "
-                "F3 balance sheet, F4 valuation, F5 earnings quality) or supporting layers when "
-                "citing a point. Lead with what actually stands out for THIS company, name the key "
-                "risk or open question, and surface uncertainty where data quality is limited. "
-                "Do NOT mention numeric scores or percentages. " + advice_clause
+                + voice
+                + "Narrate ONLY the provided bull points, bear/watch points, and open questions; "
+                "do not invent data. Reference the specific pillars by name (F1 profitability/quality, "
+                "F2 growth, F3 balance sheet, F4 valuation, F5 earnings quality) or supporting layers "
+                "when citing a point — unless this is a fund/ETF vehicle. Lead with what actually "
+                "stands out, name the key risk or open question, and surface uncertainty where data "
+                "quality is limited. Do NOT mention numeric scores or percentages. "
+                + vehicle_clause
+                + earnings_clause
+                + advice_clause
                 + "End with exactly: Signal data only."
             ),
             user_prompt=self._build_position_read_prompt(
@@ -336,6 +443,12 @@ class AIExplanationService:
                 bull_case=bull_case,
                 bear_case=bear_case,
                 open_questions=open_questions,
+                audience=aud,
+                is_fund_vehicle=vehicle,
+                next_earnings_date=next_earnings_date,
+                earnings_days_away=earnings_days_away,
+                review_action=review_action,
+                holder_stance=holder_stance,
             ),
             max_tokens=280,
             temperature=0.6,
@@ -350,6 +463,9 @@ class AIExplanationService:
         # POS-D12: never cache/serve an AI read that slips into advice/recommendation/hype
         # language — fall back to the deterministic (already-compliant) brief instead.
         safe_text, used_fallback = enforce_position_read(text_ai, det)
+        if not used_fallback and aud == "holder" and _holder_read_uses_entry_language(safe_text):
+            used_fallback = True
+            safe_text = det
         if text_ai and not used_fallback:
             result = ExplanationResult(
                 text=safe_text, source="ai", upgrade_available=False, cached=False
@@ -498,21 +614,56 @@ class AIExplanationService:
         bear_case: list[dict[str, Any]],
         open_questions: list[dict[str, Any]],
         fundamentals_covered: bool = True,
+        audience: str = "entry",
+        is_fund_vehicle: bool = False,
+        review_action: str | None = None,
+        holder_stance: str | None = None,
     ) -> str:
         sym = symbol or "This name"
-        if not fundamentals_covered:
-            parts = [
-                f"On the Long Term desk (long-horizon quality), {sym} does not have enough "
-                "fundamentals coverage yet to form a read."
-            ]
+        holder = (audience or "").strip().lower() == "holder"
+        if is_fund_vehicle:
+            if holder:
+                parts = [
+                    f"You already hold {sym}. This is a fund/ETF vehicle — corporate F1–F5 "
+                    "pillars do not apply (no 10-K)."
+                ]
+            else:
+                parts = [
+                    f"On the Long Term desk, {sym} is a fund/ETF vehicle — corporate F1–F5 "
+                    "pillars do not apply (no 10-K)."
+                ]
             top_q0 = next((str(b.get("text") or "").strip() for b in (open_questions or []) if b.get("text")), "")
             if top_q0:
                 parts.append(f"Open question: {top_q0}")
             parts.append("Signal data only.")
             return " ".join(parts)
-        parts = [
-            f"On the Long Term desk (long-horizon quality), {sym} reads {verdict} on fundamentals."
-        ]
+        if not fundamentals_covered:
+            if holder:
+                parts = [
+                    f"You already hold {sym}. The Long Term desk does not have enough "
+                    "fundamentals coverage yet to form a holder read."
+                ]
+            else:
+                parts = [
+                    f"On the Long Term desk (long-horizon quality), {sym} does not have enough "
+                    "fundamentals coverage yet to form a read."
+                ]
+            top_q0 = next((str(b.get("text") or "").strip() for b in (open_questions or []) if b.get("text")), "")
+            if top_q0:
+                parts.append(f"Open question: {top_q0}")
+            parts.append("Signal data only.")
+            return " ".join(parts)
+        if holder:
+            stance = (holder_stance or "").strip() or "unspecified"
+            action = (review_action or "").strip() or "hold"
+            parts = [
+                f"You already hold {sym}. The Long Term desk reads {verdict}; "
+                f"holder stance is {stance} and the review action is {action}."
+            ]
+        else:
+            parts = [
+                f"On the Long Term desk (long-horizon quality), {sym} reads {verdict} on fundamentals."
+            ]
         top_bull = next((str(b.get("text") or "").strip() for b in (bull_case or []) if b.get("text")), "")
         top_bear = next((str(b.get("text") or "").strip() for b in (bear_case or []) if b.get("text")), "")
         top_q = next((str(b.get("text") or "").strip() for b in (open_questions or []) if b.get("text")), "")
@@ -533,6 +684,12 @@ class AIExplanationService:
         bull_case: list[dict[str, Any]],
         bear_case: list[dict[str, Any]],
         open_questions: list[dict[str, Any]],
+        audience: str = "entry",
+        is_fund_vehicle: bool = False,
+        next_earnings_date: str | None = None,
+        earnings_days_away: int | None = None,
+        review_action: str | None = None,
+        holder_stance: str | None = None,
     ) -> str:
         def _compact(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
             out: list[dict[str, str]] = []
@@ -543,8 +700,16 @@ class AIExplanationService:
                 out.append({"text": text[:240], "source": str(x.get("source") or "")})
             return out
 
+        earn_date = (next_earnings_date or "").strip() or "none"
+        days = earnings_days_away if earnings_days_away is not None else "none"
         lines = [
             f"symbol={symbol}",
+            f"audience={audience or 'entry'}",
+            f"is_fund_vehicle={'true' if is_fund_vehicle else 'false'}",
+            f"review_action={(review_action or '').strip() or 'none'}",
+            f"holder_stance={(holder_stance or '').strip() or 'none'}",
+            f"next_earnings_date={earn_date}",
+            f"earnings_days_away={days}",
             f"fundamentals_verdict={verdict}",
             f"bull_points={json.dumps(_compact(bull_case))}",
             f"bear_or_watch_points={json.dumps(_compact(bear_case))}",

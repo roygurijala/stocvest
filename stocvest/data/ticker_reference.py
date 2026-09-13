@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
+# Polygon ``type`` values for non-operating vehicles (ETPs / funds).
+_FUND_VEHICLE_TYPES = frozenset({"ETF", "ETN", "ETS", "ETV", "FUND", "MUTUAL", "UIT", "BASKET"})
+# Name fallback when Polygon type is missing (padded so "BETF" cannot match).
+_FUND_NAME_MARKERS = (" ETF ", " ETN ", " EXCHANGE TRADED ")
+
 
 @dataclass(frozen=True)
 class TickerReference:
@@ -22,6 +27,14 @@ class TickerReference:
     def is_adr(self) -> bool:
         t = (self.security_type or "").strip().upper()
         return t in {"ADRC", "ADRP", "ADR"}
+
+    def is_fund_vehicle(self) -> bool:
+        """True for ETFs / ETNs / funds — no operating-company 10-K pillars."""
+        t = (self.security_type or "").strip().upper()
+        if t in _FUND_VEHICLE_TYPES:
+            return True
+        name = f" {(self.name or '').strip().upper()} "
+        return any(marker in name for marker in _FUND_NAME_MARKERS)
 
     def listed_days(self, *, as_of: date | None = None) -> int | None:
         if self.list_date is None:

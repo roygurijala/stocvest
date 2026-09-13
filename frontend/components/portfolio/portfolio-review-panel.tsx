@@ -255,6 +255,14 @@ function ReviewRow({ h }: { h: HoldingReview }) {
           </span>
         ) : null}
       </div>
+      {h.isFundVehicle ? (
+        <div
+          data-testid={`vehicle-honesty-${h.symbol}`}
+          style={{ fontSize: typography.scale.xs, color: colors.textMuted }}
+        >
+          Fund/ETF vehicle — no corporate filings; F1–F5 do not apply.
+        </div>
+      ) : null}
       {h.rationale.length > 0 ? (
         <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
           {h.rationale.join(" ")}

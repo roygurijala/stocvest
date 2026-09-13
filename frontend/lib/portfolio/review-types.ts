@@ -25,6 +25,7 @@ export interface HoldingReview {
   taxLotHint: string | null;
   longTermLots: number;
   shortTermLots: number;
+  isFundVehicle?: boolean;
   holderRead: {
     stance?: string;
     headline?: string;

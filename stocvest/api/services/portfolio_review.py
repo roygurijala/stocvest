@@ -373,6 +373,7 @@ class HoldingReview:
     short_term_lots: int = 0
     holder_read: dict[str, Any] | None = None
     ai_read: str | None = None
+    is_fund_vehicle: bool = False
 
     def to_api(self) -> dict[str, Any]:
         return {
@@ -397,6 +398,7 @@ class HoldingReview:
             "shortTermLots": self.short_term_lots,
             "holderRead": self.holder_read,
             "aiRead": self.ai_read,
+            "isFundVehicle": self.is_fund_vehicle,
         }
 
 
@@ -603,6 +605,7 @@ async def build_portfolio_review(
             rationale = _rationale_lines(
                 action=action, verdict=verdict, stance=stance, status=status,
                 overweight=overweight, unrealized_pl_pct=unrealized_pl_pct, target=target,
+                is_fund_vehicle=body.get("is_fund_vehicle") is True,
             )
 
         add_amt: float | None = None
@@ -657,6 +660,7 @@ async def build_portfolio_review(
                 long_term_lots=lt,
                 short_term_lots=st,
                 holder_read=holder_read,
+                is_fund_vehicle=body.get("is_fund_vehicle") is True,
             )
         )
 
@@ -715,12 +719,21 @@ def _rationale_lines(
     overweight: bool,
     unrealized_pl_pct: float | None,
     target: float | None,
+    is_fund_vehicle: bool = False,
 ) -> list[str]:
     lines: list[str] = []
     if action == ReviewAction.REVIEW:
         lines.append("The Long-Term desk could not form a confident read (insufficient data).")
+        if is_fund_vehicle:
+            lines.append(
+                "This is a fund/ETF vehicle — corporate F1–F5 pillars do not apply (no 10-K)."
+            )
         return lines
     lines.append(f"Long-Term composite reads {verdict or 'neutral'}.")
+    if is_fund_vehicle:
+        lines.append(
+            "This is a fund/ETF vehicle — corporate F1–F5 pillars do not apply (no 10-K)."
+        )
     if stance:
         lines.append(f"Holder read: {stance}.")
     if overweight and target is not None:
@@ -797,8 +810,13 @@ async def _attach_ai_reads(
     async def _one(idx: int, body: Any) -> tuple[int, str | None]:
         if not isinstance(body, dict):
             return idx, None
+        payload = dict(body)
+        payload["review_action"] = reviews[idx].action.value
+        payload["holder_stance"] = str(
+            (reviews[idx].holder_read or {}).get("stance") or ""
+        ).strip().lower() or None
         try:
-            return idx, await ai_read_fn(reviews[idx].symbol, body)
+            return idx, await ai_read_fn(reviews[idx].symbol, payload)
         except Exception as exc:  # noqa: BLE001 — AI narration never fails the review
             _LOG.warning("portfolio_review ai_read failed symbol=%s err=%s", reviews[idx].symbol, exc)
             return idx, None
