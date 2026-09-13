@@ -39,3 +39,14 @@ class TestF2Growth:
     def test_three_year_cagr_when_enough_history(self) -> None:
         result = score_f2_growth(quality_snapshot())
         assert any("3Y revenue CAGR" in c for c in result.chips)
+
+    def test_growth_chip_labels_latest_quarter_not_bare_yoy(self) -> None:
+        result = score_f2_growth(quality_snapshot())
+        growth_chips = [c for c in result.chips if "Revenue" in c or "EPS" in c]
+        assert growth_chips
+        for chip in growth_chips:
+            if "CAGR" in chip:
+                continue
+            assert "latest-quarter" in chip
+            assert "YoY" in chip
+        assert "latest-quarter" in result.reasoning

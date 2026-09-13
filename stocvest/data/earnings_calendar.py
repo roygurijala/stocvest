@@ -36,6 +36,45 @@ class EarningsHorizon:
         return self.report_date.isoformat()
 
 
+def calendar_days_away(report_date: date, as_of: date) -> int:
+    """UTC date-only calendar days until the report: ``(report_date - as_of).days``.
+
+    Inclusive counting is not used. 2026-09-13 → 2026-10-28 is **45**, not 64
+    (64 is 2026-08-25 → 2026-10-28, or 2026-09-13 → 2026-11-16).
+    """
+    return (report_date - as_of).days
+
+
+def reconcile_earnings_horizon_fields(
+    report_date_iso: str | None,
+    days_away: int | None,
+    *,
+    as_of: date | None = None,
+) -> tuple[str | None, int | None]:
+    """Recompute ``days_away`` from a parseable report date vs ``as_of``.
+
+    A cached day count is never trusted when the date is present — that is how
+    a stale as-of (e.g. Aug 25) can print "64 days" next to Oct 28. Past dates
+    are dropped. Missing date keeps ``days_away`` only when it is >= 0.
+    """
+    today = as_of or datetime.now(timezone.utc).date()
+    raw = (report_date_iso or "").strip()
+    if raw:
+        try:
+            report = date.fromisoformat(raw[:10])
+        except ValueError:
+            if days_away is not None and days_away >= 0:
+                return raw, days_away
+            return raw or None, None
+        days = calendar_days_away(report, today)
+        if days < 0:
+            return None, None
+        return report.isoformat(), days
+    if days_away is not None and days_away >= 0:
+        return None, days_away
+    return None, None
+
+
 def classify_earnings_risk(days_away: int) -> tuple[EarningsRiskLevel, str | None]:
     """Risk band from calendar days until the next report.
 
@@ -81,7 +120,7 @@ def _horizon_from_event(
     today: date,
     window_days: int = SWING_EARNINGS_WINDOW_DAYS,
 ) -> EarningsHorizon | None:
-    days = (event.report_date - today).days
+    days = calendar_days_away(event.report_date, today)
     if days < 0 or days > window_days:
         return None
     risk, chip = classify_earnings_risk(days)
@@ -174,7 +213,7 @@ async def resolve_upcoming_earnings_horizon(
 
             fmp_date = await get_upcoming_earnings_date(sym, window_days=window_days)
             if fmp_date is not None:
-                days = (fmp_date - today).days
+                days = calendar_days_away(fmp_date, today)
                 if 0 <= days <= window_days:
                     risk, chip = classify_earnings_risk(days)
                     horizon = EarningsHorizon(

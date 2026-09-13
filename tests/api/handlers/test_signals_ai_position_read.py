@@ -4,16 +4,18 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 
 import pytest
 
 from stocvest.api.handlers.signals import ai_explanations_handler
 from stocvest.data.models import UserProfile
-from stocvest.utils.config import AI_MODEL_FAST, AI_MODEL_STANDARD
 from stocvest.signals.ai_explanations import (
     AIExplanationService,
+    position_review_read_kwargs,
     reset_ai_explanation_caches_for_tests,
 )
+from stocvest.utils.config import AI_MODEL_FAST, AI_MODEL_STANDARD
 
 pytestmark = pytest.mark.unit
 
@@ -306,3 +308,24 @@ async def test_vehicle_prompt_forbids_10k_language(monkeypatch: pytest.MonkeyPat
     assert result.source == "ai"
     assert "fund/ETF vehicle" in captured["system"]
     assert "is_fund_vehicle=true" in captured["user_prompt"]
+    assert "not_applicable" in captured["user_prompt"]
+    assert "missing bull points" in captured["system"].lower()
+    assert "never compute your own day count" in captured["system"].lower()
+    assert "different window" in captured["system"].lower()
+
+
+def test_position_review_read_kwargs_recomputes_stale_days_away() -> None:
+    extras = position_review_read_kwargs(
+        {
+            "upcoming_earnings_date": "2026-10-28",
+            "earnings_days_away": 64,
+            "position_thesis_packet": {
+                "next_earnings_date": "2026-10-28",
+                "earnings_days_away": 64,
+            },
+        },
+        as_of=date(2026, 9, 13),
+    )
+    assert extras["next_earnings_date"] == "2026-10-28"
+    assert extras["earnings_days_away"] == 45
+    assert extras["audience"] == "holder"

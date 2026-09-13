@@ -407,3 +407,46 @@ def test_fund_vehicle_rationale_does_not_ask_for_filings():
     assert "10-k" in joined
     assert "verify against filings" not in joined
     assert row.to_api()["isFundVehicle"] is True
+
+
+def test_rationale_labels_cost_window_vs_six_month_rs():
+    holdings = (_holding("ECHO", [(10, 114.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=100.0)
+
+    async def snap_fn(symbols):
+        return {s: _Snap(last_trade_price=91.0) for s in symbols}
+
+    async def compose_fn(sym):
+        return {
+            "status": "ok",
+            "signal_summary": "neutral",
+            "layers": [
+                {
+                    "layer": "technical",
+                    "indicator_snapshot": {"rs_vs_spy_6m_pct": 177.2},
+                }
+            ],
+        }
+
+    async def spy_bars_fn(sym, from_date):
+        return []
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    joined = " ".join(review.holdings[0].rationale)
+    assert "vs your cost basis" in joined
+    assert "different window than 6-month RS vs SPY" in joined
+    assert "+177.2%" in joined
+    assert "not vs your cost" in joined
+    assert review.holdings[0].unrealized_pl_pct is not None
+    assert review.holdings[0].unrealized_pl_pct < 0

@@ -375,7 +375,7 @@ async def build_position_composite_response(
             insufficient_body["is_fund_vehicle"] = ticker_ref.is_fund_vehicle()
         merge_earnings_horizon_into_response(insufficient_body, earnings_horizon)
         insufficient_body["position_thesis_packet"] = build_position_thesis_packet(
-            insufficient_body
+            insufficient_body, as_of=datetime.now(timezone.utc).date()
         ).to_api_dict()
         return insufficient_body
 
@@ -569,7 +569,9 @@ async def build_position_composite_response(
     apply_entry_gates_to_response_body(response_body, mode="position")
 
     # POS-AI-1/AI-2: glass-box thesis packet from the fully-populated body (pillars + layers + verdict).
-    response_body["position_thesis_packet"] = build_position_thesis_packet(response_body).to_api_dict()
+    response_body["position_thesis_packet"] = build_position_thesis_packet(
+        response_body, as_of=datetime.now(timezone.utc).date()
+    ).to_api_dict()
 
     # Holder / position-management read (ship dark; OFF until legal sign-off). Owner-oriented
     # guidance derived from the desk's own signals; omitted entirely when the flag is off.

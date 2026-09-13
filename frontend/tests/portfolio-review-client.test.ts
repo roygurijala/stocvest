@@ -96,6 +96,50 @@ describe("fetchPortfolioReviewClient", () => {
     expect(result.message).toMatch(/isn't available/);
   });
 
+  test("does not accept a stale cached review after refresh — waits for cachedAt to advance", async () => {
+    vi.useFakeTimers();
+    const stale = {
+      ...sampleReview(),
+      generatedAt: "2026-08-25T20:00:00+00:00",
+      cachedAt: "2026-08-25T20:00:00+00:00",
+      stale: true,
+      cached: true
+    };
+    const fresh = {
+      ...sampleReview(),
+      generatedAt: "2026-09-13T14:00:00+00:00",
+      cachedAt: "2026-09-13T14:00:00+00:00",
+      stale: false,
+      cached: true
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => stale
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => stale
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => fresh
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = fetchPortfolioReviewClient();
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toEqual({ ok: true, review: fresh });
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/stocvest/portfolio-review?refresh=1");
+    expect(fetchMock.mock.calls.some((c) => c[0] === "/api/stocvest/portfolio-review")).toBe(true);
+  });
+
   test("explains a gateway timeout", async () => {
     vi.stubGlobal(
       "fetch",

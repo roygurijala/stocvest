@@ -242,7 +242,7 @@ function ReviewRow({ h }: { h: HoldingReview }) {
         </span>
         <span style={badge}>{h.actionLabel}</span>
         <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
-          {fmtPct(h.unrealizedPlPct)} · {h.weightPct != null ? `${h.weightPct.toFixed(1)}%` : "—"} wt
+          {fmtPct(h.unrealizedPlPct)} vs cost · {h.weightPct != null ? `${h.weightPct.toFixed(1)}%` : "—"} wt
         </span>
         {h.suggestedAddAmount ? (
           <span style={{ fontSize: typography.scale.xs, color: colors.bullish }}>

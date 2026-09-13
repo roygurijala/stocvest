@@ -376,7 +376,10 @@ class PositionTechnicalAnalyzer:
         elif range_pos is not None and range_pos >= 85.0:
             parts.append("Trading in upper quartile of 52-week range.")
         if rs_pct is not None:
-            parts.append(f"6-month relative strength vs SPY: {rs_pct:+.1f}%.")
+            parts.append(
+                f"6-month relative strength vs SPY: {rs_pct:+.1f}% "
+                f"(name's 6-month price return minus SPY's — not the same window as P/L vs cost basis)."
+            )
         if in_base:
             parts.append(f"Weekly base ~{base_weeks} weeks ({base_rng * 100:.1f}% range).")
         if daily_confirm:

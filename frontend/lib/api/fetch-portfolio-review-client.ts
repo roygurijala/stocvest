@@ -34,6 +34,13 @@ function isReview(body: ReviewWire | null): body is PortfolioReview {
   return !!body && Array.isArray(body.holdings) && typeof body.generatedAt === "string";
 }
 
+function reviewClock(body: PortfolioReview): string | null {
+  const cachedAt = typeof body.cachedAt === "string" ? body.cachedAt.trim() : "";
+  if (cachedAt) return cachedAt;
+  const generated = typeof body.generatedAt === "string" ? body.generatedAt.trim() : "";
+  return generated || null;
+}
+
 function errorMessage(status: number, body: ReviewWire | null): string {
   if (status === 0) {
     return "Couldn't reach the server. Check your connection and try again.";
@@ -69,19 +76,28 @@ export async function fetchPortfolioReviewClient(): Promise<FetchPortfolioReview
   if (first.status === 0 || (first.status >= 400 && first.status !== 504 && first.status !== 502)) {
     return { ok: false, status: first.status, message: errorMessage(first.status, first.body) };
   }
-  if (isReview(first.body)) {
-    return { ok: true, review: first.body };
-  }
-  if (first.status >= 400) {
+  if (first.status >= 400 && !isReview(first.body)) {
     return { ok: false, status: first.status, message: errorMessage(first.status, first.body) };
   }
+
+  // Fresh inline compute (local/dev) has no stale/pending flag — accept immediately.
+  // After ?refresh=1 in prod the handler returns the *old* cache with stale=true;
+  // accepting that is how "64 days to Oct 28" survived a Re-run (as-of Aug 25).
+  if (isReview(first.body) && first.body.stale !== true && first.body.pending !== true) {
+    return { ok: true, review: first.body };
+  }
+
+  const priorClock = isReview(first.body) ? reviewClock(first.body) : null;
 
   const deadline = Date.now() + MAX_WAIT_MS;
   while (Date.now() < deadline) {
     await sleep(POLL_MS);
     const poll = await getReview(false);
-    if (isReview(poll.body)) {
-      return { ok: true, review: poll.body };
+    if (isReview(poll.body) && poll.body.pending !== true) {
+      const nowClock = reviewClock(poll.body);
+      if (priorClock == null || (nowClock != null && nowClock !== priorClock)) {
+        return { ok: true, review: poll.body };
+      }
     }
     if (poll.status === 0) {
       continue;

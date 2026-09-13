@@ -26,21 +26,22 @@ def _apply_growth_delta(base: float, growth: float | None, *, label: str) -> tup
     if growth is None:
         return base, chips
     pct = growth * 100.0
+    # Latest quarter vs the same quarter a year earlier — not TTM / full-year.
     if growth >= 0.15:
         base = apply_score_delta(base, 18)
-        chips.append(f"{label} +{pct:.0f}% YoY — strong")
+        chips.append(f"{label} +{pct:.0f}% latest-quarter YoY — strong")
     elif growth >= 0.05:
         base = apply_score_delta(base, 10)
-        chips.append(f"{label} +{pct:.0f}% YoY")
+        chips.append(f"{label} +{pct:.0f}% latest-quarter YoY")
     elif growth >= 0.0:
         base = apply_score_delta(base, 3)
-        chips.append(f"{label} +{pct:.0f}% YoY — modest")
+        chips.append(f"{label} +{pct:.0f}% latest-quarter YoY — modest")
     elif growth >= -0.05:
         base = apply_score_delta(base, -8)
-        chips.append(f"{label} {pct:.0f}% YoY — flat/soft")
+        chips.append(f"{label} {pct:.0f}% latest-quarter YoY — flat/soft")
     else:
         base = apply_score_delta(base, -18)
-        chips.append(f"{label} {pct:.0f}% YoY — declining")
+        chips.append(f"{label} {pct:.0f}% latest-quarter YoY — declining")
     return base, chips
 
 

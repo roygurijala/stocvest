@@ -12,7 +12,7 @@ import json
 import os
 import time
 from dataclasses import dataclass, replace
-from datetime import datetime, time as dt_time, timezone
+from datetime import date, datetime, time as dt_time, timezone
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -56,8 +56,14 @@ def _as_optional_int(value: object) -> int | None:
         return None
 
 
-def position_review_read_kwargs(body: dict[str, Any]) -> dict[str, Any]:
+def position_review_read_kwargs(
+    body: dict[str, Any],
+    *,
+    as_of: date | None = None,
+) -> dict[str, Any]:
     """Extras the portfolio-review AI path forwards into ``explain_position_setup_read``."""
+    from stocvest.data.earnings_calendar import reconcile_earnings_horizon_fields
+
     packet = body.get("position_thesis_packet")
     packet = packet if isinstance(packet, dict) else {}
     next_date = (
@@ -67,6 +73,7 @@ def position_review_read_kwargs(body: dict[str, Any]) -> dict[str, Any]:
     days = _as_optional_int(packet.get("earnings_days_away"))
     if days is None:
         days = _as_optional_int(body.get("earnings_days_away"))
+    next_date, days = reconcile_earnings_horizon_fields(next_date, days, as_of=as_of)
     return {
         "audience": "holder",
         "is_fund_vehicle": bool(body.get("is_fund_vehicle") or packet.get("is_fund_vehicle")),
@@ -411,14 +418,20 @@ class AIExplanationService:
             )
         vehicle_clause = (
             "This symbol is a fund/ETF vehicle — do not discuss 10-Ks, corporate filings, "
-            "or F1–F5 as if it were an operating company. "
+            "or F1–F5 as if it were an operating company. Do not say it reads bullish or "
+            "bearish on fundamentals. Do not lament missing bull points — F1–F5 do not apply. "
             if vehicle
             else ""
         )
         earnings_clause = (
             "Never claim earnings are today, tomorrow, or imminent unless earnings_days_away "
             "is 0 (today) or 1 (tomorrow). If next_earnings_date is none, say the date is "
-            "unavailable — do not invent one. "
+            "unavailable — do not invent one. Use earnings_days_away exactly as given — "
+            "never compute your own day count from the calendar date (your clock may be wrong). "
+        )
+        window_clause = (
+            "Unrealized P/L vs cost basis is a different window than 6-month relative strength "
+            "vs SPY (name's 6-month price return minus SPY's). Never imply they cover the same period. "
         )
 
         text_ai = await self._claude_text_or_none(
@@ -434,6 +447,7 @@ class AIExplanationService:
                 "quality is limited. Do NOT mention numeric scores or percentages. "
                 + vehicle_clause
                 + earnings_clause
+                + window_clause
                 + advice_clause
                 + "End with exactly: Signal data only."
             ),
@@ -702,15 +716,18 @@ class AIExplanationService:
 
         earn_date = (next_earnings_date or "").strip() or "none"
         days = earnings_days_away if earnings_days_away is not None else "none"
+        fund_verdict = "not_applicable" if is_fund_vehicle else verdict
+        as_of_utc = datetime.now(timezone.utc).date().isoformat()
         lines = [
             f"symbol={symbol}",
             f"audience={audience or 'entry'}",
             f"is_fund_vehicle={'true' if is_fund_vehicle else 'false'}",
             f"review_action={(review_action or '').strip() or 'none'}",
             f"holder_stance={(holder_stance or '').strip() or 'none'}",
+            f"as_of_utc={as_of_utc}",
             f"next_earnings_date={earn_date}",
             f"earnings_days_away={days}",
-            f"fundamentals_verdict={verdict}",
+            f"fundamentals_verdict={fund_verdict}",
             f"bull_points={json.dumps(_compact(bull_case))}",
             f"bear_or_watch_points={json.dumps(_compact(bear_case))}",
             f"open_questions={json.dumps(_compact(open_questions))}",
