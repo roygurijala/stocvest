@@ -58,7 +58,7 @@ function sampleReview(): PortfolioReview {
         longTermLots: 1,
         shortTermLots: 0,
         holderRead: null,
-        aiRead: null
+        aiRead: "AAPL AI Investment Read essay that must stay collapsed."
       },
       {
         symbol: "XOM",
@@ -129,6 +129,7 @@ describe("PortfolioReviewPanel", () => {
     fireEvent.click(screen.getByTestId("run-review"));
 
     await waitFor(() => expect(screen.getByTestId("review-row-AAPL")).toBeInTheDocument());
+    expect(screen.getByTestId("review-holdings-table")).toBeInTheDocument();
     expect(screen.getByTestId("review-row-XOM")).toBeInTheDocument();
     expect(screen.getByText("Hold")).toBeInTheDocument();
     expect(screen.getByText("Sell")).toBeInTheDocument();
@@ -138,6 +139,11 @@ describe("PortfolioReviewPanel", () => {
     expect(screen.getAllByText(/vs cost/).length).toBeGreaterThan(0);
     expect(screen.getByText(/add ~\$150/)).toBeInTheDocument();
     expect(screen.getByText(/reduce ~\$99/)).toBeInTheDocument();
+    expect(screen.getByTestId("review-do-this-AAPL")).toHaveTextContent(/reduce ~\$99/);
+    expect(screen.queryByText(/AAPL AI Investment Read essay/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("holder-read-AAPL")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ai-read-AAPL")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("review-row-detail-AAPL")).not.toBeInTheDocument();
     expect(screen.queryByTestId("review-default-target")).not.toBeInTheDocument();
     expect(screen.getByTestId("review-sizing-rule")).toHaveTextContent(
       /If the verdict is Sell, reduce the position even when it is below target/
@@ -215,9 +221,18 @@ describe("PortfolioReviewPanel", () => {
 
     fireEvent.click(screen.getByTestId("run-review"));
 
-    await waitFor(() => expect(screen.getByTestId("holder-read-AAPL")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("review-row-AAPL")).toBeInTheDocument());
+    expect(screen.queryByTestId("holder-read-AAPL")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Keep holding — trend intact/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("review-row-AAPL"));
+
+    expect(screen.getByTestId("holder-read-AAPL")).toBeInTheDocument();
     expect(screen.getByText(/Keep holding — trend intact/)).toBeInTheDocument();
     expect(screen.getByText(/Add on a pullback/)).toBeInTheDocument();
+    expect(screen.getByTestId("ai-read-AAPL")).toHaveTextContent(
+      /AAPL AI Investment Read essay that must stay collapsed/
+    );
   });
 
   test("shows a vehicle honesty banner for fund/ETF holdings", async () => {
@@ -229,7 +244,12 @@ describe("PortfolioReviewPanel", () => {
 
     fireEvent.click(screen.getByTestId("run-review"));
 
-    await waitFor(() => expect(screen.getByTestId("vehicle-honesty-IBIT")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("review-row-IBIT")).toBeInTheDocument());
+    expect(screen.queryByTestId("vehicle-honesty-IBIT")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("review-row-IBIT"));
+
+    expect(screen.getByTestId("vehicle-honesty-IBIT")).toBeInTheDocument();
     expect(screen.getByText(/Fund\/ETF vehicle — no corporate filings/i)).toBeInTheDocument();
   });
 
