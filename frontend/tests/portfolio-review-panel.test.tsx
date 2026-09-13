@@ -52,7 +52,7 @@ function sampleReview(): PortfolioReview {
         rationale: ["Long-Term composite reads bullish."],
         overweight: true,
         suggestedAddAmount: null,
-        suggestedReduceAmount: null,
+        suggestedReduceAmount: 99,
         taxLotHint: null,
         longTermLots: 1,
         shortTermLots: 0,
@@ -74,7 +74,7 @@ function sampleReview(): PortfolioReview {
         actionLabel: "Sell",
         rationale: ["Long-Term composite reads bearish.", "Holder read: defensive."],
         overweight: false,
-        suggestedAddAmount: null,
+        suggestedAddAmount: 150,
         suggestedReduceAmount: null,
         taxLotHint: "All 1 lot(s) are short-term (held ≤ 1 year).",
         longTermLots: 0,
@@ -107,6 +107,8 @@ function sampleReview(): PortfolioReview {
       note: "Money-weighted."
     },
     fullyPriced: true,
+    effectiveTargetPct: 50,
+    targetIsDefault: false,
     disclaimer: "Informational review — not advice."
   };
 }
@@ -132,6 +134,23 @@ describe("PortfolioReviewPanel", () => {
     expect(screen.getByText(/NVDA/)).toBeInTheDocument();
     expect(screen.getByText(/SPY \(money-weighted\)/)).toBeInTheDocument();
     expect(screen.getAllByText(/vs cost/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/add ~\$150/)).toBeInTheDocument();
+    expect(screen.getByText(/reduce ~\$99/)).toBeInTheDocument();
+    expect(screen.queryByTestId("review-default-target")).not.toBeInTheDocument();
+  });
+
+  test("shows a muted default-target line when the review uses the personal default", async () => {
+    const review = sampleReview();
+    review.effectiveTargetPct = 9.0909;
+    review.targetIsDefault = true;
+    fetchMock.mockResolvedValueOnce({ ok: true, review });
+    wrap(<PortfolioReviewPanel />);
+
+    fireEvent.click(screen.getByTestId("run-review"));
+
+    await waitFor(() => expect(screen.getByTestId("review-default-target")).toBeInTheDocument());
+    expect(screen.getByText(/Using default ~9.1% target \(8-name floor\)/)).toBeInTheDocument();
+    expect(screen.getByText(/changeable in Portfolio settings/)).toBeInTheDocument();
   });
 
   test("shows an error when the review cannot be fetched", async () => {

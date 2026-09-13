@@ -56,6 +56,15 @@ def _as_optional_int(value: object) -> int | None:
         return None
 
 
+def _as_optional_float(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def position_review_read_kwargs(
     body: dict[str, Any],
     *,
@@ -81,6 +90,8 @@ def position_review_read_kwargs(
         "earnings_days_away": days,
         "review_action": str(body.get("review_action") or "").strip().lower() or None,
         "holder_stance": str(body.get("holder_stance") or "").strip().lower() or None,
+        "suggested_add_amount": _as_optional_float(body.get("suggested_add_amount")),
+        "suggested_reduce_amount": _as_optional_float(body.get("suggested_reduce_amount")),
     }
 
 ExplanationSource = Literal["ai", "deterministic"]
@@ -331,6 +342,8 @@ class AIExplanationService:
         earnings_days_away: int | None = None,
         review_action: str | None = None,
         holder_stance: str | None = None,
+        suggested_add_amount: float | None = None,
+        suggested_reduce_amount: float | None = None,
     ) -> ExplanationResult:
         """Long-horizon Investment Read for the Position deep-dive (ADR-004 POS-AI-2).
 
@@ -358,6 +371,8 @@ class AIExplanationService:
             is_fund_vehicle=vehicle,
             review_action=review_action,
             holder_stance=holder_stance,
+            suggested_add_amount=suggested_add_amount,
+            suggested_reduce_amount=suggested_reduce_amount,
         )
 
         if not user_profile.has_ai_explanations:
@@ -367,7 +382,9 @@ class AIExplanationService:
 
         ny_date = _ny_calendar_date()
         h = (pillar_snapshot_hash or "nohash").strip() or "nohash"
-        key = f"stocvest:ai_explain:position_read:{sym}:{v}:{ny_date}:{h}:{aud}"
+        add_k = f"{suggested_add_amount:.2f}" if suggested_add_amount is not None else "none"
+        red_k = f"{suggested_reduce_amount:.2f}" if suggested_reduce_amount is not None else "none"
+        key = f"stocvest:ai_explain:position_read:{sym}:{v}:{ny_date}:{h}:{aud}:add{add_k}:red{red_k}"
 
         hit = await self._cache_read(key)
         if hit is not None:
@@ -385,8 +402,11 @@ class AIExplanationService:
                     "(hold / trim / add-on-weakness / review) grounded in the points above — "
                     "never buy/watch/avoid, never 'don't initiate', never 'no position until', "
                     "never 'don't buy today'. Align with the provided review_action and "
-                    "holder_stance. Never hype, never guarantee returns, no price targets or "
-                    "position-sizing. "
+                    "holder_stance. If suggested_add_amount or suggested_reduce_amount is not "
+                    "none, you MAY cite those exact dollars so the narration matches the review "
+                    "— do not invent a different size, a 50% winner trim, or a made-up residual "
+                    "weight. If they are none, do not invent a size. Never hype, never guarantee "
+                    "returns, no price targets. "
                 )
                 if personal_mode
                 else (
@@ -463,6 +483,8 @@ class AIExplanationService:
                 earnings_days_away=earnings_days_away,
                 review_action=review_action,
                 holder_stance=holder_stance,
+                suggested_add_amount=suggested_add_amount,
+                suggested_reduce_amount=suggested_reduce_amount,
             ),
             max_tokens=280,
             temperature=0.6,
@@ -632,6 +654,8 @@ class AIExplanationService:
         is_fund_vehicle: bool = False,
         review_action: str | None = None,
         holder_stance: str | None = None,
+        suggested_add_amount: float | None = None,
+        suggested_reduce_amount: float | None = None,
     ) -> str:
         sym = symbol or "This name"
         holder = (audience or "").strip().lower() == "holder"
@@ -674,6 +698,10 @@ class AIExplanationService:
                 f"You already hold {sym}. The Long Term desk reads {verdict}; "
                 f"holder stance is {stance} and the review action is {action}."
             ]
+            if suggested_add_amount is not None and suggested_add_amount > 0:
+                parts.append(f"Suggested add is ${suggested_add_amount:,.2f} toward the target weight.")
+            if suggested_reduce_amount is not None and suggested_reduce_amount > 0:
+                parts.append(f"Suggested reduce is ${suggested_reduce_amount:,.2f}.")
         else:
             parts = [
                 f"On the Long Term desk (long-horizon quality), {sym} reads {verdict} on fundamentals."
@@ -704,6 +732,8 @@ class AIExplanationService:
         earnings_days_away: int | None = None,
         review_action: str | None = None,
         holder_stance: str | None = None,
+        suggested_add_amount: float | None = None,
+        suggested_reduce_amount: float | None = None,
     ) -> str:
         def _compact(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
             out: list[dict[str, str]] = []
@@ -724,6 +754,8 @@ class AIExplanationService:
             f"is_fund_vehicle={'true' if is_fund_vehicle else 'false'}",
             f"review_action={(review_action or '').strip() or 'none'}",
             f"holder_stance={(holder_stance or '').strip() or 'none'}",
+            f"suggested_add_amount={'none' if suggested_add_amount is None else f'{suggested_add_amount:.2f}'}",
+            f"suggested_reduce_amount={'none' if suggested_reduce_amount is None else f'{suggested_reduce_amount:.2f}'}",
             f"as_of_utc={as_of_utc}",
             f"next_earnings_date={earn_date}",
             f"earnings_days_away={days}",

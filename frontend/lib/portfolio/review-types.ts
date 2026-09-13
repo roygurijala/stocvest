@@ -22,6 +22,7 @@ export interface HoldingReview {
   overweight: boolean;
   suggestedAddAmount: number | null;
   suggestedReduceAmount: number | null;
+  effectiveTargetPct?: number | null;
   taxLotHint: string | null;
   longTermLots: number;
   shortTermLots: number;
@@ -76,5 +77,7 @@ export interface PortfolioReview {
   considerAdding: ConsiderAddCandidate[];
   benchmark: BenchmarkComparison | null;
   fullyPriced: boolean;
+  effectiveTargetPct?: number | null;
+  targetIsDefault?: boolean;
   disclaimer: string;
 }

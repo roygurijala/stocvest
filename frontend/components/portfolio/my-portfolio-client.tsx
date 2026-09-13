@@ -421,7 +421,7 @@ export function MyPortfolioClient() {
               type="number"
               min={0}
               max={100}
-              placeholder="e.g. 5"
+              placeholder="blank = equal-weight default while personal mode is on"
               value={targetInput}
               onChange={(e) => setTargetInput(e.target.value)}
             />

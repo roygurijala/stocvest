@@ -244,6 +244,7 @@ async def test_holder_audience_prompt_is_holder_voiced(monkeypatch: pytest.Monke
         holder_stance="caution",
         next_earnings_date="2026-10-28",
         earnings_days_away=46,
+        suggested_reduce_amount=220.0,
     )
     assert result.source == "ai"
     assert "ALREADY HOLDS" in captured["system"]
@@ -252,6 +253,8 @@ async def test_holder_audience_prompt_is_holder_voiced(monkeypatch: pytest.Monke
     assert "next_earnings_date=2026-10-28" in captured["user_prompt"]
     assert "earnings_days_away=46" in captured["user_prompt"]
     assert "review_action=hold" in captured["user_prompt"]
+    assert "suggested_reduce_amount=220.00" in captured["user_prompt"]
+    assert "do not invent a different size" in captured["system"].lower()
 
 
 @pytest.mark.asyncio
@@ -329,3 +332,20 @@ def test_position_review_read_kwargs_recomputes_stale_days_away() -> None:
     assert extras["next_earnings_date"] == "2026-10-28"
     assert extras["earnings_days_away"] == 45
     assert extras["audience"] == "holder"
+    assert extras["suggested_add_amount"] is None
+    assert extras["suggested_reduce_amount"] is None
+
+
+def test_position_review_read_kwargs_forwards_suggested_amounts() -> None:
+    extras = position_review_read_kwargs(
+        {
+            "review_action": "buy_more",
+            "holder_stance": "constructive",
+            "suggested_add_amount": 380.5,
+            "suggested_reduce_amount": None,
+        },
+        as_of=date(2026, 9, 13),
+    )
+    assert extras["review_action"] == "buy_more"
+    assert extras["suggested_add_amount"] == 380.5
+    assert extras["suggested_reduce_amount"] is None

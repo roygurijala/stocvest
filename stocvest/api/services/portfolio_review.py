@@ -14,7 +14,9 @@ but never flip the desk's directional read.
 
 No indicator math or thresholds are invented here (see .cursorrules §8):
 - verdict + stance come straight from the composite engine,
-- the "overweight" test uses the *user's own* ``target_position_pct``,
+- the "overweight" test uses the *effective* target — the user's own
+  ``target_position_pct`` when set, else a personal-mode equal-weight default
+  ``100 / max(N, 8)`` computed at review time (never written back to settings),
 - the "long-term lot" test uses the model's existing >365-day rule.
 
 Everything network-touching is dependency-injected (``compose_fn``, ``snapshot_fn``,
@@ -43,6 +45,10 @@ _REVIEW_DISCLAIMER = (
     "Informational review of a personal, manually-entered portfolio — not personalized "
     "investment advice. Signal data only; you are responsible for your own decisions."
 )
+
+# Personal-mode equal-weight floor: never thinner than an 8-name book (12.5%).
+# User-agreed; do not invent a different denominator.
+_PERSONAL_DEFAULT_TARGET_FLOOR_N = 8
 
 # Dependency-injection function types.
 ComposeFn = Callable[[str], Awaitable[dict[str, Any]]]
@@ -99,6 +105,30 @@ def resolve_current_price(snap: Any) -> float | None:
     return None
 
 
+def default_personal_target_pct(holding_count: int) -> float:
+    """Equal-weight default: ``100 / max(N, 8)``. 11 names → ~9.09%; empty book → 12.5%."""
+    n = max(int(holding_count), _PERSONAL_DEFAULT_TARGET_FLOOR_N)
+    return round(100.0 / n, 4)
+
+
+def resolve_effective_target_pct(
+    *,
+    explicit_target_pct: float | None,
+    holding_count: int,
+    advice_enabled: bool,
+) -> tuple[float | None, bool]:
+    """``(effective_pct, used_default)``. Explicit settings win; default only in personal mode.
+
+    Product mode (advice off) + null target → ``(None, False)`` — no amounts.
+    Never persists the default; callers display it as an *effective* review-time target.
+    """
+    if explicit_target_pct is not None:
+        return float(explicit_target_pct), False
+    if advice_enabled:
+        return default_personal_target_pct(holding_count), True
+    return None, False
+
+
 def suggested_add_amount(
     market_value: float,
     total_value: float,
@@ -109,7 +139,7 @@ def suggested_add_amount(
 
     ``None`` when no target is set (guidance stays directional, no amount). ``0.0``
     when the position is already at/over its target weight or there is no cash. Uses
-    the user's own ``target_pct`` — no invented sizing threshold.
+    the *effective* ``target_pct`` (explicit or personal default) — no invented sizing.
     """
     if target_pct is None or total_value <= 0:
         return None
@@ -128,7 +158,8 @@ def suggested_reduce_amount(
     """Dollar amount to bring an *overweight* position back down to its target weight.
 
     ``None`` when no target is set or the position is not overweight (the action stays
-    directional — "reduce exposure" — without inventing a trim size).
+    directional — "reduce exposure" — without inventing a trim size). Excess only;
+    never a 50% winner trim or a made-up residual weight.
     """
     if target_pct is None or total_value <= 0:
         return None
@@ -137,6 +168,56 @@ def suggested_reduce_amount(
     if excess <= 0:
         return None
     return round(excess, 2)
+
+
+def apply_stance_sizing(
+    *,
+    action: ReviewAction,
+    overweight: bool,
+    add_gap: float | None,
+    reduce_excess: float | None,
+    market_value: float,
+) -> tuple[ReviewAction, float | None, float | None, str | None]:
+    """Stance overlay on gap math. Returns ``(action, add, reduce, extra_rationale)``.
+
+    Uses existing desk actions only — no new numeric thresholds:
+    - ``buy_more`` / constructive → fill the underweight gap (cash-capped add)
+    - ``hold`` + already over target → trim the excess only
+    - ``hold`` + under target (caution / thin R/R) → no add
+    - ``trim`` → excess toward target, not to zero
+    - ``sell`` → full market value, not a made-up 75%
+    """
+    if action == ReviewAction.BUY_MORE:
+        if add_gap is None:
+            return action, None, None, None
+        if add_gap <= 0:
+            extra = (
+                "Already at/over target weight (or no cash available) — holding rather than adding."
+            )
+            if overweight:
+                return ReviewAction.HOLD, None, reduce_excess, extra
+            return ReviewAction.HOLD, None, None, extra
+        return action, add_gap, None, None
+
+    if action == ReviewAction.HOLD:
+        if overweight:
+            return action, None, reduce_excess, None
+        return action, None, None, None
+
+    if action == ReviewAction.TRIM:
+        return action, None, reduce_excess, None
+
+    if action == ReviewAction.SELL:
+        full_mv = round(market_value, 2) if market_value > 0 else None
+        return action, None, full_mv, None
+
+    return action, None, None, None
+
+
+def _target_weight_phrase(target: float, *, used_default: bool) -> str:
+    if used_default:
+        return f"the default ~{target:.1f}% target (8-name floor)"
+    return f"your {target:.1f}% target"
 
 
 def derive_action(
@@ -368,6 +449,7 @@ class HoldingReview:
     overweight: bool
     suggested_add_amount: float | None = None
     suggested_reduce_amount: float | None = None
+    effective_target_pct: float | None = None
     tax_lot_hint: str | None = None
     long_term_lots: int = 0
     short_term_lots: int = 0
@@ -393,6 +475,7 @@ class HoldingReview:
             "overweight": self.overweight,
             "suggestedAddAmount": self.suggested_add_amount,
             "suggestedReduceAmount": self.suggested_reduce_amount,
+            "effectiveTargetPct": self.effective_target_pct,
             "taxLotHint": self.tax_lot_hint,
             "longTermLots": self.long_term_lots,
             "shortTermLots": self.short_term_lots,
@@ -467,6 +550,8 @@ class PortfolioReview:
     consider_adding: list[ConsiderAddCandidate] = field(default_factory=list)
     benchmark: BenchmarkComparison | None = None
     fully_priced: bool = True
+    effective_target_pct: float | None = None
+    target_is_default: bool = False
 
     def to_api(self) -> dict[str, Any]:
         return {
@@ -483,6 +568,8 @@ class PortfolioReview:
             "considerAdding": [c.to_api() for c in self.consider_adding],
             "benchmark": self.benchmark.to_api() if self.benchmark else None,
             "fullyPriced": self.fully_priced,
+            "effectiveTargetPct": self.effective_target_pct,
+            "targetIsDefault": self.target_is_default,
             "disclaimer": _REVIEW_DISCLAIMER,
         }
 
@@ -527,11 +614,21 @@ async def build_portfolio_review(
     fetch_snapshots = snapshot_fn or _default_snapshots
     fetch_spy_bars = spy_bars_fn or _default_spy_bars
 
+    target, target_is_default = resolve_effective_target_pct(
+        explicit_target_pct=settings.target_position_pct,
+        holding_count=len(holdings),
+        advice_enabled=advice_enabled,
+    )
+
     if not holdings:
+        # Empty book: still expose the 8-name-floor default when personal mode is on,
+        # but skip amounts (nothing to size).
         return PortfolioReview(
             generated_at=datetime.now(timezone.utc),
             cash_balance=settings.cash_balance,
             total_market_value=settings.cash_balance,
+            effective_target_pct=target,
+            target_is_default=target_is_default,
         )
 
     symbols = [h.symbol for h in holdings]
@@ -585,7 +682,6 @@ async def build_portfolio_review(
         )
 
         weight_pct = round(mkt_value / total_value * 100.0, 2) if total_value > 0 else None
-        target = settings.target_position_pct
         overweight = bool(target is not None and weight_pct is not None and weight_pct > target)
 
         # P/L (null, never fake $0, when unpriced).
@@ -605,37 +701,40 @@ async def build_portfolio_review(
             rationale = _rationale_lines(
                 action=action, verdict=verdict, stance=stance, status=status,
                 overweight=overweight, unrealized_pl_pct=unrealized_pl_pct, target=target,
+                target_is_default=target_is_default,
                 is_fund_vehicle=body.get("is_fund_vehicle") is True,
                 rs_vs_spy_6m_pct=_rs_vs_spy_6m_from_body(body),
             )
 
         add_amt: float | None = None
         reduce_amt: float | None = None
-        if action == ReviewAction.BUY_MORE:
-            # Cap by cash still un-suggested to earlier BUY_MORE rows (no aggregate over-allocation).
-            add_amt = suggested_add_amount(mkt_value, total_value, target, remaining_cash)
-            # Sizing gate: at/over target or no cash → the "buy more" downgrades to hold.
-            if add_amt == 0.0:
-                action = ReviewAction.HOLD
-                rationale.append(
-                    "Already at/over target weight (or no cash available) — holding rather than adding."
-                )
-            elif add_amt is not None:
+        if advice_enabled:
+            add_gap = suggested_add_amount(mkt_value, total_value, target, remaining_cash)
+            reduce_excess = suggested_reduce_amount(mkt_value, total_value, target)
+            action, add_amt, reduce_amt, sizing_note = apply_stance_sizing(
+                action=action,
+                overweight=overweight,
+                add_gap=add_gap,
+                reduce_excess=reduce_excess,
+                market_value=mkt_value,
+            )
+            if sizing_note:
+                rationale.append(sizing_note)
+            if add_amt is not None and add_amt > 0:
                 remaining_cash = round(max(0.0, remaining_cash - add_amt), 2)
-        elif action in (ReviewAction.TRIM, ReviewAction.SELL):
-            reduce_amt = suggested_reduce_amount(mkt_value, total_value, target)
 
         hint, lt, st = tax_lot_hint(h, action, as_of=as_of)
 
-        if advice_enabled and overweight and weight_pct is not None:
+        if advice_enabled and overweight and weight_pct is not None and target is not None:
+            phrase = _target_weight_phrase(target, used_default=target_is_default)
             concentration.append(
                 ConcentrationFlag(
                     symbol=h.symbol,
                     weight_pct=weight_pct,
                     target_pct=target,
                     message=(
-                        f"{h.symbol} is {weight_pct:.1f}% of the portfolio, above your "
-                        f"{target:.1f}% target — consider trimming to manage single-name risk."
+                        f"{h.symbol} is {weight_pct:.1f}% of the portfolio, above {phrase} "
+                        "— consider trimming to manage single-name risk."
                     ),
                 )
             )
@@ -657,6 +756,7 @@ async def build_portfolio_review(
                 overweight=overweight,
                 suggested_add_amount=add_amt,
                 suggested_reduce_amount=reduce_amt,
+                effective_target_pct=target,
                 tax_lot_hint=hint,
                 long_term_lots=lt,
                 short_term_lots=st,
@@ -708,6 +808,8 @@ async def build_portfolio_review(
         consider_adding=consider,
         benchmark=benchmark,
         fully_priced=fully_priced,
+        effective_target_pct=target,
+        target_is_default=target_is_default,
     )
 
 
@@ -736,6 +838,7 @@ def _rationale_lines(
     overweight: bool,
     unrealized_pl_pct: float | None,
     target: float | None,
+    target_is_default: bool = False,
     is_fund_vehicle: bool = False,
     rs_vs_spy_6m_pct: float | None = None,
 ) -> list[str]:
@@ -755,7 +858,8 @@ def _rationale_lines(
     if stance:
         lines.append(f"Holder read: {stance}.")
     if overweight and target is not None:
-        lines.append(f"Position is above your {target:.1f}% target weight.")
+        phrase = _target_weight_phrase(target, used_default=target_is_default)
+        lines.append(f"Position is above {phrase} weight." if not target_is_default else f"Position is above {phrase}.")
     if unrealized_pl_pct is not None:
         direction = "up" if unrealized_pl_pct >= 0 else "down"
         lines.append(
@@ -841,6 +945,8 @@ async def _attach_ai_reads(
         payload["holder_stance"] = str(
             (reviews[idx].holder_read or {}).get("stance") or ""
         ).strip().lower() or None
+        payload["suggested_add_amount"] = reviews[idx].suggested_add_amount
+        payload["suggested_reduce_amount"] = reviews[idx].suggested_reduce_amount
         try:
             return idx, await ai_read_fn(reviews[idx].symbol, payload)
         except Exception as exc:  # noqa: BLE001 — AI narration never fails the review
