@@ -119,7 +119,7 @@ describe("PortfolioReviewPanel", () => {
   });
 
   test("renders per-holding actions, concentration, and consider-adding after run", async () => {
-    fetchMock.mockResolvedValueOnce(sampleReview());
+    fetchMock.mockResolvedValueOnce({ ok: true, review: sampleReview() });
     wrap(<PortfolioReviewPanel />);
 
     fireEvent.click(screen.getByTestId("run-review"));
@@ -134,7 +134,11 @@ describe("PortfolioReviewPanel", () => {
   });
 
   test("shows an error when the review cannot be fetched", async () => {
-    fetchMock.mockResolvedValueOnce(null);
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 504,
+      message: "Could not run the review right now. Please try again."
+    });
     wrap(<PortfolioReviewPanel />);
 
     fireEvent.click(screen.getByTestId("run-review"));
@@ -151,7 +155,7 @@ describe("PortfolioReviewPanel", () => {
       headline: "Keep holding — trend intact",
       actions: ["Add on a pullback to support"]
     };
-    fetchMock.mockResolvedValueOnce(review);
+    fetchMock.mockResolvedValueOnce({ ok: true, review });
     wrap(<PortfolioReviewPanel />);
 
     fireEvent.click(screen.getByTestId("run-review"));
@@ -164,7 +168,7 @@ describe("PortfolioReviewPanel", () => {
   test("shows an empty-holdings message when the review has no holdings", async () => {
     const review = sampleReview();
     review.holdings = [];
-    fetchMock.mockResolvedValueOnce(review);
+    fetchMock.mockResolvedValueOnce({ ok: true, review });
     wrap(<PortfolioReviewPanel />);
 
     fireEvent.click(screen.getByTestId("run-review"));

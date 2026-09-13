@@ -91,7 +91,9 @@ def test_review_returns_payload(monkeypatch):
 
     monkeypatch.setattr(handler_mod, "build_portfolio_review", _fake_build)
 
-    resp = portfolio_review_handler(_event("u-pr-1"), {})
+    resp = portfolio_review_handler(
+        _event("u-pr-1", queryStringParameters={"refresh": "1"}), {}
+    )
     assert resp["statusCode"] == 200
 
     import json
@@ -124,6 +126,7 @@ def test_dispatch_routes_get(monkeypatch):
             "http": {"method": "GET", "path": "/v1/portfolio-review"},
         },
         rawPath="/v1/portfolio-review",
+        queryStringParameters={"refresh": "1"},
     )
     resp = portfolio_review_dispatch_handler(event, {})
     assert resp["statusCode"] == 200
@@ -184,6 +187,67 @@ def test_ai_read_fn_narrates_for_paid_user(monkeypatch):
     }
     text = asyncio.run(fn("AAPL", body))
     assert "Signal data only" in text
+
+
+def test_cache_miss_without_refresh_returns_pending(monkeypatch):
+    """Poll path must not compute — that is what blew the API Gateway 29s cap."""
+    _seed_holding("u-pr-pend")
+    called = {"n": 0}
+
+    async def _fake_build(**_kwargs):
+        called["n"] += 1
+        return _stub_review()
+
+    monkeypatch.setattr(handler_mod, "build_portfolio_review", _fake_build)
+    resp = portfolio_review_handler(_event("u-pr-pend"), {})
+    assert resp["statusCode"] == 200
+    import json
+
+    body = json.loads(resp["body"])
+    assert body["pending"] is True
+    assert "holdings" not in body
+    assert called["n"] == 0
+
+
+def test_cached_review_served_on_poll(monkeypatch):
+    _seed_holding("u-pr-cache")
+    store = get_holdings_store()
+    store.put_cached_review("u-pr-cache", _stub_review().to_api(), "2026-09-12T12:00:00+00:00")
+
+    async def _fake_build(**_kwargs):
+        raise AssertionError("poll must not recompute a cached review")
+
+    monkeypatch.setattr(handler_mod, "build_portfolio_review", _fake_build)
+    resp = portfolio_review_handler(_event("u-pr-cache"), {})
+    assert resp["statusCode"] == 200
+    import json
+
+    body = json.loads(resp["body"])
+    assert body["pending"] is False
+    assert body["cached"] is True
+    assert body["holdings"][0]["symbol"] == "AAPL"
+
+
+def test_lambda_refresh_does_not_inline_when_dispatch_fails(monkeypatch):
+    """Inside AWS, a failed self-invoke must return pending — never the 20–28s composite."""
+    _seed_holding("u-pr-aws")
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-portfolio_review")
+    monkeypatch.setattr(handler_mod, "trigger_async_review_refresh", lambda _uid: False)
+    called = {"n": 0}
+
+    async def _fake_build(**_kwargs):
+        called["n"] += 1
+        return _stub_review()
+
+    monkeypatch.setattr(handler_mod, "build_portfolio_review", _fake_build)
+    resp = portfolio_review_handler(
+        _event("u-pr-aws", queryStringParameters={"refresh": "1"}), {}
+    )
+    assert resp["statusCode"] == 200
+    import json
+
+    assert json.loads(resp["body"])["pending"] is True
+    assert called["n"] == 0
 
 
 def test_dispatch_unknown_route():
