@@ -11,11 +11,14 @@ from stocvest.api.services.portfolio_review import (
     BenchmarkComparison,
     ReviewAction,
     _build_spy_close_lookup,
+    apply_stance_sizing,
     build_owner_position_context,
     build_portfolio_review,
     compute_benchmark_comparison,
+    default_personal_target_pct,
     derive_action,
     resolve_current_price,
+    resolve_effective_target_pct,
     suggested_add_amount,
     suggested_reduce_amount,
     tax_lot_hint,
@@ -110,6 +113,96 @@ def test_suggested_reduce_amount_only_when_overweight():
     assert suggested_reduce_amount(500.0, 2200.0, 40.0) is None
     # no target → None
     assert suggested_reduce_amount(1200.0, 2200.0, None) is None
+
+
+def test_default_personal_target_pct_uses_eight_name_floor():
+    assert default_personal_target_pct(11) == 9.0909
+    assert default_personal_target_pct(0) == 12.5
+    assert default_personal_target_pct(3) == 12.5
+    assert default_personal_target_pct(8) == 12.5
+    assert default_personal_target_pct(10) == 10.0
+
+
+def test_resolve_effective_target_explicit_wins_over_default():
+    pct, used_default = resolve_effective_target_pct(
+        explicit_target_pct=5.0, holding_count=11, advice_enabled=True
+    )
+    assert pct == 5.0 and used_default is False
+
+
+def test_resolve_effective_target_personal_default_when_null():
+    pct, used_default = resolve_effective_target_pct(
+        explicit_target_pct=None, holding_count=11, advice_enabled=True
+    )
+    assert pct == 9.0909 and used_default is True
+
+
+def test_resolve_effective_target_product_mode_null_is_none():
+    pct, used_default = resolve_effective_target_pct(
+        explicit_target_pct=None, holding_count=11, advice_enabled=False
+    )
+    assert pct is None and used_default is False
+
+
+def test_apply_stance_sizing_buy_more_fills_gap():
+    action, add_amt, reduce_amt, note = apply_stance_sizing(
+        action=ReviewAction.BUY_MORE,
+        overweight=False,
+        add_gap=250.0,
+        reduce_excess=None,
+        market_value=800.0,
+    )
+    assert action == ReviewAction.BUY_MORE
+    assert add_amt == 250.0 and reduce_amt is None and note is None
+
+
+def test_apply_stance_sizing_hold_over_target_trims_excess_only():
+    action, add_amt, reduce_amt, note = apply_stance_sizing(
+        action=ReviewAction.HOLD,
+        overweight=True,
+        add_gap=0.0,
+        reduce_excess=180.0,
+        market_value=1180.0,
+    )
+    assert action == ReviewAction.HOLD
+    assert add_amt is None and reduce_amt == 180.0 and note is None
+
+
+def test_apply_stance_sizing_hold_under_target_does_not_add():
+    action, add_amt, reduce_amt, note = apply_stance_sizing(
+        action=ReviewAction.HOLD,
+        overweight=False,
+        add_gap=400.0,
+        reduce_excess=None,
+        market_value=600.0,
+    )
+    assert action == ReviewAction.HOLD
+    assert add_amt is None and reduce_amt is None
+
+
+def test_apply_stance_sizing_trim_is_excess_not_to_zero():
+    action, add_amt, reduce_amt, note = apply_stance_sizing(
+        action=ReviewAction.TRIM,
+        overweight=True,
+        add_gap=0.0,
+        reduce_excess=220.0,
+        market_value=1220.0,
+    )
+    assert action == ReviewAction.TRIM
+    assert add_amt is None and reduce_amt == 220.0
+    assert reduce_amt != 1220.0
+
+
+def test_apply_stance_sizing_sell_is_full_market_value():
+    action, add_amt, reduce_amt, note = apply_stance_sizing(
+        action=ReviewAction.SELL,
+        overweight=False,
+        add_gap=None,
+        reduce_excess=None,
+        market_value=750.0,
+    )
+    assert action == ReviewAction.SELL
+    assert add_amt is None and reduce_amt == 750.0
 
 
 # ── tax-lot hint ─────────────────────────────────────────────────────────────
@@ -213,17 +306,20 @@ def test_build_portfolio_review_end_to_end():
     by_sym = {h.symbol: h for h in review.holdings}
 
     # AAPL: mkt 1200 / total 2200 = 54.5% > 50% target → overweight; bullish+constructive
-    # would be BUY_MORE but it's over target so add=0 → downgraded to HOLD.
+    # would be BUY_MORE but it's over target so add=0 → downgraded to HOLD and trim excess.
     aapl = by_sym["AAPL"]
     assert aapl.action == ReviewAction.HOLD
     assert aapl.overweight is True
     assert aapl.unrealized_pl == 200.0  # (120-100)*10
+    assert aapl.suggested_add_amount is None
+    assert aapl.suggested_reduce_amount == 100.0  # 1200 − 50% of 2200
 
-    # XOM: bearish + defensive → SELL; short-term single lot tax hint.
+    # XOM: bearish + defensive → SELL; full market value, not excess-to-target.
     xom = by_sym["XOM"]
     assert xom.action == ReviewAction.SELL
     assert xom.short_term_lots == 1 and xom.long_term_lots == 0
     assert xom.tax_lot_hint is not None
+    assert xom.suggested_reduce_amount == 750.0
 
     # Concentration flags AAPL only.
     assert [c.symbol for c in review.concentration] == ["AAPL"]
@@ -278,11 +374,15 @@ def test_build_portfolio_review_empty_portfolio():
         build_portfolio_review(
             holdings=(),
             settings=PortfolioSettings(cash_balance=1000.0),
+            advice_enabled=True,
         )
     )
     assert review.holdings == []
     assert review.total_market_value == 1000.0
     assert review.cash_balance == 1000.0
+    # Empty book: 8-name floor (12.5%) is exposed; nothing to size.
+    assert review.effective_target_pct == 12.5
+    assert review.target_is_default is True
 
 
 def test_build_portfolio_review_advice_disabled_is_informational_only():
@@ -450,3 +550,207 @@ def test_rationale_labels_cost_window_vs_six_month_rs():
     assert "not vs your cost" in joined
     assert review.holdings[0].unrealized_pl_pct is not None
     assert review.holdings[0].unrealized_pl_pct < 0
+
+
+def _prices_and_compose(bodies: dict, prices: dict):
+    async def snap_fn(symbols):
+        return {s: prices[s] for s in symbols if s in prices}
+
+    async def compose_fn(sym):
+        return bodies[sym]
+
+    async def spy_bars_fn(sym, from_date):
+        return []
+
+    return snap_fn, compose_fn, spy_bars_fn
+
+
+def test_personal_default_target_eleven_names_is_nine_pct():
+    """11 names → 100/11 ≈ 9.09%; amounts use that default, not a silent settings write."""
+    holdings = tuple(_holding(f"N{i:02d}", [(1, 10.0, "2024-01-02")]) for i in range(11))
+    settings = PortfolioSettings(cash_balance=0.0)  # null target
+    prices = {h.symbol: _Snap(last_trade_price=100.0) for h in holdings}
+    prices["SPY"] = _Snap(last_trade_price=500.0)
+    bodies = {h.symbol: {"status": "ok", "signal_summary": "neutral"} for h in holdings}
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    assert review.effective_target_pct == 9.0909
+    assert review.target_is_default is True
+    assert settings.target_position_pct is None  # never persisted
+    assert all(h.effective_target_pct == 9.0909 for h in review.holdings)
+    payload = review.to_api()
+    assert payload["effectiveTargetPct"] == 9.0909
+    assert payload["targetIsDefault"] is True
+
+
+def test_explicit_target_wins_over_personal_default():
+    holdings = (_holding("AAA", [(1, 10.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=100.0, target_position_pct=20.0)
+    prices = {"AAA": _Snap(last_trade_price=80.0), "SPY": _Snap(last_trade_price=500.0)}
+    bodies = {"AAA": {"status": "ok", "signal_summary": "bullish"}}  # BUY_MORE
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    assert review.effective_target_pct == 20.0
+    assert review.target_is_default is False
+    # 80 / 180 ≈ 44.4% > 20% → overweight; BUY_MORE downgrades to HOLD + trim excess
+    row = review.holdings[0]
+    assert row.overweight is True
+    assert row.suggested_add_amount is None
+    assert row.suggested_reduce_amount == pytest.approx(80.0 - 0.20 * 180.0, abs=0.02)
+
+
+def test_product_mode_null_target_emits_no_amounts():
+    holdings = (_holding("AAA", [(1, 10.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=500.0)  # null target
+    prices = {"AAA": _Snap(last_trade_price=100.0), "SPY": _Snap(last_trade_price=500.0)}
+    bodies = {"AAA": {"status": "ok", "signal_summary": "bullish"}}
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=False,
+        )
+    )
+    assert review.effective_target_pct is None
+    assert review.target_is_default is False
+    assert review.holdings[0].suggested_add_amount is None
+    assert review.holdings[0].suggested_reduce_amount is None
+
+
+def test_hold_caution_under_target_does_not_add():
+    """Bullish + thin R/R → HOLD / caution; underweight still does not add (avoid-adding)."""
+    holdings = (_holding("AAA", [(1, 10.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=900.0, target_position_pct=50.0)
+    prices = {"AAA": _Snap(last_trade_price=100.0), "SPY": _Snap(last_trade_price=500.0)}
+    bodies = {
+        "AAA": {
+            "status": "ok",
+            "signal_summary": "bullish",
+            "risk_reward": 1.0,
+            "min_rr_desk": 2.0,
+        }
+    }
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    row = review.holdings[0]
+    assert row.action == ReviewAction.HOLD
+    assert row.holder_read is not None
+    assert row.holder_read["stance"] == "caution"
+    assert row.overweight is False
+    assert row.suggested_add_amount is None
+    assert row.suggested_reduce_amount is None
+
+
+def test_vehicle_overweight_uses_same_gap_not_f1f5():
+    holdings = (_holding("XOVR", [(10, 20.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=100.0, target_position_pct=10.0)
+    prices = {"XOVR": _Snap(last_trade_price=40.0), "SPY": _Snap(last_trade_price=500.0)}
+    bodies = {
+        "XOVR": {
+            "status": "ok",
+            "signal_summary": "bearish",
+            "is_fund_vehicle": True,
+            "instrument_type": "ETF",
+        }
+    }
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    row = review.holdings[0]
+    assert row.is_fund_vehicle is True
+    assert row.action == ReviewAction.TRIM
+    # MV 400, total 500, target 10% = 50 → excess 350. Not a 50% trim and not "to 2%".
+    assert row.suggested_reduce_amount == 350.0
+    assert row.suggested_reduce_amount != 400.0
+    joined = " ".join(row.rationale).lower()
+    assert "above your 10.0% target" in joined
+    assert "f1" not in joined or "do not apply" in joined
+    assert review.concentration[0].target_pct == 10.0
+    assert "10.0% target" in review.concentration[0].message
+
+
+def test_ai_read_payload_forwards_suggested_amounts():
+    holdings = (_holding("AAA", [(1, 10.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=500.0, target_position_pct=80.0)
+    prices = {"AAA": _Snap(last_trade_price=100.0), "SPY": _Snap(last_trade_price=500.0)}
+    bodies = {"AAA": {"status": "ok", "signal_summary": "bullish"}}
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+    captured: dict = {}
+
+    async def ai_fn(symbol, payload):
+        captured["symbol"] = symbol
+        captured["payload"] = payload
+        return "ok"
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            ai_read_fn=ai_fn,
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    row = review.holdings[0]
+    assert row.action == ReviewAction.BUY_MORE
+    assert row.suggested_add_amount is not None and row.suggested_add_amount > 0
+    assert captured["payload"]["suggested_add_amount"] == row.suggested_add_amount
+    assert captured["payload"]["review_action"] == "buy_more"

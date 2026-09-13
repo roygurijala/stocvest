@@ -155,6 +155,13 @@ export function PortfolioReviewPanel() {
             </div>
           ) : null}
 
+          {review.targetIsDefault && review.effectiveTargetPct != null ? (
+            <div data-testid="review-default-target" style={muted}>
+              Using default ~{review.effectiveTargetPct.toFixed(1)}% target (8-name floor) —
+              changeable in Portfolio settings.
+            </div>
+          ) : null}
+
           {!review.fullyPriced ? (
             <div style={muted}>
               Some live prices were unavailable — affected values show &ldquo;—&rdquo;.
