@@ -118,6 +118,7 @@ def test_suggested_reduce_amount_only_when_overweight():
 def test_default_personal_target_pct_uses_eight_name_floor():
     assert default_personal_target_pct(11) == 9.0909
     assert default_personal_target_pct(0) == 12.5
+    assert default_personal_target_pct(1) == 12.5
     assert default_personal_target_pct(3) == 12.5
     assert default_personal_target_pct(8) == 12.5
     assert default_personal_target_pct(10) == 10.0
@@ -203,6 +204,33 @@ def test_apply_stance_sizing_sell_is_full_market_value():
     )
     assert action == ReviewAction.SELL
     assert add_amt is None and reduce_amt == 750.0
+
+
+def test_apply_stance_sizing_review_emits_no_amounts():
+    action, add_amt, reduce_amt, note = apply_stance_sizing(
+        action=ReviewAction.REVIEW,
+        overweight=False,
+        add_gap=400.0,
+        reduce_excess=180.0,
+        market_value=600.0,
+    )
+    assert action == ReviewAction.REVIEW
+    assert add_amt is None and reduce_amt is None and note is None
+
+
+def test_apply_stance_sizing_buy_more_no_cash_says_no_cash():
+    action, add_amt, reduce_amt, note = apply_stance_sizing(
+        action=ReviewAction.BUY_MORE,
+        overweight=False,
+        add_gap=0.0,
+        reduce_excess=None,
+        market_value=600.0,
+        cash_available=0.0,
+    )
+    assert action == ReviewAction.HOLD
+    assert add_amt is None and reduce_amt is None
+    assert note is not None and "no cash" in note.lower()
+    assert "already at/over target" not in note.lower()
 
 
 # ── tax-lot hint ─────────────────────────────────────────────────────────────
@@ -754,3 +782,59 @@ def test_ai_read_payload_forwards_suggested_amounts():
     assert row.suggested_add_amount is not None and row.suggested_add_amount > 0
     assert captured["payload"]["suggested_add_amount"] == row.suggested_add_amount
     assert captured["payload"]["review_action"] == "buy_more"
+
+
+def test_unpriced_holding_null_pl_and_cost_basis_label():
+    holdings = (_holding("AAA", [(10, 50.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=100.0, target_position_pct=20.0)
+    prices = {"SPY": _Snap(last_trade_price=500.0)}  # AAA missing → unpriced
+    bodies = {"AAA": {"status": "ok", "signal_summary": "bullish"}}
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    row = review.holdings[0]
+    assert row.current_price is None
+    assert row.unrealized_pl is None and row.unrealized_pl_pct is None
+    assert row.market_value == 500.0  # 10 × cost 50 — existing cost fallback
+    assert review.fully_priced is False
+    joined = " ".join(row.rationale).lower()
+    assert "live price unavailable" in joined
+    assert "cost basis" in joined
+
+
+def test_review_action_emits_no_amounts_even_with_default_target():
+    holdings = (_holding("AAA", [(1, 10.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=500.0)  # null target → personal default
+    prices = {"AAA": _Snap(last_trade_price=100.0), "SPY": _Snap(last_trade_price=500.0)}
+    bodies = {"AAA": {"status": "insufficient_data", "signal_summary": "bullish"}}
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    row = review.holdings[0]
+    assert row.action == ReviewAction.REVIEW
+    assert row.suggested_add_amount is None
+    assert row.suggested_reduce_amount is None
+    assert review.effective_target_pct == 12.5
+    assert review.target_is_default is True

@@ -5,6 +5,7 @@ import pytest
 from stocvest.api.services.holdings_store import (
     DynamoDBHoldingsStore,
     InMemoryHoldingsStore,
+    holdings_settings_fingerprint,
 )
 from stocvest.models.portfolio_holding import PortfolioHolding, PortfolioSettings
 
@@ -91,6 +92,23 @@ class _FakeTable:
         self._items[Item["userId"]] = Item
         return {}
 
+    def update_item(
+        self,
+        *,
+        Key: dict,
+        UpdateExpression: str,
+        ExpressionAttributeNames: dict,
+        ExpressionAttributeValues: dict,
+    ) -> dict:
+        uid = Key["userId"]
+        item = self._items.setdefault(uid, {"userId": uid})
+        assignments = UpdateExpression[4:].split(",") if UpdateExpression.startswith("SET ") else []
+        for part in assignments:
+            left, right = part.split("=")
+            attr = ExpressionAttributeNames[left.strip()]
+            item[attr] = ExpressionAttributeValues[right.strip()]
+        return {}
+
     def scan(self, **kwargs: dict) -> dict:
         # Ignores projection; returns all stored items (single unpaginated page).
         return {"Items": list(self._items.values())}
@@ -162,4 +180,54 @@ def test_review_cache_roundtrip_and_invalidate_on_write() -> None:
     assert cached_at == "2026-09-12T00:00:00+00:00"
 
     store.upsert_holding("u1", _holding("MSFT"))
+    assert store.get_cached_review("u1") == (None, None)
+
+
+def test_review_cache_rejected_when_source_fingerprint_stale() -> None:
+    """Background compute that finishes after a settings write must not be served."""
+    store = InMemoryHoldingsStore(_by_user={})
+    store.upsert_holding("u1", _holding("AAPL"))
+    store.save_settings("u1", PortfolioSettings(cash_balance=100.0))
+    old_fp = holdings_settings_fingerprint(store.list_holdings("u1"), store.get_settings("u1"))
+    store.save_settings("u1", PortfolioSettings(cash_balance=999.0))  # drops cache
+    store.put_cached_review(
+        "u1",
+        {"generatedAt": "2026-09-13T00:00:00+00:00", "holdings": []},
+        "2026-09-13T00:00:00+00:00",
+        source=old_fp,
+    )
+    assert store.get_cached_review("u1") == (None, None)
+
+
+def test_dynamo_review_cache_roundtrip_and_put_item_invalidates() -> None:
+    store = DynamoDBHoldingsStore(table=_FakeTable())
+    store.upsert_holding("u1", _holding("AAPL"))
+    store.save_settings("u1", PortfolioSettings(cash_balance=250.0))
+    source = holdings_settings_fingerprint(store.list_holdings("u1"), store.get_settings("u1"))
+    store.put_cached_review(
+        "u1",
+        {"generatedAt": "2026-09-13T00:00:00+00:00", "holdings": [{"symbol": "AAPL"}]},
+        "2026-09-13T00:00:00+00:00",
+        source=source,
+    )
+    review, cached_at = store.get_cached_review("u1")
+    assert review is not None and review["holdings"][0]["symbol"] == "AAPL"
+    assert cached_at == "2026-09-13T00:00:00+00:00"
+
+    store.save_settings("u1", PortfolioSettings(cash_balance=500.0))
+    assert store.get_cached_review("u1") == (None, None)
+
+
+def test_dynamo_review_cache_rejected_when_source_fingerprint_stale() -> None:
+    store = DynamoDBHoldingsStore(table=_FakeTable())
+    store.upsert_holding("u1", _holding("AAPL"))
+    store.save_settings("u1", PortfolioSettings(cash_balance=100.0))
+    old_fp = holdings_settings_fingerprint(store.list_holdings("u1"), store.get_settings("u1"))
+    store.save_settings("u1", PortfolioSettings(cash_balance=999.0))
+    store.put_cached_review(
+        "u1",
+        {"generatedAt": "2026-09-13T00:00:00+00:00", "holdings": []},
+        "2026-09-13T00:00:00+00:00",
+        source=old_fp,
+    )
     assert store.get_cached_review("u1") == (None, None)

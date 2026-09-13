@@ -177,6 +177,7 @@ def apply_stance_sizing(
     add_gap: float | None,
     reduce_excess: float | None,
     market_value: float,
+    cash_available: float | None = None,
 ) -> tuple[ReviewAction, float | None, float | None, str | None]:
     """Stance overlay on gap math. Returns ``(action, add, reduce, extra_rationale)``.
 
@@ -186,11 +187,18 @@ def apply_stance_sizing(
     - ``hold`` + under target (caution / thin R/R) → no add
     - ``trim`` → excess toward target, not to zero
     - ``sell`` → full market value, not a made-up 75%
+    - ``review`` → directional only; never emit add/reduce
     """
+    if action == ReviewAction.REVIEW:
+        return action, None, None, None
+
     if action == ReviewAction.BUY_MORE:
         if add_gap is None:
             return action, None, None, None
         if add_gap <= 0:
+            if cash_available is not None and cash_available <= 0 and not overweight:
+                extra = "No cash available to add toward target — holding rather than adding."
+                return ReviewAction.HOLD, None, None, extra
             extra = (
                 "Already at/over target weight (or no cash available) — holding rather than adding."
             )
@@ -717,11 +725,18 @@ async def build_portfolio_review(
                 add_gap=add_gap,
                 reduce_excess=reduce_excess,
                 market_value=mkt_value,
+                cash_available=remaining_cash,
             )
             if sizing_note:
                 rationale.append(sizing_note)
             if add_amt is not None and add_amt > 0:
                 remaining_cash = round(max(0.0, remaining_cash - add_amt), 2)
+
+        if price is None:
+            rationale.append(
+                "Live price unavailable — weight and any suggested size use your cost basis, "
+                "not a mark; P/L is omitted."
+            )
 
         hint, lt, st = tax_lot_hint(h, action, as_of=as_of)
 

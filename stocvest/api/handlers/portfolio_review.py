@@ -23,7 +23,11 @@ from typing import Any, Awaitable, Callable
 
 from stocvest.api.http_route import http_route_descriptor
 from stocvest.api.response import not_found, ok, unauthorized
-from stocvest.api.services.holdings_store import HoldingsStore, get_holdings_store
+from stocvest.api.services.holdings_store import (
+    HoldingsStore,
+    get_holdings_store,
+    holdings_settings_fingerprint,
+)
 from stocvest.api.services.portfolio_review import build_portfolio_review
 from stocvest.api.services.user_profile_store import get_user_profile_store
 from stocvest.api.shared import build_request_context
@@ -159,6 +163,7 @@ def run_portfolio_review_refresh(
     store = store or get_holdings_store()
     holdings = store.list_holdings(user_id)
     settings = store.get_settings(user_id)
+    source = holdings_settings_fingerprint(holdings, settings)
     review = asyncio.run(
         build_portfolio_review(
             holdings=holdings,
@@ -172,7 +177,7 @@ def run_portfolio_review_refresh(
     cached_at = _now_iso()
     if holdings:
         try:
-            store.put_cached_review(user_id, review_dict, cached_at)
+            store.put_cached_review(user_id, review_dict, cached_at, source=source)
         except Exception as exc:  # noqa: BLE001 — a cache-write failure must not fail the review
             _LOG.warning("portfolio_review cache write failed: %s", exc)
     return review_dict, cached_at

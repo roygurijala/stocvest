@@ -23,15 +23,19 @@ from stocvest.models.portfolio_holding import (
     PortfolioHolding,
     PortfolioSettings,
 )
+from stocvest.utils.config import get_settings
 
 pytestmark = pytest.mark.unit
 
 
 @pytest.fixture(autouse=True)
-def _fresh_store():
+def _fresh_store(monkeypatch):
+    monkeypatch.setenv("STOCVEST_PORTFOLIO_REVIEW_CACHE_ENABLED", "true")
+    get_settings.cache_clear()
     reset_holdings_store_for_tests()
     yield
     reset_holdings_store_for_tests()
+    get_settings.cache_clear()
 
 
 def _event(user_sub: str | None, **extra):

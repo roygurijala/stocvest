@@ -209,8 +209,8 @@ class PortfolioSettings:
 
     - ``cash_balance`` — dry powder available to deploy; bounds "buy more" / "add new".
     - ``target_position_pct`` — target weight per position as a % of total portfolio
-      value (holdings at cost + cash). ``None`` means "no target set" (guidance stays
-      directional, without suggested amounts).
+      value (holdings at mark — cost fallback when unpriced — plus cash). ``None``
+      means "no target set" (guidance stays directional, without suggested amounts).
     - ``benchmark_symbol`` — what the portfolio's return is compared against.
 
     Pure data — no advice, no network. This is *not* PII beyond what holdings already

@@ -17,7 +17,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from stocvest.data.earnings_calendar import (
     earnings_when_phrase,
@@ -163,13 +163,9 @@ def _earnings_fields(
 ) -> tuple[str | None, int | None]:
     raw_date = str(body.get("upcoming_earnings_date") or "").strip() or None
     days = _as_int(body.get("earnings_days_away"))
-    if as_of is not None:
-        return reconcile_earnings_horizon_fields(raw_date, days, as_of=as_of)
-    if raw_date and days is not None and days >= 0:
-        return raw_date, days
-    if raw_date:
-        return raw_date, days
-    return None, days if days is not None and days >= 0 else None
+    # Always recompute from the report date vs UTC today (or caller as_of). A cached
+    # day count next to a real date is how "64 days to Oct 28" survived on Sep 13.
+    return reconcile_earnings_horizon_fields(raw_date, days, as_of=as_of)
 
 
 def _pillar_snapshot_hash(body: dict[str, Any], pillars: dict[str, _Pillar]) -> str:
@@ -197,6 +193,7 @@ def build_position_thesis_packet(
     pillars = _parse_pillars(body)
     snapshot_hash = _pillar_snapshot_hash(body, pillars)
     is_vehicle = _is_fund_vehicle(body)
+    as_of = as_of or datetime.now(timezone.utc).date()
     next_earn, earn_days = _earnings_fields(body, as_of=as_of)
 
     status = str(body.get("status") or "active").strip().lower()
