@@ -1,10 +1,13 @@
-"""Position fundamentals v2 (ship-dark) — EV/Sales TTM + bank FCF/current-ratio suppression.
+"""Position fundamentals v2 — EV/Sales TTM + bank/retail current-ratio (and bank FCF) suppression.
 
-v2 fixes two accuracy defects surfaced on SOFI:
+v2 fixes accuracy defects surfaced on SOFI and WMT:
   (1) F4 EV/Sales used FMP's *quarterly* evToSales (EV ÷ single-quarter revenue), ~4x the
       annual multiple, over-penalizing growth names. v2 derives EV/Sales from EV ÷ TTM rev.
   (2) F1 "Negative FCF" and F3 "current ratio" penalties fire for lenders where those
       metrics are structurally non-meaningful. v2 suppresses them for bank buckets.
+  (3) F3 "tight liquidity" on a sub-1.0 current ratio also misfires for retailers (working-
+      capital cycle). v2 reuses the same suppress_current_ratio flag for the retail bucket.
+      No new numeric threshold.
 
 Every test asserts the v2=False path is byte-identical to the shipped v1 behavior.
 """
@@ -173,6 +176,49 @@ def test_f3_bank_current_ratio_suppressed_under_v2() -> None:
     assert not any("tight liquidity" in c for c in v2.chips)
     assert any("not a solvency metric" in c for c in v2.chips)
     assert v2.score > v1.score
+
+
+def _retail_tight_current_snapshot() -> PositionFundamentalsSnapshot:
+    """WMT-shaped: sub-1.0 current ratio, otherwise no extra F3 punches."""
+    return PositionFundamentalsSnapshot(
+        symbol="WMT",
+        configured=True,
+        data_quality="high",
+        ratios=[
+            FinancialRatios(
+                symbol="WMT",
+                as_of_date=_QDATES[0],
+                current_ratio=0.8,
+            )
+        ],
+    )
+
+
+def test_f3_retail_current_ratio_suppressed_under_v2() -> None:
+    snap = _retail_tight_current_snapshot()
+    retail_flags = resolve_sector_override_flags("retail")
+
+    v1 = score_f3_balance_sheet(snap, sector_flags=retail_flags, fundamentals_v2=False)
+    v2 = score_f3_balance_sheet(snap, sector_flags=retail_flags, fundamentals_v2=True)
+
+    assert any("tight liquidity" in c for c in v1.chips)
+    assert not any("tight liquidity" in c for c in v2.chips)
+    assert any("not a solvency metric" in c for c in v2.chips)
+    assert v2.score > v1.score
+
+
+def test_f3_retail_v2_off_still_penalizes() -> None:
+    snap = _retail_tight_current_snapshot()
+    retail_flags = resolve_sector_override_flags("retail")
+    off = score_f3_balance_sheet(snap, sector_flags=retail_flags, fundamentals_v2=False)
+    assert any("tight liquidity" in c for c in off.chips)
+
+
+def test_f3_non_retail_still_penalizes_current_ratio_under_v2() -> None:
+    snap = _retail_tight_current_snapshot()
+    generic = resolve_sector_override_flags("technology")
+    v2 = score_f3_balance_sheet(snap, sector_flags=generic, fundamentals_v2=True)
+    assert any("tight liquidity" in c for c in v2.chips)
 
 
 def test_f3_bank_v2_off_is_byte_identical() -> None:

@@ -42,8 +42,9 @@ def score_f3_balance_sheet(
     if latest_ratio is not None:
         current = latest_ratio.current_ratio
         if current is not None and suppress_current:
-            # Banks/insurers have no industrial current-asset/liability structure, so a
-            # sub-1.0 current ratio is not a liquidity red flag — surface as context only.
+            # Banks/insurers have no industrial current-asset structure; retailers often
+            # run a negative working-capital cycle. A sub-1.0 ratio is not a liquidity
+            # red flag — surface as context only. No new numeric threshold.
             chips.append(f"Current ratio {current:.1f} — not a solvency metric for this sector")
         elif current is not None:
             if current >= 1.5:
