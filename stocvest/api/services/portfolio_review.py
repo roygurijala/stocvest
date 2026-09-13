@@ -46,6 +46,13 @@ _REVIEW_DISCLAIMER = (
     "investment advice. Signal data only; you are responsible for your own decisions."
 )
 
+# Header one-liner: explains the already-shipped stance overlay (amounts unchanged).
+_SIZING_RULE = (
+    "If the verdict is Sell, reduce the position even when it is below target. "
+    "If Hold/Neutral and caution, do not add toward target. "
+    "Otherwise move toward the target."
+)
+
 # Personal-mode equal-weight floor: never thinner than an 8-name book (12.5%).
 # User-agreed; do not invent a different denominator.
 _PERSONAL_DEFAULT_TARGET_FLOOR_N = 8
@@ -220,6 +227,89 @@ def apply_stance_sizing(
         return action, None, full_mv, None
 
     return action, None, None, None
+
+
+def unfilled_gap_dollars(
+    *,
+    target_pct: float | None,
+    weight_pct: float | None,
+    portfolio_value: float,
+) -> float | None:
+    """Informational ``(target − weight) × portfolioValue``. Never a suggested add."""
+    if target_pct is None or weight_pct is None or portfolio_value <= 0:
+        return None
+    gap = (target_pct - weight_pct) / 100.0 * portfolio_value
+    if gap <= 0:
+        return None
+    return round(gap, 2)
+
+
+def _fmt_target_pct(target: float) -> str:
+    return f"~{target:.1f}%"
+
+
+def _fmt_gap_dollars(gap: float) -> str:
+    return f"~${gap:,.2f}"
+
+
+def sizing_reason(
+    *,
+    action: ReviewAction,
+    target_pct: float | None,
+    weight_pct: float | None,
+    suggested_add: float | None,
+    suggested_reduce: float | None,
+    portfolio_value: float,
+    stance: str | None = None,
+) -> str:
+    """Short deterministic sentence for why add/reduce is (or is not) set.
+
+    Does not change amounts — copy only. Uses the effective target (default or explicit).
+    """
+    has_add = suggested_add is not None and suggested_add > 0
+    has_reduce = suggested_reduce is not None and suggested_reduce > 0
+    under = (
+        target_pct is not None
+        and weight_pct is not None
+        and weight_pct < target_pct
+    )
+    over = (
+        target_pct is not None
+        and weight_pct is not None
+        and weight_pct > target_pct
+    )
+    caution = (stance or "").strip().lower() == "caution"
+
+    if action == ReviewAction.SELL and has_reduce and target_pct is not None and under:
+        return (
+            "Sell overrides the target: reducing the full position even though "
+            f"weight is below the {_fmt_target_pct(target_pct)} target."
+        )
+    if action == ReviewAction.HOLD and under and not has_add and caution and target_pct is not None:
+        gap = unfilled_gap_dollars(
+            target_pct=target_pct,
+            weight_pct=weight_pct,
+            portfolio_value=portfolio_value,
+        )
+        if gap is not None:
+            return (
+                f"Hold + caution: not adding toward the {_fmt_target_pct(target_pct)} "
+                f"target (thin R/R). Gap to target would be {_fmt_gap_dollars(gap)}."
+            )
+    if (
+        action in (ReviewAction.HOLD, ReviewAction.TRIM)
+        and over
+        and has_reduce
+        and target_pct is not None
+    ):
+        return f"Over the {_fmt_target_pct(target_pct)} target — trimming the excess only."
+    if action == ReviewAction.BUY_MORE and has_add and target_pct is not None:
+        return (
+            f"Under the {_fmt_target_pct(target_pct)} target — adding the gap (cash-capped)."
+        )
+    if target_pct is not None and not has_add and not has_reduce and not under and not over:
+        return f"At the {_fmt_target_pct(target_pct)} target"
+    return "No size change."
 
 
 def _target_weight_phrase(target: float, *, used_default: bool) -> str:
@@ -457,6 +547,7 @@ class HoldingReview:
     overweight: bool
     suggested_add_amount: float | None = None
     suggested_reduce_amount: float | None = None
+    sizing_reason: str | None = None
     effective_target_pct: float | None = None
     tax_lot_hint: str | None = None
     long_term_lots: int = 0
@@ -483,6 +574,7 @@ class HoldingReview:
             "overweight": self.overweight,
             "suggestedAddAmount": self.suggested_add_amount,
             "suggestedReduceAmount": self.suggested_reduce_amount,
+            "sizingReason": self.sizing_reason,
             "effectiveTargetPct": self.effective_target_pct,
             "taxLotHint": self.tax_lot_hint,
             "longTermLots": self.long_term_lots,
@@ -578,6 +670,7 @@ class PortfolioReview:
             "fullyPriced": self.fully_priced,
             "effectiveTargetPct": self.effective_target_pct,
             "targetIsDefault": self.target_is_default,
+            "sizingRule": _SIZING_RULE,
             "disclaimer": _REVIEW_DISCLAIMER,
         }
 
@@ -732,6 +825,16 @@ async def build_portfolio_review(
             if add_amt is not None and add_amt > 0:
                 remaining_cash = round(max(0.0, remaining_cash - add_amt), 2)
 
+        row_sizing_reason = sizing_reason(
+            action=action,
+            target_pct=target,
+            weight_pct=weight_pct,
+            suggested_add=add_amt,
+            suggested_reduce=reduce_amt,
+            portfolio_value=total_value,
+            stance=stance,
+        )
+
         if price is None:
             rationale.append(
                 "Live price unavailable — weight and any suggested size use your cost basis, "
@@ -771,6 +874,7 @@ async def build_portfolio_review(
                 overweight=overweight,
                 suggested_add_amount=add_amt,
                 suggested_reduce_amount=reduce_amt,
+                sizing_reason=row_sizing_reason,
                 effective_target_pct=target,
                 tax_lot_hint=hint,
                 long_term_lots=lt,

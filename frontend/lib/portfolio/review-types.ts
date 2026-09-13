@@ -5,6 +5,10 @@
 
 export type ReviewAction = "buy_more" | "hold" | "trim" | "sell" | "review";
 
+/** Review-level stance-overlay one-liner (amounts unchanged). */
+export const PORTFOLIO_REVIEW_SIZING_RULE =
+  "If the verdict is Sell, reduce the position even when it is below target. If Hold/Neutral and caution, do not add toward target. Otherwise move toward the target.";
+
 export interface HoldingReview {
   symbol: string;
   quantity: number;
@@ -22,6 +26,7 @@ export interface HoldingReview {
   overweight: boolean;
   suggestedAddAmount: number | null;
   suggestedReduceAmount: number | null;
+  sizingReason?: string | null;
   effectiveTargetPct?: number | null;
   taxLotHint: string | null;
   longTermLots: number;
@@ -79,5 +84,6 @@ export interface PortfolioReview {
   fullyPriced: boolean;
   effectiveTargetPct?: number | null;
   targetIsDefault?: boolean;
+  sizingRule?: string;
   disclaimer: string;
 }

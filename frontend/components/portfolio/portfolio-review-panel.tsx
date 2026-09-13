@@ -10,6 +10,7 @@ import type {
   PortfolioReview,
   ReviewAction
 } from "@/lib/portfolio/review-types";
+import { PORTFOLIO_REVIEW_SIZING_RULE } from "@/lib/portfolio/review-types";
 
 function fmtUsd(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -162,6 +163,10 @@ export function PortfolioReviewPanel() {
             </div>
           ) : null}
 
+          <div data-testid="review-sizing-rule" style={muted}>
+            {review.sizingRule || PORTFOLIO_REVIEW_SIZING_RULE}
+          </div>
+
           {!review.fullyPriced ? (
             <div style={muted}>
               Some live prices were unavailable — affected values show &ldquo;—&rdquo;.
@@ -262,6 +267,14 @@ function ReviewRow({ h }: { h: HoldingReview }) {
           </span>
         ) : null}
       </div>
+      {h.sizingReason ? (
+        <div
+          data-testid={`sizing-reason-${h.symbol}`}
+          style={{ fontSize: typography.scale.xs, color: colors.textMuted }}
+        >
+          {h.sizingReason}
+        </div>
+      ) : null}
       {h.isFundVehicle ? (
         <div
           data-testid={`vehicle-honesty-${h.symbol}`}
