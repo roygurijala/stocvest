@@ -12,6 +12,7 @@ import {
   buildPositionCompareMatrix,
   buildPositionGemDisplayRows,
   DEFAULT_POSITION_GEM_FILTER,
+  isPositionScanUnavailable,
   POSITION_COMPARE_MAX,
   positionActionColor,
   positionGemTierCopy,
@@ -232,7 +233,7 @@ export function InvestPageClient() {
       />
 
       {/* Table */}
-      {error ? (
+      {isPositionScanUnavailable(response, error) ? (
         <p data-testid="invest-error" style={{ margin: 0, fontSize: typography.scale.sm, color: colors.caution }}>
           The investment scan is temporarily unavailable. Try again in a moment.
         </p>

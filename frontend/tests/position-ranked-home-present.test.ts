@@ -8,6 +8,7 @@ import {
   buildWatchlistQualityBadge,
   buildWatchlistQualityMap,
   DEFAULT_POSITION_GEM_FILTER,
+  isPositionScanUnavailable,
   parsePositionCandidates,
   parsePositionGemFilterFromParams,
   positionActionColor,
@@ -65,6 +66,23 @@ describe("position-ranked-home-present", () => {
   it("returns null for non-object input", () => {
     expect(parsePositionCandidates(null)).toBeNull();
     expect(parsePositionCandidates("nope")).toBeNull();
+  });
+
+  it("treats a degraded empty envelope as scan-unavailable (not an empty universe)", () => {
+    const degraded = parsePositionCandidates({
+      candidates: [],
+      count: 0,
+      degraded: true
+    });
+    expect(degraded?.degraded).toBe(true);
+    expect(isPositionScanUnavailable(degraded, undefined)).toBe(true);
+    expect(isPositionScanUnavailable(degraded, new Error("fetch failed"))).toBe(true);
+    const emptyUniverse = parsePositionCandidates({
+      candidates: [],
+      count: 0,
+      degraded: false
+    });
+    expect(isPositionScanUnavailable(emptyUniverse, undefined)).toBe(false);
   });
 
   it("filters by tier, min scores, and symbol query", () => {

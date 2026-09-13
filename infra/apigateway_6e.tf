@@ -21,8 +21,12 @@ locals {
     "GET /v1/desk/today"            = { module_key = "market_data", authorizer = true }
     "POST /v1/desk/refresh"         = { module_key = "scanner", authorizer = true }
 
-    "POST /v1/signals/ai/explanations"       = { module_key = "signals", authorizer = true }
-    "POST /v1/signals/position/research"     = { module_key = "signals", authorizer = true }
+    "POST /v1/signals/ai/explanations"   = { module_key = "signals", authorizer = true }
+    "POST /v1/signals/position/research" = { module_key = "signals", authorizer = true }
+    # ADR-004 POS-D15 — ranked gem candidates for /dashboard/invest. Handler already
+    # lives on the signals Lambda; without this route API Gateway returns native 404
+    # (not 401), which the BFF used to proxy and the invest page treats as unavailable.
+    "GET /v1/signals/position/candidates"    = { module_key = "signals", authorizer = true }
     "POST /v1/signals/assistant/chat"        = { module_key = "signals", authorizer = true }
     "POST /v1/public/assistant/chat"         = { module_key = "signals", authorizer = false }
     "POST /v1/signals/swing/composite"       = { module_key = "signals", authorizer = true }

@@ -346,22 +346,38 @@ def get_cached_position_scan_snapshot() -> PositionScanSnapshot | None:
     return stored
 
 
+def _persist_position_scan_snapshot(snapshot: PositionScanSnapshot) -> None:
+    """Best-effort cross-instance persist so the next cold Lambda can skip a live scan."""
+    try:
+        from stocvest.api.services.position_scan_store import get_position_scan_store
+
+        get_position_scan_store().put(snapshot)
+    except Exception:  # noqa: BLE001 — persistence must never fail the request path
+        _LOG.warning("position scan persist failed")
+
+
 def get_position_scan_snapshot_sync(*, force: bool = False) -> tuple[PositionScanSnapshot, bool]:
     """Return (snapshot, cached). Recomputes (fresh asyncio loop) when stale or forced.
 
-    Loop-agnostic: cache coherence is guarded by a threading.Lock so repeated warm
-    invocations never trip asyncio's per-loop binding.
+    Request-path rule: prefer a persisted / stale-in-process snapshot over a live
+    25-name composite scan. The HTTP API integration dies at ~29s; a cold universe
+    compose regularly exceeds that and the invest page then shows "unavailable".
+    ``force=True`` (``?refresh=1``) still rescans. Loop-agnostic: cache coherence is
+    guarded by a threading.Lock so repeated warm invocations never trip asyncio's
+    per-loop binding.
     """
     global _snapshot_cache
-    now = time.time()
-    cached = _snapshot_cache
-    if not force and cached is not None and cached[0] > now:
-        return cached[1], True
+    if not force:
+        stored = get_cached_position_scan_snapshot()
+        if stored is not None:
+            return stored, True
     with _cache_lock:
+        if not force:
+            stored = get_cached_position_scan_snapshot()
+            if stored is not None:
+                return stored, True
         now = time.time()
-        cached = _snapshot_cache
-        if not force and cached is not None and cached[0] > now:
-            return cached[1], True
         snapshot = run_position_scan()
         _snapshot_cache = (now + _SCAN_TTL_SECONDS, snapshot)
+        _persist_position_scan_snapshot(snapshot)
         return snapshot, False

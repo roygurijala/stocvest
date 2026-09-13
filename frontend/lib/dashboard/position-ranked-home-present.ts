@@ -209,6 +209,15 @@ export function parsePositionCandidates(json: unknown): PositionCandidatesRespon
   };
 }
 
+/** Fetch error, or a degraded empty envelope (missing route / timeout / scan crash). */
+export function isPositionScanUnavailable(
+  response: PositionCandidatesResponse | null,
+  error: unknown
+): boolean {
+  if (error) return true;
+  return Boolean(response?.degraded && response.candidates.length === 0);
+}
+
 /** Apply transparent client-side filters (tier + pillar-score sliders + symbol search). */
 export function applyPositionGemFilter(
   candidates: readonly PositionGemCandidate[],
