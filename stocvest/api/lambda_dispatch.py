@@ -334,6 +334,14 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
 
             return portfolio_digest_handler(event, context)
 
+        # PORTFOLIO-MGMT Slice 3b — async self-invoke to recompute + cache one user's
+        # review off the request path (the GET handler fires this on a cache miss/stale so
+        # the heavy composite never runs inside the API Gateway 30s window).
+        if isinstance(event, dict) and isinstance(event.get("portfolio_review_refresh"), str):
+            from stocvest.api.handlers.portfolio_review import portfolio_review_refresh_handler
+
+            return portfolio_review_refresh_handler(event, context)
+
         from stocvest.api.handlers.portfolio_review import portfolio_review_dispatch_handler
 
         return _with_cors_and_audit(

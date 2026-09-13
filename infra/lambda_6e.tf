@@ -297,6 +297,18 @@ resource "aws_iam_role_policy" "lambda_api_data_access" {
         ]
         Resource = aws_cognito_user_pool.main.arn
       },
+      {
+        # PORTFOLIO-MGMT Slice 3b — portfolio_review GET ?refresh=1 self-invokes
+        # (InvocationType=Event) so the Long-Term composite runs off the API Gateway
+        # 29s request path. Without this, boto3 invoke fails and a naive inline
+        # fallback blows the HTTP timeout ("Could not run the review").
+        Sid    = "LambdaSelfInvokePortfolioReview"
+        Effect = "Allow"
+        Action = ["lambda:InvokeFunction"]
+        Resource = [
+          "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:stocvest-development-api-portfolio_review",
+        ]
+      },
     ]
   })
 }

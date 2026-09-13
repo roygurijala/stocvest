@@ -55,10 +55,10 @@ export function PortfolioReviewPanel() {
     setLoading(true);
     setError(null);
     const result = await fetchPortfolioReviewClient();
-    if (!result) {
-      setError("Could not run the review right now. Please try again.");
+    if (!result.ok) {
+      setError(result.message);
     } else {
-      setReview(result);
+      setReview(result.review);
     }
     setLoading(false);
   }
@@ -111,6 +111,13 @@ export function PortfolioReviewPanel() {
 
       {error ? (
         <div style={{ color: colors.bearish, fontSize: typography.scale.sm }}>{error}</div>
+      ) : null}
+
+      {loading && !review ? (
+        <div style={muted}>
+          Reading each holding on the Long-Term desk. A full book can take about a minute —
+          this page will update when it&apos;s ready.
+        </div>
       ) : null}
 
       {!review && !loading && !error ? (

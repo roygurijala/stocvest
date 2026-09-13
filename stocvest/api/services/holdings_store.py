@@ -7,6 +7,7 @@ inside). This backs the manual portfolio the daily review reads.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Protocol
 
@@ -22,6 +23,7 @@ from stocvest.utils.config import get_settings
 class DynamoTableLike(Protocol):
     def get_item(self, *, Key: dict[str, Any]) -> dict[str, Any]: ...
     def put_item(self, *, Item: dict[str, Any]) -> dict[str, Any]: ...
+    def update_item(self, **kwargs: Any) -> dict[str, Any]: ...
     def scan(self, **kwargs: Any) -> dict[str, Any]: ...
 
 
@@ -34,6 +36,12 @@ class HoldingsStore(Protocol):
     def save_settings(self, user_id: str, settings: PortfolioSettings) -> None: ...
     def iter_users_with_holdings(self) -> Iterator[str]: ...
     def apply_split(self, user_id: str, symbol: str, ratio: float) -> PortfolioHolding | None: ...
+
+    # Precomputed daily-review cache (PORTFOLIO-MGMT Slice 3b). The cached review lives
+    # on the same per-user item as the holdings, so any holdings/settings write (a full
+    # item rewrite) drops it automatically — the cache is never served for stale holdings.
+    def get_cached_review(self, user_id: str) -> tuple[dict[str, Any] | None, str | None]: ...
+    def put_cached_review(self, user_id: str, review: dict[str, Any], cached_at: str) -> None: ...
 
 
 def _dedupe(holdings: tuple[PortfolioHolding, ...]) -> tuple[PortfolioHolding, ...]:
@@ -49,16 +57,19 @@ def _dedupe(holdings: tuple[PortfolioHolding, ...]) -> tuple[PortfolioHolding, .
 class InMemoryHoldingsStore:
     _by_user: dict[str, tuple[PortfolioHolding, ...]]
     _settings_by_user: dict[str, PortfolioSettings] = field(default_factory=dict)
+    _review_cache_by_user: dict[str, tuple[dict[str, Any], str]] = field(default_factory=dict)
 
     def list_holdings(self, user_id: str) -> tuple[PortfolioHolding, ...]:
         return self._by_user.get(user_id, ())
 
     def replace_all(self, user_id: str, holdings: tuple[PortfolioHolding, ...]) -> None:
         self._by_user[user_id] = _dedupe(holdings)
+        self._review_cache_by_user.pop(user_id, None)
 
     def upsert_holding(self, user_id: str, holding: PortfolioHolding) -> None:
         rest = tuple(h for h in self.list_holdings(user_id) if h.symbol != holding.symbol)
         self._by_user[user_id] = _dedupe(rest + (holding,))
+        self._review_cache_by_user.pop(user_id, None)
 
     def remove_holding(self, user_id: str, symbol: str) -> bool:
         sym = symbol.strip().upper()
@@ -67,6 +78,7 @@ class InMemoryHoldingsStore:
         if len(nxt) == len(cur):
             return False
         self._by_user[user_id] = nxt
+        self._review_cache_by_user.pop(user_id, None)
         return True
 
     def get_settings(self, user_id: str) -> PortfolioSettings:
@@ -74,6 +86,7 @@ class InMemoryHoldingsStore:
 
     def save_settings(self, user_id: str, settings: PortfolioSettings) -> None:
         self._settings_by_user[user_id] = settings
+        self._review_cache_by_user.pop(user_id, None)
 
     def iter_users_with_holdings(self) -> Iterator[str]:
         for uid, holdings in self._by_user.items():
@@ -86,8 +99,17 @@ class InMemoryHoldingsStore:
         if held is None:
             return None
         adjusted = apply_stock_split(held, ratio=ratio)
-        self.upsert_holding(user_id, adjusted)
+        self.upsert_holding(user_id, adjusted)  # also drops the cache
         return adjusted
+
+    def get_cached_review(self, user_id: str) -> tuple[dict[str, Any] | None, str | None]:
+        entry = self._review_cache_by_user.get(user_id)
+        if entry is None:
+            return None, None
+        return entry[0], entry[1]
+
+    def put_cached_review(self, user_id: str, review: dict[str, Any], cached_at: str) -> None:
+        self._review_cache_by_user[user_id] = (review, cached_at)
 
 
 @dataclass
@@ -96,6 +118,8 @@ class DynamoDBHoldingsStore:
     user_key: str = "userId"
     holdings_key: str = "holdings"
     settings_key: str = "settings"
+    review_cache_key: str = "reviewCache"
+    review_cached_at_key: str = "reviewCachedAt"
 
     @classmethod
     def from_boto3_table(
@@ -214,6 +238,34 @@ class DynamoDBHoldingsStore:
         rest = tuple(h for h in current if h.symbol != sym)
         self._put_item(user_id, holdings=_dedupe(rest + (adjusted,)), settings=settings)
         return adjusted
+
+    def get_cached_review(self, user_id: str) -> tuple[dict[str, Any] | None, str | None]:
+        item = self._get_item(user_id)
+        raw = item.get(self.review_cache_key)
+        cached_at = item.get(self.review_cached_at_key)
+        if not isinstance(raw, str) or not raw:
+            return None, None
+        try:
+            review = json.loads(raw)
+        except (ValueError, TypeError):
+            return None, None
+        if not isinstance(review, dict):
+            return None, None
+        return review, (str(cached_at) if cached_at else None)
+
+    def put_cached_review(self, user_id: str, review: dict[str, Any], cached_at: str) -> None:
+        # Stored as a JSON string so the review's floats round-trip without DynamoDB's
+        # Decimal coercion. Written with update_item so it never disturbs holdings/settings;
+        # the next holdings/settings write is a full put_item that drops it (invalidation).
+        self.table.update_item(
+            Key={self.user_key: user_id},
+            UpdateExpression="SET #rc = :rc, #ra = :ra",
+            ExpressionAttributeNames={
+                "#rc": self.review_cache_key,
+                "#ra": self.review_cached_at_key,
+            },
+            ExpressionAttributeValues={":rc": json.dumps(review), ":ra": cached_at},
+        )
 
 
 def build_default_holdings_store() -> HoldingsStore:

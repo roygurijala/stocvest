@@ -243,6 +243,21 @@ class Settings(BaseSettings):
     trial_reminders_enabled: bool = Field(False, alias="TRIAL_REMINDERS_ENABLED")
     # PORTFOLIO-MGMT — master switch for the daily post-close portfolio digest job (default OFF).
     portfolio_digest_enabled: bool = Field(False, alias="PORTFOLIO_DIGEST_ENABLED")
+    # PORTFOLIO-MGMT Slice 3b — precomputed daily-review cache. When ON (default), the
+    # GET /v1/portfolio-review handler serves a cached review instantly and recomputes it
+    # in the background (async self-invoke) on a miss/stale, so the ~25-30s composite work
+    # never runs inside the API Gateway 30s request window. env `false` reverts to the
+    # prior synchronous behavior (compute on every request).
+    portfolio_review_cache_enabled: bool = Field(
+        True, alias="STOCVEST_PORTFOLIO_REVIEW_CACHE_ENABLED"
+    )
+    # How long a cached review is served before it is considered stale (a background
+    # refresh is triggered on the next read). Prices/verdicts drift intraday, so a
+    # same-session TTL keeps the read fresh enough for a "daily" review; the daily digest
+    # and on-demand refresh (?refresh=1) also repopulate it.
+    portfolio_review_cache_ttl_seconds: int = Field(
+        21600, alias="STOCVEST_PORTFOLIO_REVIEW_CACHE_TTL_SECONDS"
+    )
 
     # ── Scanner schedule + WebSocket broadcast ────────────────────
     scanner_symbols: str = Field("AAPL,MSFT,NVDA", alias="STOCVEST_SCANNER_SYMBOLS")

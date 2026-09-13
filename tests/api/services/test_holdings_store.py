@@ -151,3 +151,15 @@ def test_apply_split_dynamo_preserves_settings_and_missing_symbol() -> None:
     updated = store.apply_split("u1", "AAPL", 2.0)
     assert updated is not None and updated.total_quantity == 20
     assert store.get_settings("u1").cash_balance == 250.0
+
+
+def test_review_cache_roundtrip_and_invalidate_on_write() -> None:
+    store = InMemoryHoldingsStore(_by_user={})
+    store.upsert_holding("u1", _holding("AAPL"))
+    store.put_cached_review("u1", {"generatedAt": "2026-09-12T00:00:00+00:00", "holdings": []}, "2026-09-12T00:00:00+00:00")
+    review, cached_at = store.get_cached_review("u1")
+    assert review is not None and review["generatedAt"].startswith("2026-09-12")
+    assert cached_at == "2026-09-12T00:00:00+00:00"
+
+    store.upsert_holding("u1", _holding("MSFT"))
+    assert store.get_cached_review("u1") == (None, None)
