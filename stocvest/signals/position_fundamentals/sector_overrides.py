@@ -46,9 +46,10 @@ class SectorOverrideFlags:
     #: FCF is dominated by loan originations held on balance sheet, so it is structurally
     #: negative even when the business is GAAP-profitable. Gated behind fundamentals-v2.
     suppress_fcf_penalty: bool = False
-    #: F3 — do not score the classic current ratio: banks/insurers do not have an
-    #: industrial current-asset/liability structure, so a sub-1.0 ratio is not a liquidity
-    #: red flag. Gated behind fundamentals-v2.
+    #: F3 — do not score the classic current ratio: banks/insurers have no industrial
+    #: current-asset/liability structure, and retailers often run a negative working-
+    #: capital cycle (fast inventory turns, cash at sale, supplier terms), so a sub-1.0
+    #: ratio is not a liquidity red flag. Gated behind fundamentals-v2.
     suppress_current_ratio: bool = False
     #: F4 — optional chip text explaining the sector-appropriate valuation lens; when set it
     #: replaces the default de-weight chip.
@@ -59,6 +60,7 @@ class SectorOverrideFlags:
 
 # Bucket families (values match the internal buckets emitted by ``SectorMapper``).
 _BANK_BUCKETS = ("banks", "insurance", "consumer_finance", "investment_services")
+_RETAIL_BUCKETS = ("retail",)
 _REIT_BUCKETS = ("real_estate", "reits")
 _PREPROFIT_BUCKETS = ("biotech", "pharma")
 
@@ -76,6 +78,13 @@ def _build_sector_override_table() -> dict[str, SectorOverrideFlags]:
             use_roa_not_roic=True,
             structural_high_leverage=True,
             suppress_fcf_penalty=True,
+            suppress_current_ratio=True,
+            sector_label=bucket,
+        )
+    for bucket in _RETAIL_BUCKETS:
+        # Retail (e.g. WMT): a sub-1.0 current ratio is often the working-capital cycle,
+        # not distress. Reuse the existing v2 suppress — no new numeric threshold.
+        table[bucket] = SectorOverrideFlags(
             suppress_current_ratio=True,
             sector_label=bucket,
         )

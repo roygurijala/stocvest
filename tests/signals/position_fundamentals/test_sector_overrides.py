@@ -99,11 +99,23 @@ def test_bucket_lookup_is_case_insensitive() -> None:
 
 
 @pytest.mark.unit
+def test_retail_suppresses_current_ratio_only() -> None:
+    """WMT-class retailers: current ratio is working-capital cycle, not a bank-style overlay."""
+    flags = resolve_sector_override_flags("retail")
+    assert flags.suppress_current_ratio is True
+    assert flags.suppress_fcf_penalty is False
+    assert flags.use_roa_not_roic is False
+    assert flags.structural_high_leverage is False
+    assert flags.sector_label == "retail"
+
+
+@pytest.mark.unit
 def test_default_sector_no_flags_but_echoes_label() -> None:
     flags = resolve_sector_override_flags("technology")
     assert flags.use_roa_not_roic is False
     assert flags.de_weight_valuation is False
     assert flags.structural_high_leverage is False
+    assert flags.suppress_current_ratio is False
     assert flags.sector_label == "technology"
 
 
