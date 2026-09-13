@@ -17,6 +17,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from stocvest.data.earnings_calendar import earnings_when_phrase
+
 Confidence = Literal["high", "medium", "low"]
 
 _PILLAR_IDS = ("F1", "F2", "F3", "F4", "F5")
@@ -55,6 +57,9 @@ class PositionThesisPacket:
     # Consumers must NOT claim a fundamentals verdict ("reads bullish on fundamentals")
     # in that case — the verdict is carried for routing only, not as a fundamentals read.
     fundamentals_covered: bool = True
+    is_fund_vehicle: bool = False
+    next_earnings_date: str | None = None
+    earnings_days_away: int | None = None
 
     def to_api_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +70,9 @@ class PositionThesisPacket:
             "open_questions": [b.to_api_dict() for b in self.open_questions],
             "pillar_snapshot_hash": self.pillar_snapshot_hash,
             "fundamentals_covered": self.fundamentals_covered,
+            "is_fund_vehicle": self.is_fund_vehicle,
+            "next_earnings_date": self.next_earnings_date,
+            "earnings_days_away": self.earnings_days_away,
         }
 
 
@@ -136,6 +144,23 @@ def _pillar_line(p: _Pillar, tone: str) -> str:
     return f"{p.label} ({p.pillar_id}): {tone} at {score}."
 
 
+def _is_fund_vehicle(body: dict[str, Any]) -> bool:
+    if body.get("is_fund_vehicle") is True:
+        return True
+    instrument = str(body.get("instrument_type") or "").strip().upper()
+    return instrument in {"ETF", "ETN", "ETS", "ETV", "FUND", "MUTUAL", "UIT", "BASKET"}
+
+
+def _earnings_fields(body: dict[str, Any]) -> tuple[str | None, int | None]:
+    raw_date = str(body.get("upcoming_earnings_date") or "").strip()
+    days = _as_int(body.get("earnings_days_away"))
+    if raw_date and days is not None and days >= 0:
+        return raw_date, days
+    if raw_date:
+        return raw_date, days
+    return None, days if days is not None and days >= 0 else None
+
+
 def _pillar_snapshot_hash(body: dict[str, Any], pillars: dict[str, _Pillar]) -> str:
     payload = {
         "verdict": str(body.get("verdict") or body.get("signal_summary") or "").strip().lower(),
@@ -156,8 +181,30 @@ def build_position_thesis_packet(body: dict[str, Any]) -> PositionThesisPacket:
     verdict = str(body.get("verdict") or body.get("signal_summary") or "neutral").strip().lower()
     pillars = _parse_pillars(body)
     snapshot_hash = _pillar_snapshot_hash(body, pillars)
+    is_vehicle = _is_fund_vehicle(body)
+    next_earn, earn_days = _earnings_fields(body)
 
     status = str(body.get("status") or "active").strip().lower()
+    if is_vehicle:
+        return PositionThesisPacket(
+            symbol=symbol,
+            verdict=verdict,
+            open_questions=[
+                ThesisBullet(
+                    text=(
+                        "This is a fund/ETF vehicle — F1–F5 corporate pillars do not apply "
+                        "(no 10-K). Read it as a product, not an operating company."
+                    ),
+                    source="layer:fundamentals",
+                    confidence="low",
+                )
+            ],
+            pillar_snapshot_hash=snapshot_hash,
+            fundamentals_covered=False,
+            is_fund_vehicle=True,
+            next_earnings_date=next_earn,
+            earnings_days_away=earn_days,
+        )
     if status == "insufficient_data" or not pillars:
         return PositionThesisPacket(
             symbol=symbol,
@@ -171,6 +218,9 @@ def build_position_thesis_packet(body: dict[str, Any]) -> PositionThesisPacket:
             ],
             pillar_snapshot_hash=snapshot_hash,
             fundamentals_covered=False,
+            is_fund_vehicle=False,
+            next_earnings_date=next_earn,
+            earnings_days_away=earn_days,
         )
 
     bull: list[ThesisBullet] = []
@@ -241,21 +291,31 @@ def build_position_thesis_packet(body: dict[str, Any]) -> PositionThesisPacket:
             )
         )
 
-    # Earnings-calendar risk: a multi-week/month hold entered right before a report
-    # carries event volatility. Surface it as a watch item when a report is near
-    # (display-only — reads the already-merged earnings horizon; no score change).
+    # Earnings-calendar risk: only when a real upcoming date is present.
+    # Never say "tomorrow" unless days_away == 1. Missing date + imminent risk
+    # is treated as unverified — do not invent a session.
     earnings_risk = str(body.get("earnings_risk") or "").strip().lower()
-    earnings_days = _as_int(body.get("earnings_days_away"))
-    if earnings_risk in ("imminent", "elevated", "watch") and earnings_days is not None:
-        when = "tomorrow" if earnings_days <= 1 else f"in {earnings_days} days"
+    if next_earn and earn_days is not None and earnings_risk in ("imminent", "elevated", "watch"):
+        when = earnings_when_phrase(earn_days)
         questions.append(
             ThesisBullet(
                 text=(
-                    f"Earnings {when} — expect event volatility on a long-term entry; "
-                    "consider timing the entry around the report."
+                    f"Earnings {when} ({next_earn}) — expect event volatility on a long-term hold; "
+                    "weigh timing around the report."
                 ),
                 source="layer:earnings",
                 confidence="medium",
+            )
+        )
+    elif earnings_risk in ("imminent", "elevated", "watch") and not next_earn:
+        questions.append(
+            ThesisBullet(
+                text=(
+                    "Earnings timing is unverified — the feed has no upcoming report date; "
+                    "do not treat a report as imminent."
+                ),
+                source="layer:earnings",
+                confidence="low",
             )
         )
 
@@ -304,6 +364,9 @@ def build_position_thesis_packet(body: dict[str, Any]) -> PositionThesisPacket:
         bear_case=_dedupe(bear)[:_MAX_BULLETS_PER_SECTION],
         open_questions=_dedupe(questions)[:_MAX_BULLETS_PER_SECTION],
         pillar_snapshot_hash=snapshot_hash,
+        is_fund_vehicle=False,
+        next_earnings_date=next_earn,
+        earnings_days_away=earn_days,
     )
 
 
@@ -322,6 +385,15 @@ def _dedupe(bullets: list[ThesisBullet]) -> list[ThesisBullet]:
 def deterministic_investment_read(packet: PositionThesisPacket) -> str:
     """Free-tier / fallback brief woven from the packet — no LLM, non-advisory."""
     sym = packet.symbol or "This name"
+    if packet.is_fund_vehicle:
+        parts = [
+            f"On the Long Term desk, {sym} is a fund/ETF vehicle — corporate F1–F5 "
+            "pillars do not apply (no 10-K)."
+        ]
+        if packet.open_questions:
+            parts.append(f"Open question: {packet.open_questions[0].text}")
+        parts.append("Signal data only.")
+        return " ".join(parts)
     if not packet.fundamentals_covered:
         parts = [
             f"On the Long Term desk (long-horizon quality), {sym} does not have enough "

@@ -29,3 +29,25 @@ def test_parse_adr_type() -> None:
     ref = parse_polygon_ticker_details(raw)
     assert ref is not None
     assert ref.is_adr() is True
+    assert ref.is_fund_vehicle() is False
+
+
+def test_etf_type_is_fund_vehicle() -> None:
+    raw = {"ticker": "ARKQ", "type": "ETF", "name": "ARK Autonomous Technology & Robotics ETF"}
+    ref = parse_polygon_ticker_details(raw)
+    assert ref is not None
+    assert ref.is_fund_vehicle() is True
+
+
+def test_name_fallback_marks_etf_when_type_missing() -> None:
+    raw = {"ticker": "IBIT", "name": "iShares Bitcoin Trust ETF"}
+    ref = parse_polygon_ticker_details(raw)
+    assert ref is not None
+    assert ref.is_fund_vehicle() is True
+
+
+def test_common_stock_is_not_fund_vehicle() -> None:
+    raw = {"ticker": "MSFT", "type": "CS", "name": "Microsoft Corporation"}
+    ref = parse_polygon_ticker_details(raw)
+    assert ref is not None
+    assert ref.is_fund_vehicle() is False

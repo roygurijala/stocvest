@@ -367,3 +367,43 @@ def test_build_portfolio_review_buy_more_capped_by_aggregate_cash():
     )
     total_add = sum(h.suggested_add_amount or 0.0 for h in review.holdings)
     assert total_add <= 30.0 + 1e-6
+
+
+def test_fund_vehicle_rationale_does_not_ask_for_filings():
+    holdings = (_holding("ARKQ", [(20, 50.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=100.0)
+
+    async def snap_fn(symbols):
+        return {s: _Snap(last_trade_price=60.0) for s in symbols}
+
+    async def compose_fn(sym):
+        return {
+            "status": "ok",
+            "signal_summary": "neutral",
+            "is_fund_vehicle": True,
+            "instrument_type": "ETF",
+        }
+
+    async def spy_bars_fn(sym, from_date):
+        return []
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 12),
+            advice_enabled=True,
+        )
+    )
+    row = review.holdings[0]
+    assert row.symbol == "ARKQ"
+    assert row.is_fund_vehicle is True
+    joined = " ".join(row.rationale).lower()
+    assert "fund/etf vehicle" in joined
+    assert "10-k" in joined
+    assert "verify against filings" not in joined
+    assert row.to_api()["isFundVehicle"] is True

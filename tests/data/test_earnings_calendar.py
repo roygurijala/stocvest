@@ -9,9 +9,12 @@ import pytest
 
 from stocvest.data.earnings_calendar import (
     EarningsHorizon,
+    POSITION_EARNINGS_WINDOW_DAYS,
+    _horizon_from_event,
     classify_earnings_risk,
     clear_earnings_horizon_cache,
     earnings_horizon_to_api_fields,
+    earnings_when_phrase,
     resolve_upcoming_earnings_horizon,
 )
 from stocvest.data.models import EarningsEvent
@@ -33,6 +36,51 @@ def test_classify_earnings_risk(days: int, risk: str, has_chip: bool) -> None:
     level, chip = classify_earnings_risk(days)
     assert level == risk
     assert (chip is not None) is has_chip
+
+
+def test_classify_does_not_say_tomorrow_for_today() -> None:
+    level, chip = classify_earnings_risk(0)
+    assert level == "imminent"
+    assert chip is not None and "today" in chip.lower()
+    assert "tomorrow" not in chip.lower()
+
+
+def test_classify_says_tomorrow_only_for_one_day() -> None:
+    level, chip = classify_earnings_risk(1)
+    assert level == "imminent"
+    assert chip is not None and "tomorrow" in chip.lower()
+    assert earnings_when_phrase(0) == "today"
+    assert earnings_when_phrase(1) == "tomorrow"
+    assert earnings_when_phrase(46) == "in 46 days"
+
+
+def test_msft_oct_28_is_not_imminent_on_sep_12() -> None:
+    """User-reported false urgency: next print 2026-10-28 is ~46d, not tomorrow."""
+    today = date(2026, 9, 12)
+    ev = EarningsEvent(
+        symbol="MSFT",
+        company_name="Microsoft",
+        report_date=date(2026, 10, 28),
+        report_time="after_market",
+    )
+    far = _horizon_from_event(ev, today=today, window_days=30)
+    assert far is None
+    near = _horizon_from_event(ev, today=today, window_days=POSITION_EARNINGS_WINDOW_DAYS)
+    assert near is not None
+    assert near.days_away == 46
+    assert near.risk == "normal"
+    assert near.chip is None
+    last = _horizon_from_event(
+        EarningsEvent(
+            symbol="MSFT",
+            company_name="Microsoft",
+            report_date=date(2026, 7, 29),
+            report_time="after_market",
+        ),
+        today=today,
+        window_days=POSITION_EARNINGS_WINDOW_DAYS,
+    )
+    assert last is None
 
 
 def test_earnings_horizon_to_api_fields() -> None:
@@ -144,6 +192,32 @@ async def test_resolve_fmp_fallback_when_finnhub_and_polygon_empty() -> None:
     assert h is not None
     assert h.report_date == fmp_date
     assert h.days_away == 5
+
+
+@pytest.mark.asyncio
+async def test_resolve_msft_oct_28_not_imminent_on_sep_12() -> None:
+    clear_earnings_horizon_cache("MSFT")
+    today = date(2026, 9, 12)
+    ev = EarningsEvent(
+        symbol="MSFT",
+        company_name="Microsoft",
+        report_date=date(2026, 10, 28),
+        report_time="after_market",
+    )
+    with patch(
+        "stocvest.data.earnings_calendar_fetch.fetch_earnings_events",
+        new=AsyncMock(return_value=([ev], None, "finnhub")),
+    ):
+        none_swing = await resolve_upcoming_earnings_horizon(
+            "MSFT", window_days=30, as_of=today
+        )
+        long_h = await resolve_upcoming_earnings_horizon(
+            "MSFT", window_days=POSITION_EARNINGS_WINDOW_DAYS, as_of=today
+        )
+    assert none_swing is None
+    assert long_h is not None
+    assert long_h.days_away == 46
+    assert long_h.risk == "normal"
 
 
 @pytest.mark.asyncio

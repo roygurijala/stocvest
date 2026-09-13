@@ -165,6 +165,19 @@ describe("PortfolioReviewPanel", () => {
     expect(screen.getByText(/Add on a pullback/)).toBeInTheDocument();
   });
 
+  test("shows a vehicle honesty banner for fund/ETF holdings", async () => {
+    const review = sampleReview();
+    review.holdings[0].symbol = "IBIT";
+    review.holdings[0].isFundVehicle = true;
+    fetchMock.mockResolvedValueOnce({ ok: true, review });
+    wrap(<PortfolioReviewPanel />);
+
+    fireEvent.click(screen.getByTestId("run-review"));
+
+    await waitFor(() => expect(screen.getByTestId("vehicle-honesty-IBIT")).toBeInTheDocument());
+    expect(screen.getByText(/Fund\/ETF vehicle — no corporate filings/i)).toBeInTheDocument();
+  });
+
   test("shows an empty-holdings message when the review has no holdings", async () => {
     const review = sampleReview();
     review.holdings = [];

@@ -15,6 +15,10 @@ _LOG = get_logger(__name__)
 
 EarningsRiskLevel = Literal["imminent", "elevated", "watch", "normal"]
 
+# Lookup windows only — risk bands stay classify_earnings_risk (0–1 / 2–3 / 4–7).
+SWING_EARNINGS_WINDOW_DAYS = 30
+POSITION_EARNINGS_WINDOW_DAYS = 90
+
 _CACHE_TTL_SEC = 24 * 60 * 60
 _horizon_cache: dict[str, tuple[float, EarningsHorizon | None]] = {}
 
@@ -33,13 +37,31 @@ class EarningsHorizon:
 
 
 def classify_earnings_risk(days_away: int) -> tuple[EarningsRiskLevel, str | None]:
-    if days_away <= 1:
+    """Risk band from calendar days until the next report.
+
+    ``tomorrow`` is reserved for *exactly* one session away. Same-day reports
+    say ``today``. Past dates are not upcoming — callers must drop them.
+    """
+    if days_away < 0:
+        return "normal", None
+    if days_away == 0:
+        return "imminent", "⚠️ Earnings today — high volatility risk"
+    if days_away == 1:
         return "imminent", "⚠️ Earnings tomorrow — high volatility risk"
     if days_away <= 3:
         return "elevated", f"⚠️ Earnings in {days_away} days"
     if days_away <= 7:
         return "watch", f"Earnings in {days_away} days"
     return "normal", None
+
+
+def earnings_when_phrase(days_away: int) -> str:
+    """Human timing for a known upcoming report. Never says tomorrow unless days == 1."""
+    if days_away == 0:
+        return "today"
+    if days_away == 1:
+        return "tomorrow"
+    return f"in {days_away} days"
 
 
 def _normalize_report_time(raw: str | None) -> str:
@@ -53,9 +75,14 @@ def _normalize_report_time(raw: str | None) -> str:
     return "unknown"
 
 
-def _horizon_from_event(event: EarningsEvent, *, today: date) -> EarningsHorizon | None:
+def _horizon_from_event(
+    event: EarningsEvent,
+    *,
+    today: date,
+    window_days: int = SWING_EARNINGS_WINDOW_DAYS,
+) -> EarningsHorizon | None:
     days = (event.report_date - today).days
-    if days < 0 or days > 30:
+    if days < 0 or days > window_days:
         return None
     risk, chip = classify_earnings_risk(days)
     return EarningsHorizon(
@@ -78,7 +105,7 @@ async def _from_polygon(
     events = await client.get_earnings_calendar([symbol], today, to_date)
     best: EarningsHorizon | None = None
     for ev in events:
-        h = _horizon_from_event(ev, today=today)
+        h = _horizon_from_event(ev, today=today, window_days=window_days)
         if h is None:
             continue
         if best is None or h.report_date < best.report_date:
@@ -90,24 +117,28 @@ async def resolve_upcoming_earnings_horizon(
     symbol: str,
     *,
     polygon_client: PolygonClient | None = None,
-    window_days: int = 30,
+    window_days: int = SWING_EARNINGS_WINDOW_DAYS,
+    as_of: date | None = None,
 ) -> EarningsHorizon | None:
     """
     Return the next scheduled earnings date within ``window_days``, if any.
 
     Provider order (ADR-001): Finnhub → Polygon → FMP. Never raises.
-    Uses a 24h in-process cache per symbol.
+    Uses a 24h in-process cache per symbol. Past dates are dropped — we never
+    invent a report date or relabel a stale last-print as "tomorrow".
     """
     sym = symbol.strip().upper()
     if not sym:
         return None
 
+    window_days = max(1, int(window_days))
     now = time.time()
-    cached = _horizon_cache.get(sym)
-    if cached and now - cached[0] < _CACHE_TTL_SEC:
+    cache_key = f"{sym}:{window_days}"
+    cached = _horizon_cache.get(cache_key)
+    if cached and now - cached[0] < _CACHE_TTL_SEC and as_of is None:
         return cached[1]
 
-    today = datetime.now(timezone.utc).date()
+    today = as_of or datetime.now(timezone.utc).date()
     horizon: EarningsHorizon | None = None
 
     try:
@@ -121,7 +152,7 @@ async def resolve_upcoming_earnings_horizon(
         )
         best_fh: EarningsHorizon | None = None
         for ev in fh_rows:
-            h = _horizon_from_event(ev, today=today)
+            h = _horizon_from_event(ev, today=today, window_days=window_days)
             if h is None:
                 continue
             if best_fh is None or h.report_date < best_fh.report_date:
@@ -144,18 +175,20 @@ async def resolve_upcoming_earnings_horizon(
             fmp_date = await get_upcoming_earnings_date(sym, window_days=window_days)
             if fmp_date is not None:
                 days = (fmp_date - today).days
-                risk, chip = classify_earnings_risk(days)
-                horizon = EarningsHorizon(
-                    report_date=fmp_date,
-                    days_away=days,
-                    risk=risk,
-                    report_time="unknown",
-                    chip=chip,
-                )
+                if 0 <= days <= window_days:
+                    risk, chip = classify_earnings_risk(days)
+                    horizon = EarningsHorizon(
+                        report_date=fmp_date,
+                        days_away=days,
+                        risk=risk,
+                        report_time="unknown",
+                        chip=chip,
+                    )
         except Exception as exc:
             _LOG.warning("earnings_calendar_fmp_failed symbol=%s err=%s", sym, type(exc).__name__)
 
-    _horizon_cache[sym] = (now, horizon)
+    if as_of is None:
+        _horizon_cache[cache_key] = (now, horizon)
     return horizon
 
 
@@ -183,7 +216,10 @@ def merge_earnings_horizon_into_response(
 
 def clear_earnings_horizon_cache(symbol: str | None = None) -> None:
     """Test helper."""
-    if symbol:
-        _horizon_cache.pop(symbol.strip().upper(), None)
-    else:
+    if not symbol:
         _horizon_cache.clear()
+        return
+    prefix = symbol.strip().upper()
+    for key in list(_horizon_cache):
+        if key == prefix or key.startswith(f"{prefix}:"):
+            _horizon_cache.pop(key, None)

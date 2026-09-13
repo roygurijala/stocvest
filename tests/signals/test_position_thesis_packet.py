@@ -236,6 +236,9 @@ def test_to_api_dict_shape() -> None:
         "open_questions",
         "pillar_snapshot_hash",
         "fundamentals_covered",
+        "is_fund_vehicle",
+        "next_earnings_date",
+        "earnings_days_away",
     }
     assert all(set(b) == {"text", "source", "confidence"} for b in d["bull_case"])
 
@@ -257,9 +260,12 @@ def test_earnings_within_window_surfaces_watch_item() -> None:
     b = _body()
     b["earnings_risk"] = "watch"
     b["earnings_days_away"] = 5
+    b["upcoming_earnings_date"] = "2026-09-17"
     packet = build_position_thesis_packet(b)
     texts = " ".join(q.text for q in packet.open_questions).lower()
     assert "earnings in 5 days" in texts
+    assert "2026-09-17" in texts
+    assert "tomorrow" not in texts
     assert any(q.source == "layer:earnings" for q in packet.open_questions)
 
 
@@ -281,3 +287,60 @@ def test_deterministic_read_does_not_assert_verdict_without_coverage() -> None:
     assert "reads bullish on fundamentals" not in read
     assert "does not have enough fundamentals coverage" in read
     assert read.endswith("signal data only.")
+
+
+def test_msft_46d_earnings_never_says_tomorrow() -> None:
+    b = _body()
+    b["upcoming_earnings_date"] = "2026-10-28"
+    b["earnings_days_away"] = 46
+    b["earnings_risk"] = "normal"
+    packet = build_position_thesis_packet(b)
+    texts = " ".join(q.text for q in packet.open_questions).lower()
+    assert "tomorrow" not in texts
+    assert "imminent" not in texts
+    assert packet.next_earnings_date == "2026-10-28"
+    assert packet.earnings_days_away == 46
+    assert not any(q.source == "layer:earnings" for q in packet.open_questions)
+
+
+def test_imminent_without_date_is_unverified() -> None:
+    b = _body()
+    b["earnings_risk"] = "imminent"
+    b["earnings_days_away"] = 1
+    packet = build_position_thesis_packet(b)
+    texts = " ".join(q.text for q in packet.open_questions).lower()
+    assert "tomorrow" not in texts
+    assert "unverified" in texts
+    assert any(q.source == "layer:earnings" for q in packet.open_questions)
+
+
+def test_earnings_today_not_tomorrow() -> None:
+    b = _body()
+    b["earnings_risk"] = "imminent"
+    b["earnings_days_away"] = 0
+    b["upcoming_earnings_date"] = "2026-09-12"
+    packet = build_position_thesis_packet(b)
+    texts = " ".join(q.text for q in packet.open_questions).lower()
+    assert "today" in texts
+    assert "tomorrow" not in texts
+
+
+def test_fund_vehicle_does_not_ask_for_filings() -> None:
+    packet = build_position_thesis_packet(
+        {
+            "symbol": "ARKQ",
+            "verdict": "neutral",
+            "is_fund_vehicle": True,
+            "position_fundamentals": {"pillars": []},
+        }
+    )
+    assert packet.fundamentals_covered is False
+    assert packet.is_fund_vehicle is True
+    texts = " ".join(q.text for q in packet.open_questions).lower()
+    assert "fund/etf vehicle" in texts or "fund/etf" in texts
+    assert "10-k" in texts or "no 10-k" in texts
+    assert "verify against filings" not in texts
+    read = deterministic_investment_read(packet).lower()
+    assert "operating company" in " ".join(q.text.lower() for q in packet.open_questions)
+    assert "reads neutral on fundamentals" not in read
+    assert "10-k" in read or "vehicle" in read

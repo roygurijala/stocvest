@@ -211,3 +211,98 @@ async def test_position_read_model_tier_follows_flag(
     )
     assert result.source == "ai"
     assert captured["model"] == expected_model
+
+
+@pytest.mark.asyncio
+async def test_holder_audience_prompt_is_holder_voiced(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_ai_explanation_caches_for_tests()
+    svc = AIExplanationService()
+    captured: dict[str, str] = {}
+
+    async def _fake_claude(*, system: str = "", user_prompt: str = "", **_kw):
+        captured["system"] = system
+        captured["user_prompt"] = user_prompt
+        return (
+            "You already hold MSFT. Hold through the next print in 46 days; "
+            "trim only if the weekly trend breaks. Signal data only."
+        )
+
+    monkeypatch.setattr(svc, "_claude_text_or_none", _fake_claude)
+    p = _packet()
+    result = await svc.explain_position_setup_read(
+        symbol="MSFT",
+        verdict="neutral",
+        bull_case=p["bull_case"],
+        bear_case=p["bear_case"],
+        open_questions=p["open_questions"],
+        pillar_snapshot_hash="holder-msft",
+        user_profile=UserProfile(user_id="u", subscription_plan="pro", beta_full_access=True),
+        audience="holder",
+        review_action="hold",
+        holder_stance="caution",
+        next_earnings_date="2026-10-28",
+        earnings_days_away=46,
+    )
+    assert result.source == "ai"
+    assert "ALREADY HOLDS" in captured["system"]
+    assert "don't initiate" in captured["system"].lower() or "do not write" in captured["system"].lower()
+    assert "audience=holder" in captured["user_prompt"]
+    assert "next_earnings_date=2026-10-28" in captured["user_prompt"]
+    assert "earnings_days_away=46" in captured["user_prompt"]
+    assert "review_action=hold" in captured["user_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_holder_entry_language_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_ai_explanation_caches_for_tests()
+    svc = AIExplanationService()
+
+    async def _fake_claude(**_kw):
+        return "Don't initiate a position until valuation cools. Signal data only."
+
+    monkeypatch.setattr(svc, "_claude_text_or_none", _fake_claude)
+    p = _packet()
+    result = await svc.explain_position_setup_read(
+        symbol="NVDA",
+        verdict="neutral",
+        bull_case=p["bull_case"],
+        bear_case=p["bear_case"],
+        open_questions=p["open_questions"],
+        pillar_snapshot_hash="holder-nvda",
+        user_profile=UserProfile(user_id="u", subscription_plan="pro", beta_full_access=True),
+        audience="holder",
+        review_action="hold",
+        holder_stance="caution",
+    )
+    assert result.source == "deterministic"
+    assert "don't initiate" not in result.text.lower()
+    assert "you already hold nvda" in result.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_vehicle_prompt_forbids_10k_language(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_ai_explanation_caches_for_tests()
+    svc = AIExplanationService()
+    captured: dict[str, str] = {}
+
+    async def _fake_claude(*, system: str = "", user_prompt: str = "", **_kw):
+        captured["system"] = system
+        captured["user_prompt"] = user_prompt
+        return "IBIT is a bitcoin ETF vehicle; no corporate filings apply. Signal data only."
+
+    monkeypatch.setattr(svc, "_claude_text_or_none", _fake_claude)
+    result = await svc.explain_position_setup_read(
+        symbol="IBIT",
+        verdict="neutral",
+        bull_case=[],
+        bear_case=[],
+        open_questions=[{"text": "This is a fund/ETF vehicle — no 10-K.", "source": "layer:fundamentals"}],
+        pillar_snapshot_hash="ibit-v",
+        user_profile=UserProfile(user_id="u", subscription_plan="pro", beta_full_access=True),
+        audience="holder",
+        is_fund_vehicle=True,
+        fundamentals_covered=False,
+    )
+    assert result.source == "ai"
+    assert "fund/ETF vehicle" in captured["system"]
+    assert "is_fund_vehicle=true" in captured["user_prompt"]
