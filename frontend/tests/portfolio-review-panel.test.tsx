@@ -131,6 +131,7 @@ describe("PortfolioReviewPanel", () => {
     expect(screen.getByText(/above your 50.0% target/)).toBeInTheDocument();
     expect(screen.getByText(/NVDA/)).toBeInTheDocument();
     expect(screen.getByText(/SPY \(money-weighted\)/)).toBeInTheDocument();
+    expect(screen.getAllByText(/vs cost/).length).toBeGreaterThan(0);
   });
 
   test("shows an error when the review cannot be fetched", async () => {

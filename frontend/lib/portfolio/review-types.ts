@@ -60,6 +60,10 @@ export interface BenchmarkComparison {
 
 export interface PortfolioReview {
   generatedAt: string;
+  cached?: boolean;
+  cachedAt?: string | null;
+  stale?: boolean;
+  pending?: boolean;
   holdings: HoldingReview[];
   totalMarketValue: number;
   investedValue: number;

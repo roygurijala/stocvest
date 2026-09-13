@@ -606,6 +606,7 @@ async def build_portfolio_review(
                 action=action, verdict=verdict, stance=stance, status=status,
                 overweight=overweight, unrealized_pl_pct=unrealized_pl_pct, target=target,
                 is_fund_vehicle=body.get("is_fund_vehicle") is True,
+                rs_vs_spy_6m_pct=_rs_vs_spy_6m_from_body(body),
             )
 
         add_amt: float | None = None
@@ -710,6 +711,22 @@ async def build_portfolio_review(
     )
 
 
+def _rs_vs_spy_6m_from_body(body: dict[str, Any]) -> float | None:
+    """6-month RS vs SPY from the Long-Term composite (technical indicator snapshot)."""
+    raw = _num(body.get("rs_vs_spy_6m_pct"))
+    if raw is not None:
+        return raw
+    for row in body.get("layers") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("layer") or "").strip().lower() != "technical":
+            continue
+        snap = row.get("indicator_snapshot")
+        snap = snap if isinstance(snap, dict) else {}
+        return _num(snap.get("rs_vs_spy_6m_pct"))
+    return None
+
+
 def _rationale_lines(
     *,
     action: ReviewAction,
@@ -720,6 +737,7 @@ def _rationale_lines(
     unrealized_pl_pct: float | None,
     target: float | None,
     is_fund_vehicle: bool = False,
+    rs_vs_spy_6m_pct: float | None = None,
 ) -> list[str]:
     lines: list[str] = []
     if action == ReviewAction.REVIEW:
@@ -740,7 +758,15 @@ def _rationale_lines(
         lines.append(f"Position is above your {target:.1f}% target weight.")
     if unrealized_pl_pct is not None:
         direction = "up" if unrealized_pl_pct >= 0 else "down"
-        lines.append(f"You are {direction} {abs(unrealized_pl_pct):.1f}% vs your cost basis.")
+        lines.append(
+            f"You are {direction} {abs(unrealized_pl_pct):.1f}% vs your cost basis "
+            f"(lots vs last price — a different window than 6-month RS vs SPY)."
+        )
+    if rs_vs_spy_6m_pct is not None:
+        lines.append(
+            f"6-month relative strength vs SPY is {rs_vs_spy_6m_pct:+.1f}% "
+            f"(name's 6-month price return minus SPY's — not vs your cost)."
+        )
     return lines
 
 

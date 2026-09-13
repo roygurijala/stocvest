@@ -17,7 +17,12 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from stocvest.data.earnings_calendar import earnings_when_phrase
+from datetime import date
+
+from stocvest.data.earnings_calendar import (
+    earnings_when_phrase,
+    reconcile_earnings_horizon_fields,
+)
 
 Confidence = Literal["high", "medium", "low"]
 
@@ -151,9 +156,15 @@ def _is_fund_vehicle(body: dict[str, Any]) -> bool:
     return instrument in {"ETF", "ETN", "ETS", "ETV", "FUND", "MUTUAL", "UIT", "BASKET"}
 
 
-def _earnings_fields(body: dict[str, Any]) -> tuple[str | None, int | None]:
-    raw_date = str(body.get("upcoming_earnings_date") or "").strip()
+def _earnings_fields(
+    body: dict[str, Any],
+    *,
+    as_of: date | None = None,
+) -> tuple[str | None, int | None]:
+    raw_date = str(body.get("upcoming_earnings_date") or "").strip() or None
     days = _as_int(body.get("earnings_days_away"))
+    if as_of is not None:
+        return reconcile_earnings_horizon_fields(raw_date, days, as_of=as_of)
     if raw_date and days is not None and days >= 0:
         return raw_date, days
     if raw_date:
@@ -175,14 +186,18 @@ def _pillar_snapshot_hash(body: dict[str, Any], pillars: dict[str, _Pillar]) -> 
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
-def build_position_thesis_packet(body: dict[str, Any]) -> PositionThesisPacket:
+def build_position_thesis_packet(
+    body: dict[str, Any],
+    *,
+    as_of: date | None = None,
+) -> PositionThesisPacket:
     """Deterministically derive bull / bear / open-questions from a composite body."""
     symbol = str(body.get("symbol") or "").strip().upper()
     verdict = str(body.get("verdict") or body.get("signal_summary") or "neutral").strip().lower()
     pillars = _parse_pillars(body)
     snapshot_hash = _pillar_snapshot_hash(body, pillars)
     is_vehicle = _is_fund_vehicle(body)
-    next_earn, earn_days = _earnings_fields(body)
+    next_earn, earn_days = _earnings_fields(body, as_of=as_of)
 
     status = str(body.get("status") or "active").strip().lower()
     if is_vehicle:

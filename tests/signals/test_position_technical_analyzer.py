@@ -62,6 +62,14 @@ def test_relative_strength_pct_outperform() -> None:
     assert rs > 10.0
 
 
+def test_relative_strength_pct_is_return_spread_not_ratio() -> None:
+    """6M RS is subject return minus SPY return (percent), not a ratio or inverted window."""
+    subject = [100.0] + [100.0] * 25 + [200.0]
+    bench = [100.0] + [100.0] * 25 + [110.0]
+    rs = _relative_strength_pct(subject, bench, lookback=26)
+    assert rs == pytest.approx(90.0)
+
+
 def test_relative_strength_pct_rejects_non_positive_base() -> None:
     assert _relative_strength_pct([100.0, -50.0, 60.0], [100.0, 101.0, 102.0], 1) is None
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import date
 from typing import Any
 
 import pytest
@@ -287,6 +288,17 @@ def test_deterministic_read_does_not_assert_verdict_without_coverage() -> None:
     assert "reads bullish on fundamentals" not in read
     assert "does not have enough fundamentals coverage" in read
     assert read.endswith("signal data only.")
+
+
+def test_stale_64_days_on_oct_28_recomputes_to_45_as_of_sep_13() -> None:
+    b = _body()
+    b["upcoming_earnings_date"] = "2026-10-28"
+    b["earnings_days_away"] = 64
+    b["earnings_risk"] = "normal"
+    packet = build_position_thesis_packet(b, as_of=date(2026, 9, 13))
+    assert packet.next_earnings_date == "2026-10-28"
+    assert packet.earnings_days_away == 45
+    assert packet.earnings_days_away != 64
 
 
 def test_msft_46d_earnings_never_says_tomorrow() -> None:

@@ -11,10 +11,12 @@ from stocvest.data.earnings_calendar import (
     EarningsHorizon,
     POSITION_EARNINGS_WINDOW_DAYS,
     _horizon_from_event,
+    calendar_days_away,
     classify_earnings_risk,
     clear_earnings_horizon_cache,
     earnings_horizon_to_api_fields,
     earnings_when_phrase,
+    reconcile_earnings_horizon_fields,
     resolve_upcoming_earnings_horizon,
 )
 from stocvest.data.models import EarningsEvent
@@ -52,6 +54,45 @@ def test_classify_says_tomorrow_only_for_one_day() -> None:
     assert earnings_when_phrase(0) == "today"
     assert earnings_when_phrase(1) == "tomorrow"
     assert earnings_when_phrase(46) == "in 46 days"
+
+
+def test_calendar_days_away_sep_13_to_oct_28_is_45_not_64() -> None:
+    """Lock the UTC date-only convention: 2026-09-13 → 2026-10-28 is 45, never 64."""
+    as_of = date(2026, 9, 13)
+    report = date(2026, 10, 28)
+    assert calendar_days_away(report, as_of) == 45
+    assert calendar_days_away(report, as_of) != 64
+    ev = EarningsEvent(
+        symbol="MSFT",
+        company_name="Microsoft",
+        report_date=report,
+        report_time="after_market",
+    )
+    near = _horizon_from_event(ev, today=as_of, window_days=POSITION_EARNINGS_WINDOW_DAYS)
+    assert near is not None
+    assert near.days_away == 45
+    assert near.report_date == report
+    assert near.risk == "normal"
+
+
+def test_reconcile_drops_stale_days_away_when_date_is_present() -> None:
+    """A cached 64 next to Oct 28 is the Aug-25 as-of; recompute vs Sep 13 → 45."""
+    iso, days = reconcile_earnings_horizon_fields(
+        "2026-10-28", 64, as_of=date(2026, 9, 13)
+    )
+    assert iso == "2026-10-28"
+    assert days == 45
+
+
+def test_reconcile_feed_date_days_match_as_of_without_inventing_the_date() -> None:
+    """SOFI-style: display whatever date the feed returned; days_away must match as-of."""
+    feed_date = "2026-11-16"
+    iso, days = reconcile_earnings_horizon_fields(
+        feed_date, None, as_of=date(2026, 9, 13)
+    )
+    assert iso == feed_date
+    assert days == calendar_days_away(date(2026, 11, 16), date(2026, 9, 13))
+    assert days == 64
 
 
 def test_msft_oct_28_is_not_imminent_on_sep_12() -> None:
