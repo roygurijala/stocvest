@@ -15,13 +15,14 @@ import json
 import time
 from typing import Any, Protocol
 
-from stocvest.api.services.position_scan import PositionScanSnapshot
+from stocvest.api.services.position_scan import PositionScanSnapshot, PositionScanUniverse
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
 _SNAPSHOT_KEY = "position_scan_snapshot"
+_UNIVERSE_KEY = "position_scan_universe"
 _LOCK_KEY = "position_scan_refresh_lock"
 # Pre-stable keys. Read-only hydrate, then rewrite onto ``_SNAPSHOT_KEY``.
 _MIGRATION_KEYS: tuple[str, ...] = (
@@ -35,6 +36,8 @@ class PositionScanStore(Protocol):
     def put(self, snapshot: PositionScanSnapshot) -> bool: ...
     def invalidate(self) -> bool: ...
     def try_claim_refresh(self, *, stale_after_seconds: int = 180) -> bool: ...
+    def get_universe(self) -> PositionScanUniverse | None: ...
+    def put_universe(self, universe: PositionScanUniverse) -> bool: ...
 
 
 def invalidate_position_scan_snapshot() -> bool:
@@ -61,6 +64,7 @@ class InMemoryPositionScanStore:
 
     def __init__(self) -> None:
         self._snapshot: PositionScanSnapshot | None = None
+        self._universe: PositionScanUniverse | None = None
         self._claimed_at: float = 0.0
 
     def get(self) -> PositionScanSnapshot | None:
@@ -79,6 +83,13 @@ class InMemoryPositionScanStore:
         if self._claimed_at and (now - self._claimed_at) < max(0, stale_after_seconds):
             return False
         self._claimed_at = now
+        return True
+
+    def get_universe(self) -> PositionScanUniverse | None:
+        return self._universe
+
+    def put_universe(self, universe: PositionScanUniverse) -> bool:
+        self._universe = universe
         return True
 
 
@@ -168,6 +179,35 @@ class DynamoPositionScanStore:
             if code == "ConditionalCheckFailedException" or "ConditionalCheckFailed" in type(exc).__name__:
                 return False
             _LOG.warning("position scan store claim failed: %s", type(exc).__name__)
+            return False
+
+    def get_universe(self) -> PositionScanUniverse | None:
+        try:
+            resp = self._get_table().get_item(Key={"snapshot_key": _UNIVERSE_KEY})
+        except Exception as exc:  # noqa: BLE001 — read is best-effort
+            _LOG.warning("position scan universe get failed: %s", type(exc).__name__)
+            return None
+        item = resp.get("Item") if isinstance(resp, dict) else None
+        if not isinstance(item, dict):
+            return None
+        raw = item.get("blob")
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (ValueError, TypeError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        return PositionScanUniverse.from_store_dict(data)
+
+    def put_universe(self, universe: PositionScanUniverse) -> bool:
+        try:
+            blob = json.dumps(universe.to_store_dict(), separators=(",", ":"))
+            self._get_table().put_item(Item={"snapshot_key": _UNIVERSE_KEY, "blob": blob})
+            return True
+        except Exception as exc:  # noqa: BLE001 — persistence is best-effort
+            _LOG.warning("position scan universe put failed: %s", type(exc).__name__)
             return False
 
 

@@ -5,12 +5,13 @@ composite response body (the six/seven-layer stack + F1-F5 fundamentals pillars)
 No network, no LLM — this is the glass-box screening logic that ranks candidates
 for the ``GET /v1/signals/position/candidates`` API and ``/dashboard/invest``.
 
-Gem (2026-09-13): a **growth-led discovery**, not a pass-all-nine quality
-compounder. Hygiene (G8/G9/G3, not a sharp G5 breakdown) + F2 bullish + a
-sector/news/geo tailwind. Mega-caps are not the hunt; they reach Gem only as
-an exception when that same growth + tailwind still fire. Strong/Monitor stay
-the home for quality large-caps. Informational screening only — never a
-recommendation or solicitation.
+Gem (2026-09-14, growth_led_2): a **growth-led discovery**, not a pass-all-nine
+quality compounder. Membership is hygiene (G8/G9/G3, not a sharp G5 breakdown)
++ F2 bullish + a **sector** tailwind. News/geo are a catalyst flag, not the
+badge — a headline must not drop a name overnight. Mega-caps are not the hunt;
+they reach Gem only as an exception when that same growth + sector still fire.
+Strong/Monitor stay the home for quality large-caps. Informational screening
+only — never a recommendation or solicitation.
 """
 
 from __future__ import annotations
@@ -388,9 +389,19 @@ def is_growth_led(f: CandidateFeatures) -> bool:
     return bool(f2 and f2.score is not None and f2.verdict == "bullish")
 
 
+def has_sector_tailwind(f: CandidateFeatures) -> bool:
+    """Membership propellant — sector layer already scored; bullish is the existing signal."""
+    return f.sector_verdict == "bullish"
+
+
+def has_catalyst(f: CandidateFeatures) -> bool:
+    """Display / sort hint — news or geo bullish. Not a membership door."""
+    return "bullish" in (f.news_verdict, f.geo_verdict)
+
+
 def has_research_tailwind(f: CandidateFeatures) -> bool:
-    """Sector / news / geo already scored — bullish is the existing tailwind signal."""
-    return "bullish" in (f.sector_verdict, f.news_verdict, f.geo_verdict)
+    """Deprecated alias for :func:`has_sector_tailwind` (growth_led_2)."""
+    return has_sector_tailwind(f)
 
 
 def is_gem_hygiene(f: CandidateFeatures, gates: dict[str, bool]) -> bool:
@@ -404,11 +415,12 @@ def is_gem_hygiene(f: CandidateFeatures, gates: dict[str, bool]) -> bool:
 
 
 def qualifies_as_gem(f: CandidateFeatures, gates: dict[str, bool]) -> bool:
-    """Growth discovery: hygiene + F2 lead + sector/research tailwind.
+    """Growth discovery: hygiene + F2 lead + sector tailwind.
 
-    Mega-caps use the same rule (the exception). They are not a separate, looser path.
+    News/geo do not open or close the badge. Mega-caps use the same rule
+    (the exception). They are not a separate, looser path.
     """
-    return is_gem_hygiene(f, gates) and is_growth_led(f) and has_research_tailwind(f)
+    return is_gem_hygiene(f, gates) and is_growth_led(f) and has_sector_tailwind(f)
 
 
 def compute_gem_rank(f: CandidateFeatures) -> float:
@@ -455,8 +467,8 @@ def build_gem_why(f: CandidateFeatures, gates: dict[str, bool], tier: str) -> st
     )
     if tier == TIER_GEM:
         if is_mega_cap(f):
-            return "Mega-cap exception — growth + sector/research still aligned. Screening only."
-        return "Growth-led discovery — F2 bullish with sector/research tailwind. Screening only."
+            return "Mega-cap exception — growth + sector still aligned. Screening only."
+        return "Growth-led discovery — F2 bullish with sector tailwind. Screening only."
     if tier == TIER_STRONG:
         missing = [g for g in ("G5", "G6", "G7") if not gates.get(g)]
         if missing:

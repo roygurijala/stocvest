@@ -11,8 +11,11 @@ import stocvest.api.services.position_scan as scan_mod
 from stocvest.api.services.position_scan import (
     POSITION_SCAN_ENGINE_VERSION,
     PositionScanSnapshot,
+    PositionScanUniverse,
     _bottom_quartile_threshold,
     compute_and_persist_position_scan,
+    diff_gem_sets,
+    gem_exit_reason,
     get_position_scan_snapshot_sync,
     merge_scan_snapshots,
     rank_candidates,
@@ -201,6 +204,186 @@ def test_live_scan_persists_curated_before_discovery(monkeypatch: pytest.MonkeyP
 
     reset_position_scan_cache_for_tests()
     reset_position_scan_store_for_tests(None)
+
+
+def test_live_scan_reuses_persisted_universe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fresh pond is re-scored; FMP is not sampled again."""
+    reset_position_scan_cache_for_tests()
+    store = InMemoryPositionScanStore()
+    store.put_universe(
+        PositionScanUniverse(
+            symbols=["AAPL", "RKLB"],
+            generated_at=__import__("datetime").datetime(2026, 9, 10, tzinfo=__import__("datetime").timezone.utc),
+            source="live",
+        )
+    )
+    store.put(
+        PositionScanSnapshot(
+            generated_at=__import__("datetime").datetime(2026, 9, 10, tzinfo=__import__("datetime").timezone.utc),
+            universe_size=2,
+            candidates=rank_candidates([_body("AAPL", fund_score=90, rs=5.0)]),
+        )
+    )
+    reset_position_scan_store_for_tests(store)
+    seen: list[list[str]] = []
+
+    async def fake_run(*, universe=None, compose=None, concurrency=6):
+        symbols = list(universe or [])
+        seen.append(symbols)
+        if symbols == ["AAPL"]:
+            return PositionScanSnapshot(
+                generated_at=__import__("datetime").datetime(2026, 9, 14, tzinfo=__import__("datetime").timezone.utc),
+                universe_size=1,
+                candidates=rank_candidates([_body("AAPL", fund_score=90, rs=5.0)]),
+            )
+        return PositionScanSnapshot(
+            generated_at=__import__("datetime").datetime(2026, 9, 14, tzinfo=__import__("datetime").timezone.utc),
+            universe_size=1,
+            candidates=rank_candidates(
+                [_body("RKLB", fund_score=85, rs=15.0, sector_verdict="bullish", market_cap=8e9)]
+            ),
+        )
+
+    async def fake_universe() -> list[str]:
+        raise AssertionError("fresh pond must not resample FMP")
+
+    monkeypatch.setattr(scan_mod, "run_position_scan_async", fake_run)
+    monkeypatch.setattr(
+        "stocvest.api.services.position_universe.build_live_scan_universe",
+        fake_universe,
+    )
+    result = asyncio.run(scan_mod._run_live_position_scan())
+    assert seen == [["AAPL"], ["RKLB"]]
+    assert [c.symbol for c in result.candidates] == ["RKLB", "AAPL"]
+    assert result.candidates[0].tier == TIER_GEM
+    entered = [c for c in result.list_delta if c.change == "entered"]
+    assert [c.symbol for c in entered] == ["RKLB"]
+
+    reset_position_scan_cache_for_tests()
+    reset_position_scan_store_for_tests(None)
+
+
+def test_live_scan_caps_oversized_pond_keeps_held_scores(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Batch-sized pond: re-score the live slice, keep last scores for the rest."""
+    reset_position_scan_cache_for_tests()
+    store = InMemoryPositionScanStore()
+    store.put_universe(
+        PositionScanUniverse(
+            symbols=["AAPL", "RKLB", "HELD"],
+            generated_at=__import__("datetime").datetime(2026, 9, 10, tzinfo=__import__("datetime").timezone.utc),
+            source="batch",
+        )
+    )
+    store.put(
+        PositionScanSnapshot(
+            generated_at=__import__("datetime").datetime(2026, 9, 10, tzinfo=__import__("datetime").timezone.utc),
+            universe_size=3,
+            candidates=rank_candidates(
+                [
+                    _body("AAPL", fund_score=90, rs=5.0),
+                    _body("RKLB", fund_score=85, rs=15.0, sector_verdict="bullish", market_cap=8e9),
+                    _body("HELD", fund_score=85, rs=12.0, sector_verdict="bullish", market_cap=7e9),
+                ]
+            ),
+        )
+    )
+    reset_position_scan_store_for_tests(store)
+    seen: list[list[str]] = []
+
+    async def fake_run(*, universe=None, compose=None, concurrency=6):
+        symbols = list(universe or [])
+        seen.append(symbols)
+        if symbols == ["AAPL"]:
+            return PositionScanSnapshot(
+                generated_at=__import__("datetime").datetime(2026, 9, 14, tzinfo=__import__("datetime").timezone.utc),
+                universe_size=1,
+                candidates=rank_candidates([_body("AAPL", fund_score=90, rs=5.0)]),
+            )
+        if symbols == ["RKLB"]:
+            return PositionScanSnapshot(
+                generated_at=__import__("datetime").datetime(2026, 9, 14, tzinfo=__import__("datetime").timezone.utc),
+                universe_size=1,
+                candidates=rank_candidates(
+                    [_body("RKLB", fund_score=85, rs=18.0, sector_verdict="bullish", market_cap=8e9)]
+                ),
+            )
+        raise AssertionError(f"must not compose held extras: {symbols}")
+
+    async def fake_universe() -> list[str]:
+        raise AssertionError("oversized pond must not resample FMP")
+
+    monkeypatch.setattr(scan_mod, "_pond_fits_live_budget", lambda _symbols: False)
+    monkeypatch.setattr("stocvest.api.services.position_universe.LIVE_DISCOVERY_MAX", 1)
+    monkeypatch.setattr(scan_mod, "run_position_scan_async", fake_run)
+    monkeypatch.setattr(
+        "stocvest.api.services.position_universe.build_live_scan_universe",
+        fake_universe,
+    )
+    result = asyncio.run(scan_mod._run_live_position_scan())
+    assert seen == [["AAPL"], ["RKLB"]]
+    assert {c.symbol for c in result.candidates} == {"AAPL", "RKLB", "HELD"}
+    held = next(c for c in result.candidates if c.symbol == "HELD")
+    assert held.tier == TIER_GEM
+    assert result.universe_size == 3
+
+    reset_position_scan_cache_for_tests()
+    reset_position_scan_store_for_tests(None)
+
+
+def test_diff_gem_sets_entered_exited_with_reasons() -> None:
+    prev = rank_candidates(
+        [
+            _body("KEEP", fund_score=85, rs=10.0, sector_verdict="bullish", market_cap=8e9),
+            _body("DROP", fund_score=85, rs=10.0, sector_verdict="bullish", market_cap=7e9),
+        ]
+    )
+    curr = rank_candidates(
+        [
+            _body("KEEP", fund_score=85, rs=10.0, sector_verdict="bullish", market_cap=8e9),
+            _body("DROP", fund_score=85, rs=10.0, sector_verdict="neutral", market_cap=7e9),
+            _body("NEW", fund_score=85, rs=10.0, sector_verdict="bullish", market_cap=6e9),
+        ]
+    )
+    changes = diff_gem_sets(prev, curr, current_universe={"KEEP", "DROP", "NEW"})
+    by = {(c.change, c.symbol): c.reason for c in changes}
+    assert by[("entered", "NEW")] == "added to hunt pond"
+    assert by[("exited", "DROP")] == "sector tailwind faded"
+    assert "KEEP" not in {c.symbol for c in changes}
+
+
+def test_diff_gem_sets_empty_previous_is_first_scan() -> None:
+    curr = rank_candidates(
+        [_body("NEW", fund_score=85, rs=10.0, sector_verdict="bullish", market_cap=6e9)]
+    )
+    assert diff_gem_sets([], curr, current_universe={"NEW"}) == []
+
+
+def test_gem_exit_reason_compose_miss_is_not_left_pond() -> None:
+    assert gem_exit_reason(None, in_pond=True) == "failed to score"
+    assert gem_exit_reason(None, in_pond=False) == "left the hunt pond"
+
+
+def test_diff_gem_sets_compose_miss_stays_in_pond() -> None:
+    prev = rank_candidates(
+        [_body("DROP", fund_score=85, rs=10.0, sector_verdict="bullish", market_cap=7e9)]
+    )
+    changes = diff_gem_sets(prev, [], current_universe={"DROP"})
+    assert [(c.change, c.symbol, c.reason) for c in changes] == [
+        ("exited", "DROP", "failed to score")
+    ]
+
+
+def test_default_compose_uses_scan_lite(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    async def fake_build(**kwargs):
+        seen.update(kwargs)
+        return _body("X", fund_score=80, rs=5.0)
+
+    monkeypatch.setattr(scan_mod, "build_position_composite_response", fake_build)
+    monkeypatch.setattr(scan_mod.ParameterStore, "get_parameters_sync", lambda: object())
+    asyncio.run(scan_mod._default_compose("X"))
+    assert seen.get("scan_lite") is True
 
 
 def test_snapshot_filter_and_api_dict() -> None:

@@ -751,21 +751,27 @@ A **gem** is a growth-led discovery the market has not already priced as “alre
 |------|--------------------------------------|
 | Hygiene | G8 investable, G9 readable data, G3 no solvency blow-up, not a sharp G5 breakdown (`pct_from_52w_high ≤ −25%`) |
 | Growth lead | F2 Growth pillar verdict **bullish** (latest-quarter YoY already called “strong” at ≥ 15%) |
-| Propellant | Sector **or** news **or** geo layer verdict **bullish** |
+| Propellant | Sector layer verdict **bullish** (news/geo are a **catalyst**, not membership) |
 | Size | Hunt mid / large-not-mega. Mega (`market_cap ≥ $200B` or curated stub including SPCX) is **not** the pond |
 
-**Mega-cap exception:** the same growth + tailwind + hygiene rule. No looser path. Quality
+**Mega-cap exception:** the same growth + sector + hygiene rule. No looser path. Quality
 mega-caps that miss that exception stay **Strong** / **Monitor**.
 
-**Scan universe:** live refresh = curated 25 first (persist immediately), then mid-cap
-discovery (`LIVE_DISCOVERY_MAX` ≈ 15) merged for Strong/Monitor. The FMP pond is
-`DISCOVERY_FETCH_LIMIT=1500` with `marketCapLowerThan=$200B` so `prefer_mid_cap` sees
-names under $20B (not the 120 largest megas).
+**Scan universe (growth_led_2):** the hunt pond is a separate Dynamo item
+`position_scan_universe` (symbols + `generated_at`). Live `?refresh=1` **re-scores
+the same symbols** for up to 7 days. A new FMP sample is taken only when the pond
+is missing/stale, or when the weekly batch rebuilds it (`BATCH_DISCOVERY_MAX` ≈ 200).
+First live build still persists the curated 25 immediately, then mid-cap extras
+(`LIVE_DISCOVERY_MAX` ≈ 40). Scan compose is **scan-lite** (skips Polygon news
+pagination + sentiment prime) so the pond can finish inside the 180s Lambda.
+Deep-dive Position composite still fetches full news/geo.
+The FMP pond is `DISCOVERY_FETCH_LIMIT=1500` with `marketCapLowerThan=$200B`.
 Persisted snapshot key is the stable `position_scan_snapshot`. Gate/rank
 revisions live in the blob as `engine_version` (never a new Dynamo key).
 Leftover `position_scan_snapshot_v1` / `_v2` items are copied onto the stable
 key once. `?refresh=1` keeps the last snapshot while an async compose runs.
-Weekly batch uses `BATCH_DISCOVERY_MAX` ≈ 200.
+The snapshot also stores **`list_delta`** (entered/exited gems + the gate that
+moved) so the board does not look random day to day.
 `assemble_universe(exclude_mega, prefer_mid_cap)` never falls back to AAPL when the
 discovery input is empty — the caller merges the curated slice separately.
 

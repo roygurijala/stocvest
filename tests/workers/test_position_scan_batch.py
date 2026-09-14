@@ -66,7 +66,10 @@ async def test_batch_scans_persists_and_warms_cache(monkeypatch: pytest.MonkeyPa
     assert out["tiers"] == {"gem": 2, "strong": 1}
     assert out["persisted"] is True
     # Persisted to the cross-instance store AND warmed the in-process cache.
-    assert get_cached_position_scan_snapshot() is snapshot
+    cached = get_cached_position_scan_snapshot()
+    assert cached is not None
+    assert [c.symbol for c in cached.candidates] == ["AAA", "BBB", "CCC"]
+    assert cached.universe_generated_at is not None
 
 
 @pytest.mark.asyncio
@@ -84,6 +87,9 @@ async def test_batch_succeeds_even_if_persist_fails(monkeypatch: pytest.MonkeyPa
         def get(self):
             return None
 
+        def put_universe(self, _u):
+            raise RuntimeError("dynamo down")
+
     reset_position_scan_store_for_tests(_BoomStore())
 
     async def _fake_universe(**_kw):
@@ -98,7 +104,9 @@ async def test_batch_succeeds_even_if_persist_fails(monkeypatch: pytest.MonkeyPa
     out = await batch.run_position_scan_batch_async()
     assert out["persisted"] is False
     # The invoking instance is still warmed even when cross-instance persistence fails.
-    assert get_cached_position_scan_snapshot() is snapshot
+    cached = get_cached_position_scan_snapshot()
+    assert cached is not None
+    assert [c.symbol for c in cached.candidates] == ["AAA"]
 
 
 def test_cold_cache_hydrates_from_store(monkeypatch: pytest.MonkeyPatch) -> None:

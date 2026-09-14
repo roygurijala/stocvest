@@ -51,6 +51,16 @@ export type PositionGemCandidate = {
   /** Personal-mode buy/watch/avoid stance (null in product mode). */
   action: PositionGemAction | null;
   actionLabel: string | null;
+  growthLed: boolean;
+  sectorTailwind: boolean;
+  /** News/geo bullish — display only; does not define the gem badge. */
+  catalyst: boolean;
+};
+
+export type GemListChange = {
+  symbol: string;
+  change: "entered" | "exited";
+  reason: string;
 };
 
 export type PositionCandidatesResponse = {
@@ -65,6 +75,8 @@ export type PositionCandidatesResponse = {
   pending: boolean;
   /** Gate/rank contract id from the snapshot blob — not a Dynamo key. */
   engineVersion?: string | null;
+  listDelta: GemListChange[];
+  universeGeneratedAt: string | null;
 };
 
 export type PositionGemFilter = {
@@ -91,6 +103,7 @@ export type PositionGemDisplayRow = {
   sectorLabel: string;
   weakestLabel: string;
   why: string;
+  catalyst: boolean;
 };
 
 const TIER_LABEL: Record<PositionGemTier, string> = {
@@ -101,7 +114,7 @@ const TIER_LABEL: Record<PositionGemTier, string> = {
 };
 
 const TIER_COPY: Record<PositionGemTier, string> = {
-  gem: "Growth-led discovery with a sector/research tailwind — review pillars before any decision.",
+  gem: "Growth-led discovery with a sector tailwind — news/geo is a catalyst, not the badge. Review pillars before any decision.",
   strong: "Quality compounder; structure or environment may still need review.",
   monitor: "Mixed read — see weakest pillar.",
   insufficient: "Missing data or failed universe filter."
@@ -192,8 +205,20 @@ function parseCandidate(raw: unknown): PositionGemCandidate | null {
     pillars,
     failingGates,
     action: normalizeAction(r.action),
-    actionLabel: r.action_label ? String(r.action_label) : null
+    actionLabel: r.action_label ? String(r.action_label) : null,
+    growthLed: r.growth_led === true,
+    sectorTailwind: r.sector_tailwind === true,
+    catalyst: r.catalyst === true
   };
+}
+
+function parseListChange(raw: unknown): GemListChange | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const symbol = String(r.symbol ?? "").trim().toUpperCase();
+  const change = String(r.change ?? "").trim().toLowerCase();
+  if (!symbol || (change !== "entered" && change !== "exited")) return null;
+  return { symbol, change, reason: String(r.reason ?? "").trim() };
 }
 
 export function parsePositionCandidates(json: unknown): PositionCandidatesResponse | null {
@@ -211,8 +236,27 @@ export function parsePositionCandidates(json: unknown): PositionCandidatesRespon
     cached: r.cached === true,
     degraded: r.degraded === true,
     pending: r.pending === true,
-    engineVersion: r.engine_version ? String(r.engine_version) : null
+    engineVersion: r.engine_version ? String(r.engine_version) : null,
+    listDelta: Array.isArray(r.list_delta)
+      ? (r.list_delta.map(parseListChange).filter((c): c is GemListChange => c != null) as GemListChange[])
+      : [],
+    universeGeneratedAt: r.universe_generated_at ? String(r.universe_generated_at) : null
   };
+}
+
+/** One-line “since last scan” copy. Empty / first scan → null. */
+export function formatGemListDelta(changes: readonly GemListChange[] | null | undefined): string | null {
+  if (!changes?.length) return null;
+  const entered = changes.filter((c) => c.change === "entered");
+  const exited = changes.filter((c) => c.change === "exited");
+  const parts: string[] = [];
+  if (entered.length) {
+    parts.push(entered.map((c) => `+${c.symbol} (${c.reason})`).join(", "));
+  }
+  if (exited.length) {
+    parts.push(exited.map((c) => `−${c.symbol} (${c.reason})`).join(", "));
+  }
+  return parts.length ? `Since last scan: ${parts.join("; ")}.` : null;
 }
 
 /** True while the background universe compose is still running (not a hard fail). */
@@ -292,7 +336,8 @@ export function buildPositionGemDisplayRows(
       c.weakestPillarId && c.weakestPillarLabel
         ? `${c.weakestPillarId} · ${c.weakestPillarLabel}`
         : "—",
-    why: c.why
+    why: c.why,
+    catalyst: c.catalyst
   }));
 }
 

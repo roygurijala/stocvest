@@ -14,7 +14,11 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from datetime import datetime, timezone
+
 from stocvest.api.services.position_scan import (
+    PositionScanUniverse,
+    attach_list_delta,
     run_position_scan_async,
     set_position_scan_snapshot_cache,
 )
@@ -33,11 +37,23 @@ async def run_position_scan_batch_async(
     concurrency: int = _DEFAULT_CONCURRENCY,
 ) -> dict[str, Any]:
     universe = await build_batch_scan_universe(max_discovery=max_universe)
+    store = get_position_scan_store()
+    previous = None
+    try:
+        previous = store.get()
+    except Exception:  # noqa: BLE001 — delta is best-effort
+        previous = None
+    univ_at = datetime.now(timezone.utc)
+    try:
+        store.put_universe(PositionScanUniverse(symbols=list(universe), generated_at=univ_at, source="batch"))
+    except Exception as exc:  # noqa: BLE001 — pond persist is best-effort
+        _LOG.warning("position scan batch universe persist failed: %s", type(exc).__name__)
     snapshot = await run_position_scan_async(universe=universe, concurrency=concurrency)
+    snapshot = attach_list_delta(previous, snapshot, universe=list(universe), universe_generated_at=univ_at)
 
     persisted = False
     try:
-        persisted = get_position_scan_store().put(snapshot)
+        persisted = store.put(snapshot)
     except Exception as exc:  # noqa: BLE001 — persistence is best-effort
         _LOG.warning("position scan batch persist failed: %s", type(exc).__name__)
     # Warm the invoking instance regardless of whether cross-instance persistence succeeded.

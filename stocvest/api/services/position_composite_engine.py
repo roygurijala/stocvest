@@ -173,6 +173,11 @@ def _position_score_to_layer_signal(layer: str, score: int | None, status: str) 
     return LayerSignal(layer=layer, score=raw, confidence=confidence)
 
 
+async def _empty_news_rows() -> list[dict[str, Any]]:
+    """Scan-lite stand-in so the gather shape stays identical without Polygon news."""
+    return []
+
+
 async def build_position_composite_response(
     *,
     symbol: str,
@@ -180,6 +185,7 @@ async def build_position_composite_response(
     user_email: str | None,
     params: SignalParameters,
     fundamentals_provider: FundamentalsProviderMock | None = None,
+    scan_lite: bool = False,
 ) -> dict[str, Any]:
     _ = user_email
     sym = to_polygon_symbol(symbol)
@@ -195,10 +201,15 @@ async def build_position_composite_response(
     earnings_horizon = None
 
     async with PolygonClient(api_key=settings.polygon_api_key) as client:
+        news_fetch = (
+            _empty_news_rows()
+            if scan_lite
+            else client.get_market_news(tickers=[sym], limit=50, published_utc_gte=news_since)
+        )
         daily_r, sym_r, news_r, spy_r, qqq_r, vix_r, econ_r, ref_r, spy_daily_r = await asyncio.gather(
             client.get_bars(sym, Timeframe.DAY_1, limit=params.position_daily_bars_lookback),
             client.get_snapshot(sym),
-            client.get_market_news(tickers=[sym], limit=50, published_utc_gte=news_since),
+            news_fetch,
             client.get_snapshot("SPY"),
             client.get_snapshot("QQQ"),
             get_vix_snapshot_with_fallback(client),
@@ -210,12 +221,13 @@ async def build_position_composite_response(
 
         daily_bars: list[Bar] = _safe_result(daily_r, [])
         sym_snap: Snapshot | None = _safe_result(sym_r, None)
-        news_polygon: list[dict[str, Any]] = _safe_result(news_r, [])
+        news_polygon: list[dict[str, Any]] = [] if scan_lite else _safe_result(news_r, [])
         bz_data = swing_news_source_bundle()
         news_rows = list(news_polygon)
-        enrich_rows_with_cached_sentiment(news_rows)
-        enrich_rows_with_cached_impact(news_rows)
-        await prime_missing_news_sentiment(news_rows)
+        if not scan_lite:
+            enrich_rows_with_cached_sentiment(news_rows)
+            enrich_rows_with_cached_impact(news_rows)
+            await prime_missing_news_sentiment(news_rows)
         spy_snap: Snapshot | None = _safe_result(spy_r, None)
         qqq_snap: Snapshot | None = _safe_result(qqq_r, None)
         vix_snap: Snapshot | None = _safe_result(vix_r, None)

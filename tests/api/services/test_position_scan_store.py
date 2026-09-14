@@ -11,7 +11,9 @@ from stocvest.api.services import position_scan_store as store_mod
 from stocvest.api.services.position_scan import (
     POSITION_SCAN_ENGINE_VERSION,
     GemCandidate,
+    GemListChange,
     PositionScanSnapshot,
+    PositionScanUniverse,
 )
 from stocvest.api.services.position_scan_store import (
     DynamoPositionScanStore,
@@ -64,6 +66,24 @@ def test_snapshot_store_dict_round_trip() -> None:
     assert c0.pillars[0]["pillar_id"] == "F1"
     assert rehydrated.generated_at == snap.generated_at
     assert rehydrated.engine_version == POSITION_SCAN_ENGINE_VERSION
+    assert rehydrated.list_delta == []
+    assert rehydrated.universe_generated_at is None
+
+
+def test_snapshot_store_dict_round_trips_list_delta() -> None:
+    snap = PositionScanSnapshot(
+        generated_at=datetime(2026, 9, 14, 12, 0, tzinfo=timezone.utc),
+        universe_size=2,
+        candidates=[_candidate("AAA", "gem")],
+        list_delta=[GemListChange(symbol="AAA", change="entered", reason="added to hunt pond")],
+        universe_generated_at=datetime(2026, 9, 10, tzinfo=timezone.utc),
+    )
+    rehydrated = PositionScanSnapshot.from_store_dict(snap.to_store_dict())
+    assert [(c.symbol, c.change, c.reason) for c in rehydrated.list_delta] == [
+        ("AAA", "entered", "added to hunt pond")
+    ]
+    assert rehydrated.universe_generated_at == snap.universe_generated_at
+    assert rehydrated.candidates[0].growth_led is False
 
 
 def test_from_store_dict_missing_engine_version_is_blank() -> None:
@@ -91,8 +111,36 @@ def test_in_memory_store_put_get() -> None:
     assert store.get() is None
 
 
+def test_in_memory_universe_put_get() -> None:
+    store = InMemoryPositionScanStore()
+    assert store.get_universe() is None
+    pond = PositionScanUniverse(
+        symbols=["RKLB", "AAPL"],
+        generated_at=datetime(2026, 9, 10, tzinfo=timezone.utc),
+        source="live",
+    )
+    assert store.put_universe(pond) is True
+    assert store.get_universe() is pond
+    store.invalidate()
+    assert store.get() is None
+    assert store.get_universe() is pond
+
+
+def test_universe_from_store_dict_missing_generated_at_is_none() -> None:
+    assert PositionScanUniverse.from_store_dict({"symbols": ["AAPL"]}) is None
+    assert PositionScanUniverse.from_store_dict({"symbols": ["AAPL"], "generated_at": "not-a-date"}) is None
+
+
+def test_universe_is_stale_after_seven_days() -> None:
+    gen = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    pond = PositionScanUniverse(symbols=["AAPL"], generated_at=gen, source="live")
+    assert pond.is_stale(now=datetime(2026, 9, 7, tzinfo=timezone.utc)) is False
+    assert pond.is_stale(now=datetime(2026, 9, 8, tzinfo=timezone.utc)) is True
+
+
 def test_snapshot_key_is_stable_not_versioned() -> None:
     assert store_mod._SNAPSHOT_KEY == "position_scan_snapshot"  # noqa: SLF001
+    assert store_mod._UNIVERSE_KEY == "position_scan_universe"  # noqa: SLF001
     assert store_mod._LOCK_KEY == "position_scan_refresh_lock"  # noqa: SLF001
     assert store_mod._MIGRATION_KEYS == (  # noqa: SLF001
         "position_scan_snapshot_v2",

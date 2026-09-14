@@ -13,6 +13,7 @@ import {
   buildPositionGemDisplayRows,
   DEFAULT_POSITION_GEM_FILTER,
   emptyPositionGemCopy,
+  formatGemListDelta,
   isPositionScanUnavailable,
   POSITION_COMPARE_MAX,
   positionActionColor,
@@ -78,6 +79,8 @@ export function InvestPageClient() {
     return Number.isNaN(d.getTime()) ? null : d.toLocaleString();
   }, [response?.scanGeneratedAt]);
 
+  const deltaLabel = useMemo(() => formatGemListDelta(response?.listDelta), [response?.listDelta]);
+
   function submitSymbolSearch(e: React.FormEvent) {
     e.preventDefault();
     const sym = searchInput.trim().toUpperCase();
@@ -108,9 +111,14 @@ export function InvestPageClient() {
             Gem Candidates
           </h1>
           <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-            Growth-led names with a sector/research tailwind — informational only, never a recommendation.
+            Growth-led names with a sector tailwind — news/geo is a catalyst, not the badge. Informational only, never a recommendation.
             {scanLabel ? ` Last scan: ${scanLabel}.` : ""}
           </p>
+          {deltaLabel ? (
+            <p data-testid="invest-list-delta" style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
+              {deltaLabel}
+            </p>
+          ) : null}
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], alignItems: "center" }}>
           <button
@@ -317,6 +325,11 @@ export function InvestPageClient() {
                   </td>
                   <td style={{ padding: spacing[2] }} title={row.tierCopy}>
                     {row.tierLabel}
+                    {row.catalyst ? (
+                      <span style={{ marginLeft: spacing[1], color: colors.textMuted, fontWeight: 500 }}>
+                        · Catalyst
+                      </span>
+                    ) : null}
                   </td>
                   {showAction ? (
                     <td
