@@ -140,3 +140,19 @@ def test_signals_gap_intel_cache_tick_short_circuits(monkeypatch: pytest.MonkeyP
     )
     r = lambda_handler({"gap_intel_cache_tick": True}, {})
     assert r["statusCode"] == 200
+
+
+def test_signals_position_scan_refresh_short_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STOCVEST_LAMBDA_MODULE", "signals")
+
+    def fake_refresh(event: dict, ctx: dict) -> dict:  # noqa: ANN001
+        _ = ctx
+        assert event.get("position_scan_refresh") is True
+        return {"statusCode": 200, "refreshed": True}
+
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.position_scan_refresh_handler", fake_refresh
+    )
+    r = lambda_handler({"position_scan_refresh": True}, {})
+    assert r["statusCode"] == 200
+    assert r["refreshed"] is True

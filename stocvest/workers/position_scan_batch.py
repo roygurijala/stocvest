@@ -19,7 +19,7 @@ from stocvest.api.services.position_scan import (
     set_position_scan_snapshot_cache,
 )
 from stocvest.api.services.position_scan_store import get_position_scan_store
-from stocvest.api.services.position_universe import build_scan_universe
+from stocvest.api.services.position_universe import build_batch_scan_universe
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
@@ -32,7 +32,7 @@ async def run_position_scan_batch_async(
     max_universe: int | None = None,
     concurrency: int = _DEFAULT_CONCURRENCY,
 ) -> dict[str, Any]:
-    universe = await build_scan_universe(max_size=max_universe)
+    universe = await build_batch_scan_universe(max_discovery=max_universe)
     snapshot = await run_position_scan_async(universe=universe, concurrency=concurrency)
 
     persisted = False

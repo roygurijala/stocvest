@@ -9,6 +9,10 @@ import pytest
 
 from stocvest.api.handlers.signals import position_candidates_handler
 from stocvest.api.services.position_scan import GemCandidate, PositionScanSnapshot
+from stocvest.api.services.position_scan_store import (
+    InMemoryPositionScanStore,
+    reset_position_scan_store_for_tests,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -97,11 +101,127 @@ def test_bad_tier_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     assert res["statusCode"] == 400
 
 
-def test_refresh_forces_recompute(monkeypatch: pytest.MonkeyPatch) -> None:
-    _patch_snapshot(monkeypatch)
+def test_miss_claims_once_then_polls_pending(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-signals")
+    reset_position_scan_store_for_tests(InMemoryPositionScanStore())
+    monkeypatch.setattr(
+        "stocvest.api.services.position_scan.get_position_scan_snapshot_sync",
+        lambda *, force=False: (None, False),
+    )
+
+    def _boom_compute() -> None:
+        raise AssertionError("must not inline compose inside AWS")
+
+    monkeypatch.setattr(
+        "stocvest.api.services.position_scan.compute_and_persist_position_scan",
+        _boom_compute,
+    )
+    kicks = {"n": 0}
+
+    def _kick() -> bool:
+        kicks["n"] += 1
+        return True
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.trigger_async_position_scan_refresh", _kick)
+    first = json.loads(position_candidates_handler(_event(), {})["body"])
+    second = json.loads(position_candidates_handler(_event(), {})["body"])
+    assert first["pending"] is True and second["pending"] is True
+    assert first["degraded"] is False
+    assert kicks["n"] == 1
+    reset_position_scan_store_for_tests(None)
+
+
+def test_refresh_kicks_async_and_returns_pending_in_aws(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_position_scan_store_for_tests(InMemoryPositionScanStore())
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-signals")
+    monkeypatch.setattr(
+        "stocvest.api.services.position_scan.get_position_scan_snapshot_sync",
+        lambda *, force=False: (None, False),
+    )
+
+    def _boom_compute() -> None:
+        raise AssertionError("must not inline compose inside AWS")
+
+    monkeypatch.setattr(
+        "stocvest.api.services.position_scan.compute_and_persist_position_scan",
+        _boom_compute,
+    )
+    kicks = {"n": 0}
+
+    def _kick() -> bool:
+        kicks["n"] += 1
+        return True
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.trigger_async_position_scan_refresh", _kick)
+    res = position_candidates_handler(_event(qs={"refresh": "1"}), {})
+    body = json.loads(res["body"])
+    assert body["pending"] is True
+    assert body["candidates"] == []
+    assert kicks["n"] == 1
+
+
+def test_refresh_inlines_when_not_in_aws(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_position_scan_store_for_tests(InMemoryPositionScanStore())
+    monkeypatch.delenv("AWS_LAMBDA_FUNCTION_NAME", raising=False)
+    monkeypatch.setattr(
+        "stocvest.api.services.position_scan.get_position_scan_snapshot_sync",
+        lambda *, force=False: (None, False),
+    )
+    snap = PositionScanSnapshot(
+        generated_at=datetime(2026, 9, 8, tzinfo=timezone.utc),
+        universe_size=25,
+        candidates=[_candidate("HIGH", "gem", 88.0)],
+    )
+    monkeypatch.setattr(
+        "stocvest.api.services.position_scan.compute_and_persist_position_scan",
+        lambda: snap,
+    )
+    monkeypatch.setattr(
+        "stocvest.api.handlers.signals.trigger_async_position_scan_refresh",
+        lambda: False,
+    )
     res = position_candidates_handler(_event(qs={"refresh": "true"}), {})
     body = json.loads(res["body"])
     assert body["cached"] is False
+    assert body.get("pending") is not True
+    assert [c["symbol"] for c in body["candidates"]] == ["HIGH"]
+
+
+def test_refresh_invalidates_and_returns_pending(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = InMemoryPositionScanStore()
+    reset_position_scan_store_for_tests(store)
+    _patch_snapshot(monkeypatch)
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-signals")
+    kicks = {"n": 0}
+
+    def _kick() -> bool:
+        kicks["n"] += 1
+        return True
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.trigger_async_position_scan_refresh", _kick)
+    res = position_candidates_handler(_event(qs={"refresh": "true"}), {})
+    body = json.loads(res["body"])
+    assert body["pending"] is True
+    assert body["candidates"] == []
+    assert kicks["n"] == 1
+    assert store.get() is None
+
+
+def test_scan_refresh_handler_computes(monkeypatch: pytest.MonkeyPatch) -> None:
+    from stocvest.api.handlers.signals import position_scan_refresh_handler
+
+    called = {"n": 0}
+
+    def _compute() -> None:
+        called["n"] += 1
+
+    monkeypatch.setattr(
+        "stocvest.api.services.position_scan.compute_and_persist_position_scan",
+        _compute,
+    )
+    r = position_scan_refresh_handler({"position_scan_refresh": True}, {})
+    assert r["statusCode"] == 200 and r["refreshed"] is True
+    assert called["n"] == 1
 
 
 def test_scan_failure_degrades_gracefully(monkeypatch: pytest.MonkeyPatch) -> None:

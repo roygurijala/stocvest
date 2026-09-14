@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from datetime import date
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from stocvest.data.fmp_client import get_revenue_trend, get_upcoming_earnings_date
+from stocvest.data.fmp_client import get_position_screener_rows, get_revenue_trend, get_upcoming_earnings_date
 
 
 @pytest.mark.asyncio
@@ -112,3 +112,46 @@ async def test_get_revenue_trend_never_raises_on_http_error() -> None:
         patch("stocvest.data.fmp_client.httpx.AsyncClient", FakeClient),
     ):
         assert await get_revenue_trend("ZZZ") == "unknown"
+
+@pytest.mark.asyncio
+async def test_position_screener_sends_cap_band() -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResp:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            return [{"symbol": "RKLB", "marketCap": 8e9}]
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+
+        async def get(self, url, params=None):
+            captured["url"] = url
+            captured["params"] = params
+            return FakeResp()
+
+    with (
+        patch("stocvest.data.fmp_client._api_key", return_value="test-key"),
+        patch("stocvest.data.fmp_client.httpx.AsyncClient", FakeClient),
+    ):
+        rows = await get_position_screener_rows(
+            min_market_cap=500_000_000,
+            limit=1500,
+            max_market_cap=200_000_000_000,
+        )
+    assert rows[0]["symbol"] == "RKLB"
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert params["marketCapMoreThan"] == "500000000"
+    assert params["marketCapLowerThan"] == "200000000000"
+    assert params["limit"] == "1500"
+

@@ -58,7 +58,7 @@ def _pillar(pid: str, score: int, verdict: str = "bullish", *, dq: str = "high",
 
 
 def _gem_body() -> dict[str, Any]:
-    """A body that passes all nine gem gates by default."""
+    """A body that passes all nine G1–G9 gates (AAPL mega, sector neutral — not a gem)."""
     return {
         "symbol": "AAPL",
         "score": 40,
@@ -140,7 +140,74 @@ def test_all_gates_pass_for_gem_body() -> None:
     f = _features(_gem_body())
     gates = evaluate_gem_gates(f, rs_bottom_quartile_threshold=-5.0)
     assert all(gates[g] for g in GEM_GATE_IDS), gates
+    # Mega-cap + no sector/research tailwind → quality Strong, not Gem.
+    assert resolve_gem_tier(f, gates) == TIER_STRONG
+
+
+def _discovery_body() -> dict[str, Any]:
+    """Mid-cap growth name with a sector tailwind — the gem hunt pond."""
+    body = _gem_body()
+    body["symbol"] = "RKLB"
+    body["market_cap"] = 8_000_000_000
+    body["layers"][2]["verdict"] = "bullish"
+    body["layers"][2]["score"] = 70
+    return body
+
+
+def test_mid_cap_growth_plus_tailwind_is_gem_even_when_g1_fails() -> None:
+    body = _discovery_body()
+    body["position_fundamentals"]["score"] = 55
+    body["position_fundamentals"]["pillars"][3]["score"] = 40  # F4 cheap-not-required
+    f = _features(body)
+    gates = evaluate_gem_gates(f)
+    assert gates["G1"] is False
     assert resolve_gem_tier(f, gates) == TIER_GEM
+    why = build_gem_why(f, gates, TIER_GEM)
+    assert "Growth-led discovery" in why
+    assert "Screening only" in why
+
+
+def test_mega_cap_needs_growth_and_tailwind_for_gem_exception() -> None:
+    body = _gem_body()  # AAPL, all G1–G9, sector neutral
+    f = _features(body)
+    gates = evaluate_gem_gates(f)
+    assert resolve_gem_tier(f, gates) == TIER_STRONG
+
+    body["layers"][2]["verdict"] = "bullish"
+    f = _features(body)
+    gates = evaluate_gem_gates(f)
+    assert resolve_gem_tier(f, gates) == TIER_GEM
+    why = build_gem_why(f, gates, TIER_GEM)
+    assert "Mega-cap exception" in why
+
+
+def test_sharp_breakdown_blocks_gem() -> None:
+    body = _discovery_body()
+    body["layers"][1]["indicator_snapshot"]["pct_from_52w_high"] = -30.0
+    f = _features(body)
+    gates = evaluate_gem_gates(f)
+    assert gates["G5"] is False
+    assert resolve_gem_tier(f, gates) != TIER_GEM
+
+
+def test_news_tailwind_qualifies_gem_without_sector() -> None:
+    body = _discovery_body()
+    body["layers"][2]["verdict"] = "neutral"
+    body["layers"].append({"layer": "news", "score": 70, "verdict": "bullish", "status": "available", "chips": []})
+    f = _features(body)
+    gates = evaluate_gem_gates(f)
+    assert f.news_verdict == "bullish"
+    assert f.sector_verdict == "neutral"
+    assert resolve_gem_tier(f, gates) == TIER_GEM
+
+
+def test_no_growth_blocks_gem_even_with_tailwind() -> None:
+    body = _discovery_body()
+    body["position_fundamentals"]["pillars"][1]["verdict"] = "neutral"  # F2
+    body["position_fundamentals"]["pillars"][1]["score"] = 50
+    f = _features(body)
+    gates = evaluate_gem_gates(f)
+    assert resolve_gem_tier(f, gates) != TIER_GEM
 
 
 # --------------------------------------------------------------------------- G1
@@ -403,6 +470,7 @@ def test_build_gem_why_is_non_advisory() -> None:
     gates = evaluate_gem_gates(f, rs_bottom_quartile_threshold=-5.0)
     why = build_gem_why(f, gates, TIER_GEM)
     assert "Screening only" in why
+    assert "Mega-cap exception" in why
     for banned in ("buy", "sell", "should own", "recommend"):
         assert banned not in why.lower()
 

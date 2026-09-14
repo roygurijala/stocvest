@@ -5,8 +5,12 @@ composite response body (the six/seven-layer stack + F1-F5 fundamentals pillars)
 No network, no LLM — this is the glass-box screening logic that ranks candidates
 for the ``GET /v1/signals/position/candidates`` API and ``/dashboard/invest``.
 
-Legal framing: a "gem candidate" has passed internal quality gates for
-*informational screening only* — never a recommendation or solicitation.
+Gem (2026-09-13): a **growth-led discovery**, not a pass-all-nine quality
+compounder. Hygiene (G8/G9/G3, not a sharp G5 breakdown) + F2 bullish + a
+sector/news/geo tailwind. Mega-caps are not the hunt; they reach Gem only as
+an exception when that same growth + tailwind still fire. Strong/Monitor stay
+the home for quality large-caps. Informational screening only — never a
+recommendation or solicitation.
 """
 
 from __future__ import annotations
@@ -25,6 +29,46 @@ GEM_GATE_IDS: tuple[str, ...] = ("G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8",
 FUNDAMENTALS_STRENGTH_MIN = 72
 PILLAR_FLOOR = 60
 SHARP_BREAKDOWN_PCT_FROM_HIGH = -25.0
+
+# Same $200B band as frontend ``earningsImpactLevel`` / ``MEGA_CAP_FALLBACK``.
+# Used only to keep mega-caps off the default gem hunt (not a new score floor).
+MEGA_CAP_USD = 200_000_000_000.0
+# Already-found names (curated v1 stub + earnings mega fallback + SPCX).
+# Treat as mega for gem eligibility even when the composite body omits market_cap.
+_MEGA_CAP_SYMBOLS = frozenset(
+    {
+        "AAPL",
+        "MSFT",
+        "NVDA",
+        "GOOGL",
+        "GOOG",
+        "AMZN",
+        "META",
+        "BRK.B",
+        "BRK.A",
+        "TSLA",
+        "LLY",
+        "AVGO",
+        "JPM",
+        "V",
+        "UNH",
+        "MA",
+        "JNJ",
+        "PG",
+        "HD",
+        "COST",
+        "KO",
+        "PEP",
+        "XOM",
+        "CVX",
+        "ABBV",
+        "MRK",
+        "WMT",
+        "CAT",
+        "HON",
+        "SPCX",
+    }
+)
 
 PILLAR_IDS: tuple[str, ...] = ("F1", "F2", "F3", "F4", "F5")
 
@@ -105,6 +149,8 @@ class CandidateFeatures:
     company_name: str | None = None
     market_cap: float | None = None
     avg_dollar_volume: float | None = None
+    news_verdict: str = "neutral"
+    geo_verdict: str = "neutral"
 
 
 def _layer_row(body: dict[str, Any], layer: str) -> dict[str, Any]:
@@ -181,6 +227,8 @@ def extract_candidate_features(body: dict[str, Any]) -> CandidateFeatures:
 
     sector_row = _layer_row(body, "sector")
     macro_row = _layer_row(body, "macro")
+    news_row = _layer_row(body, "news")
+    geo_row = _layer_row(body, "geopolitical")
 
     return CandidateFeatures(
         symbol=symbol,
@@ -211,6 +259,8 @@ def extract_candidate_features(body: dict[str, Any]) -> CandidateFeatures:
         avg_dollar_volume=_as_float(
             body["avg_dollar_volume"] if body.get("avg_dollar_volume") is not None else body.get("dollar_volume")
         ),
+        news_verdict=str(news_row.get("verdict") or "neutral").strip().lower(),
+        geo_verdict=str(geo_row.get("verdict") or "neutral").strip().lower(),
     )
 
 
@@ -320,6 +370,47 @@ def failing_gates(gates: dict[str, bool]) -> list[str]:
     return [gid for gid in GEM_GATE_IDS if not gates.get(gid, False)]
 
 
+def is_mega_cap(f: CandidateFeatures) -> bool:
+    """True when size or ticker already says the market found this name."""
+    if f.market_cap is not None and f.market_cap >= MEGA_CAP_USD:
+        return True
+    return f.symbol in _MEGA_CAP_SYMBOLS
+
+
+def is_sharp_breakdown(f: CandidateFeatures) -> bool:
+    """Existing G5 breakdown band — not a new drawdown floor."""
+    return f.pct_from_52w_high is not None and f.pct_from_52w_high <= SHARP_BREAKDOWN_PCT_FROM_HIGH
+
+
+def is_growth_led(f: CandidateFeatures) -> bool:
+    """F2 already calls latest-quarter YoY ≥ 15% 'strong' and emits a bullish verdict."""
+    f2 = f.pillars.get("F2")
+    return bool(f2 and f2.score is not None and f2.verdict == "bullish")
+
+
+def has_research_tailwind(f: CandidateFeatures) -> bool:
+    """Sector / news / geo already scored — bullish is the existing tailwind signal."""
+    return "bullish" in (f.sector_verdict, f.news_verdict, f.geo_verdict)
+
+
+def is_gem_hygiene(f: CandidateFeatures, gates: dict[str, bool]) -> bool:
+    """Safety only: investable, readable, no solvency blow-up, not a sharp breakdown."""
+    return bool(
+        gates.get("G8", False)
+        and gates.get("G9", False)
+        and gates.get("G3", False)
+        and not is_sharp_breakdown(f)
+    )
+
+
+def qualifies_as_gem(f: CandidateFeatures, gates: dict[str, bool]) -> bool:
+    """Growth discovery: hygiene + F2 lead + sector/research tailwind.
+
+    Mega-caps use the same rule (the exception). They are not a separate, looser path.
+    """
+    return is_gem_hygiene(f, gates) and is_growth_led(f) and has_research_tailwind(f)
+
+
 def compute_gem_rank(f: CandidateFeatures) -> float:
     """Transparent weighted rank within the qualified set (0-100).
 
@@ -343,11 +434,13 @@ def resolve_gem_tier(f: CandidateFeatures, gates: dict[str, bool]) -> str:
     # is not investable — never surfaced, regardless of fundamentals.
     if not gates.get("G8", False):
         return TIER_INSUFFICIENT
-    if all(gates.get(gid, False) for gid in GEM_GATE_IDS):
+    if qualifies_as_gem(f, gates):
         return TIER_GEM
+    # Quality compounder path — G1-led Strong, including mega-caps the gem hunt skipped.
+    if all(gates.get(gid, False) for gid in GEM_GATE_IDS):
+        return TIER_STRONG
     strong_core = all(gates.get(gid, False) for gid in ("G1", "G2", "G3", "G8", "G9"))
-    misses_environment = not (gates.get("G5") and gates.get("G6") and gates.get("G7"))
-    if strong_core and misses_environment:
+    if strong_core:
         return TIER_STRONG
     return TIER_MONITOR
 
@@ -361,16 +454,20 @@ def build_gem_why(f: CandidateFeatures, gates: dict[str, bool], tier: str) -> st
         else "review pillars"
     )
     if tier == TIER_GEM:
-        return f"Passes strict quality gates — {weak_txt}. Screening only."
+        if is_mega_cap(f):
+            return "Mega-cap exception — growth + sector/research still aligned. Screening only."
+        return "Growth-led discovery — F2 bullish with sector/research tailwind. Screening only."
     if tier == TIER_STRONG:
         missing = [g for g in ("G5", "G6", "G7") if not gates.get(g)]
-        env = {
-            "G5": "structural trend",
-            "G6": "relative strength",
-            "G7": "macro/sector environment",
-        }
-        missing_txt = ", ".join(env[g] for g in missing) or "environment"
-        return f"Strong fundamentals; {missing_txt} needs review. Screening only."
+        if missing:
+            env = {
+                "G5": "structural trend",
+                "G6": "relative strength",
+                "G7": "macro/sector environment",
+            }
+            missing_txt = ", ".join(env[g] for g in missing)
+            return f"Strong quality compounder; {missing_txt} needs review. Screening only."
+        return "Strong quality compounder — review pillars. Screening only."
     if tier == TIER_INSUFFICIENT:
         if not gates.get("G8", False):
             return "Excluded by universe hygiene (leveraged/inverse, SPAC, or micro-cap/illiquid) — not screened."

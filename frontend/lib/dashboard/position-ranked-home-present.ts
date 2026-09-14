@@ -61,6 +61,8 @@ export type PositionCandidatesResponse = {
   scanGeneratedAt: string | null;
   cached: boolean;
   degraded: boolean;
+  /** True while the universe compose runs off the request path (empty store / ?refresh=1). */
+  pending: boolean;
 };
 
 export type PositionGemFilter = {
@@ -97,14 +99,14 @@ const TIER_LABEL: Record<PositionGemTier, string> = {
 };
 
 const TIER_COPY: Record<PositionGemTier, string> = {
-  gem: "Passes strict quality gates — review pillars before any decision.",
-  strong: "Strong fundamentals; structure or environment needs review.",
+  gem: "Growth-led discovery with a sector/research tailwind — review pillars before any decision.",
+  strong: "Quality compounder; structure or environment may still need review.",
   monitor: "Mixed read — see weakest pillar.",
   insufficient: "Missing data or failed universe filter."
 };
 
 export const DEFAULT_POSITION_GEM_FILTER: PositionGemFilter = {
-  tier: "gem",
+  tier: "all",
   minFundamentals: null,
   minTechnical: null,
   symbolQuery: null
@@ -205,8 +207,14 @@ export function parsePositionCandidates(json: unknown): PositionCandidatesRespon
     universeSize: numberOrNull(r.universe_size) ?? 0,
     scanGeneratedAt: r.scan_generated_at ? String(r.scan_generated_at) : null,
     cached: r.cached === true,
-    degraded: r.degraded === true
+    degraded: r.degraded === true,
+    pending: r.pending === true
   };
+}
+
+/** True while the background universe compose is still running (not a hard fail). */
+export function isPositionScanPending(response: PositionCandidatesResponse | null): boolean {
+  return Boolean(response?.pending && response.candidates.length === 0);
 }
 
 /** Fetch error, or a degraded empty envelope (missing route / timeout / scan crash). */
@@ -215,7 +223,24 @@ export function isPositionScanUnavailable(
   error: unknown
 ): boolean {
   if (error) return true;
+  // Background compose in flight — show "Scanning the universe…", not unavailable.
+  if (isPositionScanPending(response)) return false;
   return Boolean(response?.degraded && response.candidates.length === 0);
+}
+
+/** Honest empty-state when Gem is selected but Strong/Monitor already have names. */
+export function emptyPositionGemCopy(
+  filter: PositionGemFilter,
+  allCandidates: readonly PositionGemCandidate[],
+  universeSize: number
+): string {
+  if (filter.tier === "gem") {
+    const strong = allCandidates.filter((c) => c.tier === "strong").length;
+    const monitor = allCandidates.filter((c) => c.tier === "monitor").length;
+    const n = universeSize > 0 ? universeSize : allCandidates.length;
+    return `0 of ${n} passed gem gates; ${strong} on Strong, ${monitor} on Monitor.`;
+  }
+  return "No names passed these gates — widen filters or run a symbol lookup above.";
 }
 
 /** Apply transparent client-side filters (tier + pillar-score sliders + symbol search). */
@@ -532,11 +557,11 @@ export function togglePositionCompareSelection(
 export function parsePositionGemFilterFromParams(
   params: Pick<URLSearchParams, "get">
 ): PositionGemFilter {
-  const tierRaw = String(params.get("tier") ?? "gem").trim().toLowerCase();
+  const tierRaw = String(params.get("tier") ?? "all").trim().toLowerCase();
   const tier: PositionGemTierFilter =
     tierRaw === "all" || tierRaw === "gem" || tierRaw === "strong" || tierRaw === "monitor"
       ? (tierRaw as PositionGemTierFilter)
-      : "gem";
+      : "all";
   return {
     tier,
     minFundamentals: parseMinToken(params.get("fund")),

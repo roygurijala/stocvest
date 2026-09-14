@@ -12,6 +12,7 @@ import {
   buildPositionCompareMatrix,
   buildPositionGemDisplayRows,
   DEFAULT_POSITION_GEM_FILTER,
+  emptyPositionGemCopy,
   isPositionScanUnavailable,
   POSITION_COMPARE_MAX,
   positionActionColor,
@@ -26,10 +27,10 @@ import { dashboardTradingRoomHref } from "@/lib/nav/dashboard-trading-room-deepl
 import { useTheme } from "@/lib/theme-provider";
 
 const TIER_TABS: { id: PositionGemTierFilter; label: string }[] = [
+  { id: "all", label: "All" },
   { id: "gem", label: "Gem candidates" },
   { id: "strong", label: "Strong quality" },
-  { id: "monitor", label: "Monitor" },
-  { id: "all", label: "All" }
+  { id: "monitor", label: "Monitor" }
 ];
 
 function scoreLabel(score: number | null): string {
@@ -45,7 +46,12 @@ export function InvestPageClient() {
   const [searchInput, setSearchInput] = useState("");
   const [compareSelected, setCompareSelected] = useState<string[]>([]);
 
-  const { response, isInitialLoading, error } = usePositionCandidates(filter.tier);
+  const { response, isInitialLoading, isPending, error, timedOut, refresh } = usePositionCandidates(
+    "all",
+    {
+      limit: 100
+    }
+  );
 
   const rows: PositionGemDisplayRow[] = useMemo(() => {
     if (!response) return [];
@@ -96,48 +102,69 @@ export function InvestPageClient() {
       >
         <div>
           <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: "1.4px", textTransform: "uppercase", color: accent.accent }}>
-            Investment · long-horizon quality
+            Investment · growth discovery
           </p>
           <h1 style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xl, fontWeight: 700, color: colors.text }}>
             Gem Candidates
           </h1>
           <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-            Transparent pillar screen — informational only, never a recommendation.
+            Growth-led names with a sector/research tailwind — informational only, never a recommendation.
             {scanLabel ? ` Last scan: ${scanLabel}.` : ""}
           </p>
         </div>
-        <form onSubmit={submitSymbolSearch} style={{ display: "flex", gap: spacing[2] }} role="search">
-          <input
-            aria-label="Look up a symbol for the Long Term desk"
-            placeholder="Look up any symbol…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], alignItems: "center" }}>
+          <button
+            type="button"
+            data-testid="invest-refresh"
+            aria-label="Refresh investment scan"
+            onClick={() => refresh()}
+            disabled={isPending || isInitialLoading}
             style={{
               background: colors.surface,
               border: `1px solid ${colors.border}`,
               borderRadius: borderRadius.md,
               color: colors.text,
               fontSize: typography.scale.sm,
+              fontWeight: 600,
               padding: `${spacing[2]} ${spacing[3]}`,
-              minWidth: 160
-            }}
-          />
-          <button
-            type="submit"
-            style={{
-              background: accent.accent,
-              border: "none",
-              borderRadius: borderRadius.md,
-              color: "#0b0b0f",
-              fontSize: typography.scale.sm,
-              fontWeight: 700,
-              padding: `${spacing[2]} ${spacing[3]}`,
-              cursor: "pointer"
+              cursor: isPending || isInitialLoading ? "wait" : "pointer"
             }}
           >
-            Look up
+            {isPending || isInitialLoading ? "Scanning…" : "Refresh"}
           </button>
-        </form>
+          <form onSubmit={submitSymbolSearch} style={{ display: "flex", gap: spacing[2] }} role="search">
+            <input
+              aria-label="Look up a symbol for the Long Term desk"
+              placeholder="Look up any symbol…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              style={{
+                background: colors.surface,
+                border: `1px solid ${colors.border}`,
+                borderRadius: borderRadius.md,
+                color: colors.text,
+                fontSize: typography.scale.sm,
+                padding: `${spacing[2]} ${spacing[3]}`,
+                minWidth: 160
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                background: accent.accent,
+                border: "none",
+                borderRadius: borderRadius.md,
+                color: "#0b0b0f",
+                fontSize: typography.scale.sm,
+                fontWeight: 700,
+                padding: `${spacing[2]} ${spacing[3]}`,
+                cursor: "pointer"
+              }}
+            >
+              Look up
+            </button>
+          </form>
+        </div>
       </header>
 
       {/* Tier tabs + filters */}
@@ -235,15 +262,17 @@ export function InvestPageClient() {
       {/* Table */}
       {isPositionScanUnavailable(response, error) ? (
         <p data-testid="invest-error" style={{ margin: 0, fontSize: typography.scale.sm, color: colors.caution }}>
-          The investment scan is temporarily unavailable. Try again in a moment.
+          The investment scan is temporarily unavailable. Try Refresh, or wait a moment.
         </p>
-      ) : isInitialLoading ? (
+      ) : isInitialLoading || isPending ? (
         <p data-testid="invest-loading" style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
-          Scanning the universe…
+          {timedOut
+            ? "Still scanning the universe — this can take a couple of minutes."
+            : "Scanning the universe…"}
         </p>
       ) : rows.length === 0 ? (
         <p data-testid="invest-empty" style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted, lineHeight: 1.5 }}>
-          No names passed these gates — widen filters or run a symbol lookup above.
+          {emptyPositionGemCopy(filter, response?.candidates ?? [], response?.universeSize ?? 0)}
         </p>
       ) : (
         <div data-testid="invest-gem-table" style={{ overflowX: "auto" }}>

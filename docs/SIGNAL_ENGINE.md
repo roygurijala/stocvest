@@ -54,7 +54,7 @@ Single source of truth for signal scoring math, so scanner / watchlist / scenari
 
 ### Position universe hygiene (gem gate G8, ADR-004 POS-D11)
 
-Gem discovery screens each candidate through `position_gem_gates.py` (G1–G9). **G8 — universe hygiene** delegates to **`position_universe_filter.py`** (`passes_position_universe_filter`). A failed G8 forces tier **Insufficient** (never surfaced), independent of fundamentals.
+Gem discovery screens each candidate through `position_gem_gates.py` (G1–G9 still computed). **Gem tier** is growth-led: hygiene (G8/G9/G3, not a sharp G5 breakdown) + F2 bullish + sector/news/geo bullish. Mega-caps use that same rule as a rare exception. **G8 — universe hygiene** delegates to **`position_universe_filter.py`** (`passes_position_universe_filter`). A failed G8 forces tier **Insufficient** (never surfaced), independent of fundamentals.
 
 | Check | Rule |
 |-------|------|

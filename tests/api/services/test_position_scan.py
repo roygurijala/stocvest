@@ -11,6 +11,7 @@ import stocvest.api.services.position_scan as scan_mod
 from stocvest.api.services.position_scan import (
     PositionScanSnapshot,
     _bottom_quartile_threshold,
+    compute_and_persist_position_scan,
     get_position_scan_snapshot_sync,
     rank_candidates,
     reset_position_scan_cache_for_tests,
@@ -46,8 +47,16 @@ def _pillar(pid: str, score: int, verdict: str = "bullish", dq: str = "high") ->
     }
 
 
-def _body(symbol: str, *, fund_score: int, rs: float, tech_verdict: str = "bullish") -> dict[str, Any]:
-    return {
+def _body(
+    symbol: str,
+    *,
+    fund_score: int,
+    rs: float,
+    tech_verdict: str = "bullish",
+    sector_verdict: str = "neutral",
+    market_cap: float | None = None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
         "symbol": symbol,
         "score": 40,
         "verdict": "bullish",
@@ -76,10 +85,13 @@ def _body(symbol: str, *, fund_score: int, rs: float, tech_verdict: str = "bulli
                 "chips": ["Above W-SMA200"],
                 "indicator_snapshot": {"mode": "position", "pct_from_52w_high": -4.0, "rs_vs_spy_6m_pct": rs},
             },
-            {"layer": "sector", "score": 55, "verdict": "neutral", "status": "available", "chips": []},
+            {"layer": "sector", "score": 70 if sector_verdict == "bullish" else 55, "verdict": sector_verdict, "status": "available", "chips": []},
             {"layer": "macro", "score": 52, "verdict": "neutral", "status": "available", "chips": []},
         ],
     }
+    if market_cap is not None:
+        body["market_cap"] = market_cap
+    return body
 
 
 def test_bottom_quartile_threshold_needs_four_points() -> None:
@@ -89,9 +101,9 @@ def test_bottom_quartile_threshold_needs_four_points() -> None:
 
 def test_rank_candidates_sorts_gem_first_then_rank() -> None:
     bodies = [
-        _body("LOWQ", fund_score=55, rs=5.0),  # G1 fails -> monitor
-        _body("HIGH", fund_score=90, rs=5.0),  # gem, higher rank
-        _body("MIDD", fund_score=74, rs=5.0),  # gem, lower rank
+        _body("LOWQ", fund_score=55, rs=5.0),  # G1 fails, no tailwind -> monitor
+        _body("HIGH", fund_score=90, rs=5.0, sector_verdict="bullish", market_cap=8e9),
+        _body("MIDD", fund_score=74, rs=5.0, sector_verdict="bullish", market_cap=6e9),
     ]
     rows = rank_candidates(bodies)
     assert [r.symbol for r in rows] == ["HIGH", "MIDD", "LOWQ"]
@@ -101,17 +113,17 @@ def test_rank_candidates_sorts_gem_first_then_rank() -> None:
 
 
 def test_rank_candidates_applies_rs_quartile_gate() -> None:
-    # Four strong names; one has clearly bottom-quartile RS -> G6 fails -> not gem.
+    # G6 still records a miss; it no longer blocks a growth-led gem.
     bodies = [
-        _body("AAA", fund_score=85, rs=20.0),
-        _body("BBB", fund_score=85, rs=15.0),
-        _body("CCC", fund_score=85, rs=12.0),
-        _body("DDD", fund_score=85, rs=-30.0),
+        _body("AAA", fund_score=85, rs=20.0, sector_verdict="bullish", market_cap=8e9),
+        _body("BBB", fund_score=85, rs=15.0, sector_verdict="bullish", market_cap=7e9),
+        _body("CCC", fund_score=85, rs=12.0, sector_verdict="bullish", market_cap=6e9),
+        _body("DDD", fund_score=85, rs=-30.0, sector_verdict="bullish", market_cap=5e9),
     ]
     rows = rank_candidates(bodies)
     by_symbol = {r.symbol: r for r in rows}
-    assert by_symbol["DDD"].tier != TIER_GEM
     assert "G6" in by_symbol["DDD"].failing_gates
+    assert by_symbol["DDD"].tier == TIER_GEM
 
 
 def test_run_scan_uses_injected_compose_and_skips_failures() -> None:
@@ -131,7 +143,10 @@ def test_run_scan_uses_injected_compose_and_skips_failures() -> None:
 
 
 def test_snapshot_filter_and_api_dict() -> None:
-    bodies = [_body("HIGH", fund_score=90, rs=5.0), _body("LOWQ", fund_score=55, rs=5.0)]
+    bodies = [
+        _body("HIGH", fund_score=90, rs=5.0, sector_verdict="bullish", market_cap=8e9),
+        _body("LOWQ", fund_score=55, rs=5.0),
+    ]
     snap = PositionScanSnapshot(
         generated_at=__import__("datetime").datetime(2026, 9, 8, tzinfo=__import__("datetime").timezone.utc),
         universe_size=2,
@@ -181,7 +196,7 @@ def test_snapshot_sync_caches_and_forces(monkeypatch: pytest.MonkeyPatch) -> Non
     reset_position_scan_store_for_tests(InMemoryPositionScanStore())
     calls = {"n": 0}
 
-    def fake_scan(**_kwargs) -> PositionScanSnapshot:
+    async def fake_live_scan() -> PositionScanSnapshot:
         calls["n"] += 1
         return PositionScanSnapshot(
             generated_at=_dt.datetime(2026, 9, 8, tzinfo=_dt.timezone.utc),
@@ -189,16 +204,18 @@ def test_snapshot_sync_caches_and_forces(monkeypatch: pytest.MonkeyPatch) -> Non
             candidates=[],
         )
 
-    monkeypatch.setattr(scan_mod, "run_position_scan", fake_scan)
+    monkeypatch.setattr(scan_mod, "_run_live_position_scan", fake_live_scan)
 
     snap1, cached1 = get_position_scan_snapshot_sync()
-    assert cached1 is False and calls["n"] == 1
-    # Second call hits the cache — no recompute, loop-agnostic (no asyncio.run reuse).
-    snap2, cached2 = get_position_scan_snapshot_sync()
-    assert cached2 is True and calls["n"] == 1 and snap2 is snap1
-    # Force triggers a fresh scan.
-    _snap3, cached3 = get_position_scan_snapshot_sync(force=True)
-    assert cached3 is False and calls["n"] == 2
+    assert snap1 is None and cached1 is False and calls["n"] == 0
+    # Workers / tests still compose via force or compute_and_persist.
+    snap2, cached2 = get_position_scan_snapshot_sync(force=True)
+    assert cached2 is False and calls["n"] == 1 and snap2 is not None
+    # Second unforced call hits the cache — no recompute.
+    snap3, cached3 = get_position_scan_snapshot_sync()
+    assert cached3 is True and calls["n"] == 1 and snap3 is snap2
+    persisted = compute_and_persist_position_scan()
+    assert calls["n"] == 2 and persisted is not None
 
     reset_position_scan_cache_for_tests()
     reset_position_scan_store_for_tests(None)
