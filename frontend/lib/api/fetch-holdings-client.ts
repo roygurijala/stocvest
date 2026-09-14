@@ -3,7 +3,13 @@
  * (`/api/stocvest/holdings*`). Session-cookie auth is added server-side by the
  * BFF route handlers (`stocvestAuthedFetch`).
  */
-import type { Holding, HoldingInput, PortfolioSettings } from "@/lib/portfolio/types";
+import { parsePortfolioLedger } from "@/lib/portfolio/advice-ledger-present";
+import type {
+  Holding,
+  HoldingInput,
+  PortfolioLedgerResponse,
+  PortfolioSettings
+} from "@/lib/portfolio/types";
 import { DEFAULT_PORTFOLIO_SETTINGS } from "@/lib/portfolio/types";
 
 async function parseJson<T>(res: Response): Promise<T | null> {
@@ -119,6 +125,32 @@ export async function fetchPortfolioSettingsClient(): Promise<PortfolioSettings>
   }).catch(() => null);
   if (!res?.ok) return { ...DEFAULT_PORTFOLIO_SETTINGS };
   return (await parseJson<PortfolioSettings>(res)) ?? { ...DEFAULT_PORTFOLIO_SETTINGS };
+}
+
+export async function recordHoldingSaleClient(
+  symbol: string,
+  body: { quantity: number; salePrice: number; soldAt: string; creditCash?: boolean }
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const res = await fetch(`/api/stocvest/holdings/${encodeURIComponent(symbol)}/sale`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store"
+  }).catch(() => null);
+  if (!res) return { ok: false, message: "Couldn't reach the server. Check your connection and try again." };
+  if (!res.ok) {
+    const err = await parseJson<{ message?: string; error?: string }>(res);
+    return { ok: false, message: err?.message || err?.error || `Sale failed (HTTP ${res.status}).` };
+  }
+  return { ok: true };
+}
+
+export async function fetchPortfolioLedgerClient(): Promise<PortfolioLedgerResponse | null> {
+  const res = await fetch("/api/stocvest/holdings/ledger", { method: "GET", cache: "no-store" }).catch(
+    () => null
+  );
+  if (!res?.ok) return null;
+  return parsePortfolioLedger(await parseJson<unknown>(res));
 }
 
 export async function savePortfolioSettingsClient(

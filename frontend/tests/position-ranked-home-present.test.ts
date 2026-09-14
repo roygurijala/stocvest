@@ -148,8 +148,29 @@ describe("position-ranked-home-present", () => {
       applyPositionGemFilter(cands, { ...DEFAULT_POSITION_GEM_FILTER, tier: "gem", minTechnical: 50 }).map((c) => c.symbol)
     ).toEqual(["AAA"]);
     expect(
+      applyPositionGemFilter(cands, { ...DEFAULT_POSITION_GEM_FILTER, tier: "all", symbolQuery: "aa" }).map((c) => c.symbol)
+    ).toEqual(["AAA"]);
+    expect(
       applyPositionGemFilter(cands, { ...DEFAULT_POSITION_GEM_FILTER, tier: "all", symbolQuery: "cc" }).map((c) => c.symbol)
-    ).toEqual(["CCC"]);
+    ).toEqual([]);
+  });
+
+  it("keeps Invest All/home on the hunt (gems only); Strong/Monitor stay on their tabs", () => {
+    const cands: PositionGemCandidate[] = parsePositionCandidates({
+      candidates: [
+        apiRow({ symbol: "MID1", tier: "gem", fundamentals_score: 85, technical_score: 70 }),
+        apiRow({ symbol: "AAPL", tier: "strong", fundamentals_score: 90, technical_score: 80 }),
+        apiRow({ symbol: "WMT", tier: "monitor", fundamentals_score: 60, technical_score: 45 })
+      ]
+    })!.candidates;
+
+    expect(applyPositionGemFilter(cands, DEFAULT_POSITION_GEM_FILTER).map((c) => c.symbol)).toEqual(["MID1"]);
+    expect(
+      applyPositionGemFilter(cands, { ...DEFAULT_POSITION_GEM_FILTER, tier: "strong" }).map((c) => c.symbol)
+    ).toEqual(["AAPL"]);
+    expect(
+      applyPositionGemFilter(cands, { ...DEFAULT_POSITION_GEM_FILTER, tier: "monitor" }).map((c) => c.symbol)
+    ).toEqual(["WMT"]);
   });
 
   it("builds display rows with a Position deep-dive href and weakest pillar", () => {
@@ -236,6 +257,9 @@ describe("position-ranked-home-present", () => {
     expect(
       emptyPositionGemCopy({ ...DEFAULT_POSITION_GEM_FILTER, tier: "gem" }, cands, 25)
     ).toBe("0 of 25 passed gem gates; 1 on Strong, 1 on Monitor.");
+    expect(emptyPositionGemCopy(DEFAULT_POSITION_GEM_FILTER, cands, 25)).toBe(
+      "0 of 25 passed gem gates; 1 on Strong, 1 on Monitor."
+    );
   });
 
   it("exposes non-advisory tier copy and labels", () => {

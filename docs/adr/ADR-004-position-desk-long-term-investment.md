@@ -313,7 +313,7 @@ Extend sticky header control:
 **This is the investment product home**, not a secondary report. Layout (density-safe, ADR-003 compliant):
 
 1. **Header** — “Long-horizon quality” + last scan time + symbol search (Journey B entry)
-2. **Gem Candidates** — ranked table (default filter: tier = gem), columns: Symbol · Quality · Fundamentals · Trend · Sector · **Weakest pillar** · Why
+2. **Gem Candidates** — ranked table (default **Hunt** tab = gems only, top 15; mega-caps live on Strong quality / Monitor), columns: Symbol · Quality · Fundamentals · Trend · Sector · **Weakest pillar** · Why
 3. **Expand filters** — pillar sliders (transparent), sector, market cap band
 4. **Row click** → Deep Dive Position tab
 5. **Empty state** — “No names passed gem gates this week — widen filters or run symbol lookup.”
@@ -756,7 +756,8 @@ A **gem** is a growth-led discovery the market has not already priced as “alre
 
 **Mega-caps:** never Gem. They stay **Strong** / **Monitor** even when growth + sector
 + hygiene fire — already-found names, not the hunt. The gem board is the top
-**15** mid-cap discoveries by `gem_rank`.
+**15** mid-cap discoveries by `gem_rank`. Invest All/home is that hunt board
+only; curated megas appear on Strong quality / Monitor, not the front of Invest.
 
 **Scan universe (growth_led_3):** the hunt pond is a separate Dynamo item
 `position_scan_universe` (symbols + `generated_at`). Live `?refresh=1` **re-scores

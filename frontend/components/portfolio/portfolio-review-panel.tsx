@@ -71,7 +71,7 @@ function actionColor(
   }
 }
 
-export function PortfolioReviewPanel() {
+export function PortfolioReviewPanel({ onReviewComplete }: { onReviewComplete?: () => void } = {}) {
   const { colors } = useTheme();
   const isMobile = useIsMobileLayout();
   const [review, setReview] = useState<PortfolioReview | null>(null);
@@ -86,6 +86,7 @@ export function PortfolioReviewPanel() {
       setError(result.message);
     } else {
       setReview(result.review);
+      onReviewComplete?.();
     }
     setLoading(false);
   }

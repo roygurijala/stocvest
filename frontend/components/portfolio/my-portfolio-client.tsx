@@ -8,16 +8,25 @@ import { fetchBffSnapshotsBatched, lookupSnapshot } from "@/lib/api/fetch-bff-sn
 import {
   applyHoldingSplitClient,
   deleteHoldingClient,
+  fetchPortfolioLedgerClient,
   loadPortfolioBundleClient,
+  recordHoldingSaleClient,
   savePortfolioSettingsClient,
   upsertHoldingClient
 } from "@/lib/api/fetch-holdings-client";
+import {
+  adviceActionLabel,
+  followThroughForReview,
+  followThroughLabel,
+  outcomeLabel
+} from "@/lib/portfolio/advice-ledger-present";
 import { buildPortfolioView, type PortfolioView } from "@/lib/portfolio/holdings-present";
 import { PortfolioReviewPanel } from "@/components/portfolio/portfolio-review-panel";
 import {
   DEFAULT_PORTFOLIO_SETTINGS,
   type Holding,
   type HoldingLot,
+  type PortfolioLedgerResponse,
   type PortfolioSettings
 } from "@/lib/portfolio/types";
 
@@ -98,6 +107,14 @@ export function MyPortfolioClient() {
   const [splitRatio, setSplitRatio] = useState("2");
   const [splitError, setSplitError] = useState<string | null>(null);
   const [applyingSplit, setApplyingSplit] = useState(false);
+  const [saleFor, setSaleFor] = useState<string | null>(null);
+  const [saleQty, setSaleQty] = useState("");
+  const [salePrice, setSalePrice] = useState("");
+  const [saleDate, setSaleDate] = useState("");
+  const [saleCreditCash, setSaleCreditCash] = useState(true);
+  const [saleError, setSaleError] = useState<string | null>(null);
+  const [recordingSale, setRecordingSale] = useState(false);
+  const [ledger, setLedger] = useState<PortfolioLedgerResponse | null>(null);
 
   // Editable settings mirror (so typing doesn't fire saves).
   const [cashInput, setCashInput] = useState("0");
@@ -115,6 +132,8 @@ export function MyPortfolioClient() {
       setTargetInput(s.targetPositionPct != null ? String(s.targetPositionPct) : "");
       setBenchInput(s.benchmarkSymbol || "SPY");
     }
+    const nextLedger = await fetchPortfolioLedgerClient();
+    setLedger(nextLedger);
     setLoading(false);
   }, []);
 
@@ -126,8 +145,9 @@ export function MyPortfolioClient() {
   useEffect(() => {
     const symbols = new Set(holdings.map((h) => h.symbol));
     if (splitFor && !symbols.has(splitFor)) setSplitFor(null);
+    if (saleFor && !symbols.has(saleFor)) setSaleFor(null);
     if (draft?.existing && !symbols.has(draft.symbol)) setDraft(null);
-  }, [holdings, splitFor, draft]);
+  }, [holdings, splitFor, saleFor, draft]);
 
   // Fetch live quotes for held symbols + the benchmark.
   useEffect(() => {
@@ -229,7 +249,9 @@ export function MyPortfolioClient() {
     if (deletingSymbol) return;
     const confirmed =
       typeof window === "undefined" ||
-      window.confirm(`Remove ${symbol} from your portfolio? This can't be undone.`);
+      window.confirm(
+        `Remove ${symbol} from your portfolio without recording a sale? This can't be undone. Use Sell to keep sold history and advice tracking.`
+      );
     if (!confirmed) return;
     setDeletingSymbol(symbol);
     const ok = await deleteHoldingClient(symbol);
@@ -258,7 +280,46 @@ export function MyPortfolioClient() {
     await reload();
   }
 
+  async function handleRecordSale() {
+    if (!saleFor) return;
+    setSaleError(null);
+    const qty = Number(saleQty);
+    const price = Number(salePrice);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setSaleError("Enter a share count greater than 0.");
+      return;
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      setSaleError("Enter a sale price of 0 or more.");
+      return;
+    }
+    if (!saleDate.trim()) {
+      setSaleError("Enter the sale date.");
+      return;
+    }
+    setRecordingSale(true);
+    const result = await recordHoldingSaleClient(saleFor, {
+      quantity: qty,
+      salePrice: price,
+      soldAt: saleDate.trim(),
+      creditCash: saleCreditCash
+    });
+    setRecordingSale(false);
+    if (!result.ok) {
+      setSaleError(result.message);
+      return;
+    }
+    setSaleFor(null);
+    setSaleQty("");
+    setSalePrice("");
+    setSaleDate("");
+    await reload();
+  }
+
   const benchPrice = prices.get(settings.benchmarkSymbol.toUpperCase());
+  const sales = ledger?.events.filter((e) => e.kind === "sale") ?? [];
+  const reviews = ledger?.events.filter((e) => e.kind === "review") ?? [];
+  const ledgerEvents = ledger?.events ?? [];
 
   // ── styles ──────────────────────────────────────────────────────────────
   const card: React.CSSProperties = {
@@ -311,7 +372,8 @@ export function MyPortfolioClient() {
       <header style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
         <h1 style={{ fontSize: typography.scale.xl, color: colors.text, margin: 0 }}>My Portfolio</h1>
         <p style={{ fontSize: typography.scale.sm, color: colors.textMuted, margin: 0 }}>
-          Your holdings, entered manually. STOCVEST reviews these for you — this is your personal
+          Your holdings, entered manually. Record a sale to keep sold history and see how well
+          STOCVEST&apos;s Hold / Buy-more / Trim / Sell advice performed. This is your personal
           workspace, not a broker link and not a trade order.
         </p>
       </header>
@@ -392,7 +454,11 @@ export function MyPortfolioClient() {
       </div>
 
       {/* Daily review — the "manage my portfolio" read */}
-      <PortfolioReviewPanel />
+      <PortfolioReviewPanel
+        onReviewComplete={() => {
+          void fetchPortfolioLedgerClient().then(setLedger);
+        }}
+      />
 
       {/* Settings */}
       <div style={card}>
@@ -525,12 +591,34 @@ export function MyPortfolioClient() {
                       </button>
                       <button
                         type="button"
+                        data-testid={`sell-${r.symbol}`}
+                        style={{ ...btn("ghost"), marginRight: spacing[2] }}
+                        onClick={() => {
+                          const h = holdings.find((x) => x.symbol === r.symbol);
+                          setSaleFor(r.symbol);
+                          setSaleQty(h ? String(h.totalQuantity) : "");
+                          setSalePrice(
+                            r.currentPrice != null && Number.isFinite(r.currentPrice)
+                              ? String(r.currentPrice)
+                              : ""
+                          );
+                          setSaleDate(todayIso());
+                          setSaleCreditCash(true);
+                          setSaleError(null);
+                          setSplitFor(null);
+                        }}
+                      >
+                        Sell
+                      </button>
+                      <button
+                        type="button"
                         data-testid={`split-${r.symbol}`}
                         style={{ ...btn("ghost"), marginRight: spacing[2] }}
                         onClick={() => {
                           setSplitFor(r.symbol);
                           setSplitRatio("2");
                           setSplitError(null);
+                          setSaleFor(null);
                         }}
                       >
                         Split
@@ -552,6 +640,99 @@ export function MyPortfolioClient() {
           </div>
         )}
       </div>
+
+      {/* Record a sale */}
+      {saleFor ? (
+        <div style={card} data-testid="sale-form">
+          <div style={{ fontSize: typography.scale.sm, color: colors.text, fontWeight: 600, marginBottom: spacing[2] }}>
+            Record a sale for {saleFor}
+          </div>
+          <p style={{ fontSize: typography.scale.xs, color: colors.textMuted, margin: `0 0 ${spacing[3]}` }}>
+            Oldest lots are sold first. This writes realized P/L and stamps the last daily-review
+            action so you can later see whether that advice helped. Delete still removes a name
+            without a sale ticket.
+          </p>
+          <div style={{ display: "flex", gap: spacing[2], alignItems: "flex-end", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, width: 140 }}>
+              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Shares sold</span>
+              <input
+                data-testid="sale-qty"
+                style={input}
+                type="number"
+                min={0}
+                step="any"
+                value={saleQty}
+                onChange={(e) => setSaleQty(e.target.value)}
+              />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, width: 140 }}>
+              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Sale price / share</span>
+              <input
+                data-testid="sale-price"
+                style={input}
+                type="number"
+                min={0}
+                step="any"
+                value={salePrice}
+                onChange={(e) => setSalePrice(e.target.value)}
+              />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4, width: 160 }}>
+              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Sale date</span>
+              <input
+                data-testid="sale-date"
+                style={input}
+                type="date"
+                value={saleDate}
+                onChange={(e) => setSaleDate(e.target.value)}
+              />
+            </label>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: spacing[2],
+                fontSize: typography.scale.xs,
+                color: colors.text,
+                paddingBottom: spacing[1]
+              }}
+            >
+              <input
+                data-testid="sale-credit-cash"
+                type="checkbox"
+                checked={saleCreditCash}
+                onChange={(e) => setSaleCreditCash(e.target.checked)}
+              />
+              Add proceeds to cash
+            </label>
+            <button
+              data-testid="sale-apply"
+              type="button"
+              style={btn("primary")}
+              disabled={recordingSale}
+              onClick={() => void handleRecordSale()}
+            >
+              {recordingSale ? "Recording…" : "Record sale"}
+            </button>
+            <button
+              type="button"
+              style={btn("ghost")}
+              disabled={recordingSale}
+              onClick={() => {
+                setSaleFor(null);
+                setSaleError(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {saleError ? (
+            <div style={{ color: colors.bearish, fontSize: typography.scale.sm, marginTop: spacing[2] }}>
+              {saleError}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Record stock split */}
       {splitFor ? (
@@ -728,6 +909,123 @@ export function MyPortfolioClient() {
           </div>
         </div>
       ) : null}
+
+      {/* Sold history + advice track */}
+      <div style={card} data-testid="portfolio-sold">
+        <div style={{ fontSize: typography.scale.sm, color: colors.text, fontWeight: 600, marginBottom: spacing[1] }}>
+          Sold
+        </div>
+        <p style={{ fontSize: typography.scale.xs, color: colors.textMuted, margin: `0 0 ${spacing[3]}` }}>
+          Realized P/L from recorded sales. FIFO oldest lots first.
+          {ledger?.summary
+            ? ` ${ledger.summary.salesCount} sale${ledger.summary.salesCount === 1 ? "" : "s"} · realized ${fmtUsd(ledger.summary.realizedPl)}.`
+            : ""}
+        </p>
+        {sales.length === 0 ? (
+          <div style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
+            No sales recorded yet. Use Sell on a holding — Delete does not keep history.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ ...th, textAlign: "left" }}>Date</th>
+                  <th style={{ ...th, textAlign: "left" }}>Symbol</th>
+                  <th style={th}>Shares</th>
+                  <th style={th}>Sale price</th>
+                  <th style={th}>Cost</th>
+                  <th style={th}>Realized P/L</th>
+                  <th style={{ ...th, textAlign: "left" }}>Advice then</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...sales].reverse().map((e) => (
+                  <tr key={e.eventId || `${e.symbol}-${e.occurredAt}`}>
+                    <td style={{ ...td, textAlign: "left" }}>{e.occurredAt || "—"}</td>
+                    <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{e.symbol}</td>
+                    <td style={td}>{e.quantity != null ? fmtShares(e.quantity) : "—"}</td>
+                    <td style={td}>{fmtUsd(e.pricePerShare)}</td>
+                    <td style={td}>{fmtUsd(e.costBasisPerShare)}</td>
+                    <td style={{ ...td, color: plColor(e.realizedPl) }}>
+                      {fmtUsd(e.realizedPl)}
+                      {e.realizedPlPct != null ? (
+                        <span style={{ fontSize: typography.scale.xs }}> ({fmtPct(e.realizedPlPct)})</span>
+                      ) : null}
+                    </td>
+                    <td style={{ ...td, textAlign: "left" }}>{adviceActionLabel(e.adviceAction)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div style={card} data-testid="portfolio-advice-track">
+        <div style={{ fontSize: typography.scale.sm, color: colors.text, fontWeight: 600, marginBottom: spacing[1] }}>
+          Advice track
+        </div>
+        <p style={{ fontSize: typography.scale.xs, color: colors.textMuted, margin: `0 0 ${spacing[3]}` }}>
+          Each daily review is frozen, then scored 30 and 90 calendar days later. Sell/trim is
+          favorable if price fell; hold/buy-more is favorable if price rose (same 0.1% band as
+          the signal ledger). Follow-through is whether you later sold, bought, or held.
+          {ledger?.summary
+            ? ` 30d ${ledger.summary.outcome30d.favorable ?? 0} favorable / ${ledger.summary.outcome30d.unfavorable ?? 0} unfavorable / ${ledger.summary.outcome30d.pending ?? 0} pending · followed ${ledger.summary.followThrough.followed} · ignored ${ledger.summary.followThrough.ignored} · diverged ${ledger.summary.followThrough.diverged}.`
+            : ""}
+        </p>
+        {reviews.length === 0 ? (
+          <div style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
+            Run a daily review to start tracking advice. 30- and 90-day outcomes fill on later
+            reviews once those dates pass.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ ...th, textAlign: "left" }}>Date</th>
+                  <th style={{ ...th, textAlign: "left" }}>Symbol</th>
+                  <th style={{ ...th, textAlign: "left" }}>Advice</th>
+                  <th style={th}>Price then</th>
+                  <th style={{ ...th, textAlign: "left" }}>30d</th>
+                  <th style={{ ...th, textAlign: "left" }}>90d</th>
+                  <th style={{ ...th, textAlign: "left" }}>You</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...reviews].reverse().map((e) => {
+                  const ft = followThroughForReview(e, ledgerEvents);
+                  return (
+                    <tr key={e.eventId || `${e.symbol}-review-${e.occurredAt}`}>
+                      <td style={{ ...td, textAlign: "left" }}>{e.occurredAt || "—"}</td>
+                      <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{e.symbol}</td>
+                      <td style={{ ...td, textAlign: "left" }}>{adviceActionLabel(e.adviceAction)}</td>
+                      <td style={td}>{fmtUsd(e.priceAtAdvice)}</td>
+                      <td style={{ ...td, textAlign: "left", color: outcomeColor(e.outcome30d, colors) }}>
+                        {outcomeLabel(e.outcome30d)}
+                      </td>
+                      <td style={{ ...td, textAlign: "left", color: outcomeColor(e.outcome90d, colors) }}>
+                        {outcomeLabel(e.outcome90d)}
+                      </td>
+                      <td style={{ ...td, textAlign: "left" }}>{followThroughLabel(ft)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+function outcomeColor(
+  outcome: string | null | undefined,
+  colors: { bullish: string; bearish: string; textMuted: string }
+): string {
+  if (outcome === "favorable") return colors.bullish;
+  if (outcome === "unfavorable") return colors.bearish;
+  return colors.textMuted;
 }

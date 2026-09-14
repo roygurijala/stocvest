@@ -28,7 +28,7 @@ import { dashboardTradingRoomHref } from "@/lib/nav/dashboard-trading-room-deepl
 import { useTheme } from "@/lib/theme-provider";
 
 const TIER_TABS: { id: PositionGemTierFilter; label: string }[] = [
-  { id: "all", label: "All" },
+  { id: "all", label: "Hunt" },
   { id: "gem", label: "Gem candidates" },
   { id: "strong", label: "Strong quality" },
   { id: "monitor", label: "Monitor" }
@@ -111,7 +111,7 @@ export function InvestPageClient() {
             Gem Candidates
           </h1>
           <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-            Mid-cap hunt, top 15 by rank. Mega-caps stay on Strong. News/geo is a catalyst, not the badge. Informational only, never a recommendation.
+            Hunt home is gems only, top 15. Mega-caps live on Strong quality and Monitor. News/geo is a catalyst, not the badge. Informational only, never a recommendation.
             {scanLabel ? ` Last scan: ${scanLabel}.` : ""}
           </p>
           {deltaLabel ? (
