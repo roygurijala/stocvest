@@ -8,7 +8,11 @@ from datetime import datetime, timezone
 import pytest
 
 from stocvest.api.services import position_scan_store as store_mod
-from stocvest.api.services.position_scan import GemCandidate, PositionScanSnapshot
+from stocvest.api.services.position_scan import (
+    POSITION_SCAN_ENGINE_VERSION,
+    GemCandidate,
+    PositionScanSnapshot,
+)
 from stocvest.api.services.position_scan_store import (
     DynamoPositionScanStore,
     InMemoryPositionScanStore,
@@ -59,6 +63,15 @@ def test_snapshot_store_dict_round_trip() -> None:
     assert c0.tier == "gem" and c0.rank == 91.5 and c0.weakest_pillar_id == "F4"
     assert c0.pillars[0]["pillar_id"] == "F1"
     assert rehydrated.generated_at == snap.generated_at
+    assert rehydrated.engine_version == POSITION_SCAN_ENGINE_VERSION
+
+
+def test_from_store_dict_missing_engine_version_is_blank() -> None:
+    blob = _snapshot().to_store_dict()
+    del blob["engine_version"]
+    rehydrated = PositionScanSnapshot.from_store_dict(blob)
+    assert rehydrated.engine_version == ""
+    assert [c.symbol for c in rehydrated.candidates] == ["AAA", "BBB"]
 
 
 def test_from_store_dict_skips_malformed_candidate_rows() -> None:
@@ -78,25 +91,38 @@ def test_in_memory_store_put_get() -> None:
     assert store.get() is None
 
 
-def test_snapshot_key_is_growth_led_v2() -> None:
-    assert store_mod._SNAPSHOT_KEY == "position_scan_snapshot_v2"  # noqa: SLF001
-    assert store_mod._LEGACY_SNAPSHOT_KEY == "position_scan_snapshot_v1"  # noqa: SLF001
+def test_snapshot_key_is_stable_not_versioned() -> None:
+    assert store_mod._SNAPSHOT_KEY == "position_scan_snapshot"  # noqa: SLF001
+    assert store_mod._LOCK_KEY == "position_scan_refresh_lock"  # noqa: SLF001
+    assert store_mod._MIGRATION_KEYS == (  # noqa: SLF001
+        "position_scan_snapshot_v2",
+        "position_scan_snapshot_v1",
+    )
 
 
-def test_dynamo_get_falls_back_to_legacy_v1() -> None:
+def test_dynamo_get_migrates_legacy_v2_onto_stable_key() -> None:
     blob = json.dumps(_snapshot().to_store_dict())
+    items: dict[str, dict] = {
+        "position_scan_snapshot_v2": {"snapshot_key": "position_scan_snapshot_v2", "blob": blob},
+    }
 
     class _FakeTable:
         def get_item(self, Key: dict) -> dict:
-            if Key.get("snapshot_key") == "position_scan_snapshot_v1":
-                return {"Item": {"snapshot_key": "position_scan_snapshot_v1", "blob": blob}}
-            return {}
+            item = items.get(str(Key.get("snapshot_key") or ""))
+            return {"Item": item} if item else {}
+
+        def put_item(self, Item: dict) -> None:
+            items[str(Item["snapshot_key"])] = Item
 
     store = DynamoPositionScanStore("PositionScanSnapshot")
     store._table = _FakeTable()  # noqa: SLF001
     got = store.get()
     assert got is not None
     assert [c.symbol for c in got.candidates] == ["AAA", "BBB"]
+    assert "position_scan_snapshot" in items
+    promoted = store.get()
+    assert promoted is not None
+    assert [c.symbol for c in promoted.candidates] == ["AAA", "BBB"]
 
 
 def test_in_memory_claim_refresh_is_single_flight() -> None:

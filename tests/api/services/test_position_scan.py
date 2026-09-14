@@ -9,6 +9,7 @@ import pytest
 
 import stocvest.api.services.position_scan as scan_mod
 from stocvest.api.services.position_scan import (
+    POSITION_SCAN_ENGINE_VERSION,
     PositionScanSnapshot,
     _bottom_quartile_threshold,
     compute_and_persist_position_scan,
@@ -215,6 +216,7 @@ def test_snapshot_filter_and_api_dict() -> None:
     gem = snap.to_api_dict(tier="gem", limit=50, cached=True)
     assert gem["mode"] == "position"
     assert gem["cached"] is True
+    assert gem["engine_version"] == POSITION_SCAN_ENGINE_VERSION
     assert all(c["tier"] == "gem" for c in gem["candidates"])
     assert gem["count"] == 1
 

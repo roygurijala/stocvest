@@ -56,13 +56,15 @@ describe("position-ranked-home-present", () => {
       count: 2,
       universe_size: 25,
       scan_generated_at: "2026-09-08T00:00:00+00:00",
-      cached: true
+      cached: true,
+      engine_version: "growth_led_1"
     });
     expect(parsed).not.toBeNull();
     expect(parsed?.candidates.map((c) => c.symbol)).toEqual(["AAPL", "MSFT"]);
     expect(parsed?.candidates[1].tier).toBe("strong");
     expect(parsed?.universeSize).toBe(25);
     expect(parsed?.cached).toBe(true);
+    expect(parsed?.engineVersion).toBe("growth_led_1");
   });
 
   it("returns null for non-object input", () => {

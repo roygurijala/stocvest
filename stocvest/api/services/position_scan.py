@@ -40,6 +40,11 @@ from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
+# Gate/rank contract id stored *inside* the snapshot blob. Bump this when
+# resolve_gem_tier / gem_rank change. Never encode it in the Dynamo key —
+# a new key orphans the last successful list and leaves Invest pending.
+POSITION_SCAN_ENGINE_VERSION = "growth_led_1"
+
 # Curated mega / already-found board — Strong/Monitor home, not the gem hunt.
 # Discovery names come from ``build_live_scan_universe`` / weekly batch.
 POSITION_SCAN_UNIVERSE_V1: tuple[str, ...] = (
@@ -158,6 +163,7 @@ class PositionScanSnapshot:
     generated_at: datetime
     universe_size: int
     candidates: list[GemCandidate] = field(default_factory=list)
+    engine_version: str = POSITION_SCAN_ENGINE_VERSION
 
     def filtered(self, *, tier: str, limit: int) -> list[GemCandidate]:
         t = (tier or "gem").strip().lower()
@@ -177,6 +183,7 @@ class PositionScanSnapshot:
             "universe_size": self.universe_size,
             "scan_generated_at": self.generated_at.replace(microsecond=0).isoformat(),
             "cached": cached,
+            "engine_version": self.engine_version,
             "disclaimer": API_SIGNAL_DISCLAIMER,
         }
 
@@ -185,6 +192,7 @@ class PositionScanSnapshot:
         return {
             "generated_at": self.generated_at.replace(microsecond=0).isoformat(),
             "universe_size": self.universe_size,
+            "engine_version": self.engine_version,
             "candidates": [c.to_api_dict() for c in self.candidates],
         }
 
@@ -208,6 +216,7 @@ class PositionScanSnapshot:
             generated_at=gen,
             universe_size=int(d.get("universe_size") or len(cands)),
             candidates=cands,
+            engine_version=str(d.get("engine_version") or "").strip(),
         )
 
 
@@ -342,15 +351,16 @@ def merge_scan_snapshots(
         generated_at=second.generated_at,
         universe_size=universe_size,
         candidates=merged,
+        engine_version=POSITION_SCAN_ENGINE_VERSION,
     )
 
 
 async def _run_live_position_scan() -> PositionScanSnapshot:
     """Curated board first (persist immediately), then mid-cap discovery if time remains.
 
-    The 65-name mix (40 discovery + 25 curated) was blowing the 180s / memory
-    budget on Polygon news pagination, so GET never saw a v2 snapshot. Persist
-    the 25-name board as soon as it scores so Invest is never empty mid-refresh.
+    A 65-name mix regularly exhausted the 180s / memory budget on Polygon news
+    pagination before any persist. Write the curated board as soon as it scores
+    so GET can serve names while discovery continues.
     """
     curated = list(POSITION_SCAN_UNIVERSE_V1)
     snapshot = await run_position_scan_async(universe=curated)

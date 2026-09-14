@@ -63,6 +63,8 @@ export type PositionCandidatesResponse = {
   degraded: boolean;
   /** True while the universe compose runs off the request path (empty store / ?refresh=1). */
   pending: boolean;
+  /** Gate/rank contract id from the snapshot blob — not a Dynamo key. */
+  engineVersion?: string | null;
 };
 
 export type PositionGemFilter = {
@@ -208,7 +210,8 @@ export function parsePositionCandidates(json: unknown): PositionCandidatesRespon
     scanGeneratedAt: r.scan_generated_at ? String(r.scan_generated_at) : null,
     cached: r.cached === true,
     degraded: r.degraded === true,
-    pending: r.pending === true
+    pending: r.pending === true,
+    engineVersion: r.engine_version ? String(r.engine_version) : null
   };
 }
 

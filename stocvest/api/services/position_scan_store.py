@@ -1,17 +1,12 @@
-"""Cross-instance persistence for the weekly Position scan snapshot — ADR-004 POS-D15.
+"""Cross-instance persistence for the Position scan snapshot — ADR-004 POS-D15.
 
-The weekly batch (one Lambda invocation) scans the expanded universe and persists a single
-snapshot blob; every other Lambda instance (invest page / candidates API / assistant gem
-discovery) reads that blob so the gem list is warm without recomputing.
+One stable Dynamo item holds the last successful list. Engine/gate revisions live
+inside the blob (``PositionScanSnapshot.engine_version``), not in the key. Bumping
+the key to cache-bust (v1 → v2) orphaned Invest when the next compose failed.
 
-Two implementations behind a tiny :class:`PositionScanStore` protocol:
-  * :class:`InMemoryPositionScanStore` — default; process-local (used in tests and as a safe
-    no-persistence fallback).
-  * :class:`DynamoPositionScanStore` — active only when ``STOCVEST_POSITION_SCAN_TABLE`` is set;
-    stores the JSON blob on a single fixed key. Any boto/parse failure degrades to ``None``.
-
-The factory returns the Dynamo store when a table is configured, else the in-memory store, so
-callers never branch on environment.
+On read, a leftover v1/v2 item is copied onto the stable key once (migration),
+then ignored. Writes always go to the stable key. Refresh must overwrite on
+success — never delete the last list first.
 """
 
 from __future__ import annotations
@@ -26,11 +21,13 @@ from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
-# v2 is the growth-led snapshot. v1 is read as a last-resort so a failed
-# mid-cap compose cannot hide the last successful 25-name board.
-_SNAPSHOT_KEY = "position_scan_snapshot_v2"
-_LEGACY_SNAPSHOT_KEY = "position_scan_snapshot_v1"
-_LOCK_KEY = "position_scan_refresh_lock_v2"
+_SNAPSHOT_KEY = "position_scan_snapshot"
+_LOCK_KEY = "position_scan_refresh_lock"
+# Pre-stable keys. Read-only hydrate, then rewrite onto ``_SNAPSHOT_KEY``.
+_MIGRATION_KEYS: tuple[str, ...] = (
+    "position_scan_snapshot_v2",
+    "position_scan_snapshot_v1",
+)
 
 
 class PositionScanStore(Protocol):
@@ -41,7 +38,7 @@ class PositionScanStore(Protocol):
 
 
 def invalidate_position_scan_snapshot() -> bool:
-    """Drop the persisted + in-process snapshot so the next GET is pending."""
+    """Drop the in-process cache. Tests / ops only — refresh must not delete Dynamo."""
     from stocvest.api.services.position_scan import clear_position_scan_snapshot_cache
 
     clear_position_scan_snapshot_cache()
@@ -103,7 +100,13 @@ class DynamoPositionScanStore:
         snap = self._get_key(_SNAPSHOT_KEY)
         if snap is not None:
             return snap
-        return self._get_key(_LEGACY_SNAPSHOT_KEY)
+        for key in _MIGRATION_KEYS:
+            snap = self._get_key(key)
+            if snap is None:
+                continue
+            self.put(snap)
+            return snap
+        return None
 
     def _get_key(self, key: str) -> PositionScanSnapshot | None:
         try:
