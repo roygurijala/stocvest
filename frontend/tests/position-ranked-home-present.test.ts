@@ -58,7 +58,7 @@ describe("position-ranked-home-present", () => {
       universe_size: 25,
       scan_generated_at: "2026-09-08T00:00:00+00:00",
       cached: true,
-      engine_version: "growth_led_2",
+      engine_version: "growth_led_3",
       list_delta: [
         { symbol: "rklb", change: "entered", reason: "added to hunt pond" },
         { symbol: "XYZ", change: "exited", reason: "F2 no longer bullish" }
@@ -69,7 +69,7 @@ describe("position-ranked-home-present", () => {
     expect(parsed?.candidates[1].tier).toBe("strong");
     expect(parsed?.universeSize).toBe(25);
     expect(parsed?.cached).toBe(true);
-    expect(parsed?.engineVersion).toBe("growth_led_2");
+    expect(parsed?.engineVersion).toBe("growth_led_3");
     expect(parsed?.listDelta).toEqual([
       { symbol: "RKLB", change: "entered", reason: "added to hunt pond" },
       { symbol: "XYZ", change: "exited", reason: "F2 no longer bullish" }

@@ -9,6 +9,7 @@ import pytest
 
 import stocvest.api.services.position_scan as scan_mod
 from stocvest.api.services.position_scan import (
+    GEM_BOARD_LIMIT,
     POSITION_SCAN_ENGINE_VERSION,
     PositionScanSnapshot,
     PositionScanUniverse,
@@ -405,6 +406,27 @@ def test_snapshot_filter_and_api_dict() -> None:
 
     all_rows = snap.to_api_dict(tier="all", limit=50)
     assert all_rows["count"] == 2
+
+
+def test_gem_board_capped_at_15() -> None:
+    bodies = [
+        _body(f"G{i:02d}", fund_score=90 - i, rs=5.0, sector_verdict="bullish", market_cap=8e9)
+        for i in range(GEM_BOARD_LIMIT + 1)
+    ]
+    bodies.append(_body("LOWQ", fund_score=55, rs=5.0))
+    snap = PositionScanSnapshot(
+        generated_at=__import__("datetime").datetime(2026, 9, 8, tzinfo=__import__("datetime").timezone.utc),
+        universe_size=len(bodies),
+        candidates=rank_candidates(bodies),
+    )
+    gem = snap.to_api_dict(tier="gem", limit=50)
+    assert gem["count"] == GEM_BOARD_LIMIT
+    assert all(c["tier"] == "gem" for c in gem["candidates"])
+
+    all_rows = snap.to_api_dict(tier="all", limit=50)
+    gems_on_all = [c for c in all_rows["candidates"] if c["tier"] == "gem"]
+    assert len(gems_on_all) == GEM_BOARD_LIMIT
+    assert any(c["symbol"] == "LOWQ" for c in all_rows["candidates"])
 
 
 def test_api_dict_action_gated_by_personal_mode(monkeypatch: pytest.MonkeyPatch) -> None:

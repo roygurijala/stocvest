@@ -754,10 +754,11 @@ A **gem** is a growth-led discovery the market has not already priced as “alre
 | Propellant | Sector layer verdict **bullish** (news/geo are a **catalyst**, not membership) |
 | Size | Hunt mid / large-not-mega. Mega (`market_cap ≥ $200B` or curated stub including SPCX) is **not** the pond |
 
-**Mega-cap exception:** the same growth + sector + hygiene rule. No looser path. Quality
-mega-caps that miss that exception stay **Strong** / **Monitor**.
+**Mega-caps:** never Gem. They stay **Strong** / **Monitor** even when growth + sector
++ hygiene fire — already-found names, not the hunt. The gem board is the top
+**15** mid-cap discoveries by `gem_rank`.
 
-**Scan universe (growth_led_2):** the hunt pond is a separate Dynamo item
+**Scan universe (growth_led_3):** the hunt pond is a separate Dynamo item
 `position_scan_universe` (symbols + `generated_at`). Live `?refresh=1` **re-scores
 the same symbols** for up to 7 days. A new FMP sample is taken only when the pond
 is missing/stale, or when the weekly batch rebuilds it (`BATCH_DISCOVERY_MAX` ≈ 200).

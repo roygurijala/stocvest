@@ -169,7 +169,7 @@ def test_mid_cap_growth_plus_tailwind_is_gem_even_when_g1_fails() -> None:
     assert "Screening only" in why
 
 
-def test_mega_cap_needs_growth_and_tailwind_for_gem_exception() -> None:
+def test_mega_cap_stays_strong_even_with_growth_and_tailwind() -> None:
     body = _gem_body()  # AAPL, all G1–G9, sector neutral
     f = _features(body)
     gates = evaluate_gem_gates(f)
@@ -178,9 +178,10 @@ def test_mega_cap_needs_growth_and_tailwind_for_gem_exception() -> None:
     body["layers"][2]["verdict"] = "bullish"
     f = _features(body)
     gates = evaluate_gem_gates(f)
-    assert resolve_gem_tier(f, gates) == TIER_GEM
-    why = build_gem_why(f, gates, TIER_GEM)
-    assert "Mega-cap exception" in why
+    assert resolve_gem_tier(f, gates) == TIER_STRONG
+    why = build_gem_why(f, gates, TIER_STRONG)
+    assert "Already-found mega-cap" in why
+    assert "not the gem hunt" in why
 
 
 def test_sharp_breakdown_blocks_gem() -> None:
@@ -473,11 +474,14 @@ def test_failing_gates_lists_only_failures() -> None:
 def test_build_gem_why_is_non_advisory() -> None:
     f = _features(_gem_body())
     gates = evaluate_gem_gates(f, rs_bottom_quartile_threshold=-5.0)
-    why = build_gem_why(f, gates, TIER_GEM)
-    assert "Screening only" in why
-    assert "Mega-cap exception" in why
+    why_gem = build_gem_why(f, gates, TIER_GEM)
+    assert "Screening only" in why_gem
+    assert "Growth-led discovery" in why_gem
+    why_strong = build_gem_why(f, gates, TIER_STRONG)
+    assert "Already-found mega-cap" in why_strong
     for banned in ("buy", "sell", "should own", "recommend"):
-        assert banned not in why.lower()
+        assert banned not in why_gem.lower()
+        assert banned not in why_strong.lower()
 
 
 def test_evaluate_does_not_mutate_body() -> None:
