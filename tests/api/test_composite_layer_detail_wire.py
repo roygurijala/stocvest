@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from stocvest.api.services.composite_layer_detail_wire import (
     quality_article_wire,
@@ -33,7 +33,7 @@ def test_recent_ratings_wire_returns_recent_actions() -> None:
             rating="Outperform",
             price_target=24.0,
             analyst_firm="Goldman Sachs",
-            published_at=datetime(2026, 8, 15, tzinfo=timezone.utc),
+            published_at=datetime.now(timezone.utc) - timedelta(days=5),
         )
     ]
     out = recent_ratings_wire(ratings)
