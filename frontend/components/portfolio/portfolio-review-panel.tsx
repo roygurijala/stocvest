@@ -182,9 +182,14 @@ export function PortfolioReviewPanel() {
             </div>
           ) : null}
 
-          {review.targetIsDefault && review.effectiveTargetPct != null ? (
+          {review.targetIsDefault && review.sizingPolicy === "sleeve" ? (
             <div data-testid="review-default-target" style={muted}>
-              Using default ~{review.effectiveTargetPct.toFixed(1)}% target (8-name floor) —
+              Using conviction sleeves (core 10–12% · standard 6–9% · vehicle 4–6% ·
+              exit 0–3%; max 15%). An explicit target in Portfolio settings still wins.
+            </div>
+          ) : review.targetIsDefault && review.effectiveTargetPct != null ? (
+            <div data-testid="review-default-target" style={muted}>
+              Using default ~{review.effectiveTargetPct.toFixed(1)}% target —
               changeable in Portfolio settings.
             </div>
           ) : null}

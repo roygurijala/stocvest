@@ -421,7 +421,7 @@ export function MyPortfolioClient() {
               type="number"
               min={0}
               max={100}
-              placeholder="blank = equal-weight default while personal mode is on"
+              placeholder="blank = conviction sleeves (core/standard/vehicle/exit)"
               value={targetInput}
               onChange={(e) => setTargetInput(e.target.value)}
             />
