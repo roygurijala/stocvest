@@ -8,7 +8,8 @@ and ``/dashboard/invest``.
 Gem is growth-led discovery (hygiene + F2 + sector tailwind). News/geo are a
 catalyst, not the badge. The hunt pond is persisted separately and re-scored
 on live refresh; weekly batch rebuilds it. The curated mega list is for
-Strong/Monitor, with a rare mega-cap gem exception. Everything here is
+Strong/Monitor only — mega-caps never take Gem. The gem board is capped
+at ``GEM_BOARD_LIMIT``. Everything here is
 dependency-injectable so the gate/rank/sort logic is unit-testable without network.
 """
 
@@ -48,7 +49,9 @@ _LOG = get_logger(__name__)
 # Gate/rank contract id stored *inside* the snapshot blob. Bump this when
 # resolve_gem_tier / gem_rank change. Never encode it in the Dynamo key —
 # a new key orphans the last successful list and leaves Invest pending.
-POSITION_SCAN_ENGINE_VERSION = "growth_led_2"
+POSITION_SCAN_ENGINE_VERSION = "growth_led_3"
+# Scarce gem board — Invest / API ``tier=gem`` (and gems on ``tier=all``).
+GEM_BOARD_LIMIT = 15
 # Hunt-pond TTL. Live refresh re-scores the same symbols until this elapses
 # (or the weekly batch rebuilds). Not a Dynamo TTL — freshness is checked in code.
 UNIVERSE_STALE_SECONDS = 7 * 24 * 3600
@@ -254,8 +257,12 @@ class PositionScanSnapshot:
 
     def filtered(self, *, tier: str, limit: int) -> list[GemCandidate]:
         t = (tier or "gem").strip().lower()
+        gems = [c for c in self.candidates if c.tier == TIER_GEM][:GEM_BOARD_LIMIT]
         if t in ("", "all", "any"):
-            rows = [c for c in self.candidates if c.tier != TIER_INSUFFICIENT]
+            rest = [c for c in self.candidates if c.tier not in (TIER_GEM, TIER_INSUFFICIENT)]
+            rows = gems + rest
+        elif t == TIER_GEM:
+            rows = gems
         else:
             rows = [c for c in self.candidates if c.tier == t]
         return rows[: max(0, limit)]

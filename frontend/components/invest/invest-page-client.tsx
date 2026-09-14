@@ -111,7 +111,7 @@ export function InvestPageClient() {
             Gem Candidates
           </h1>
           <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
-            Growth-led names with a sector tailwind — news/geo is a catalyst, not the badge. Informational only, never a recommendation.
+            Mid-cap hunt, top 15 by rank. Mega-caps stay on Strong. News/geo is a catalyst, not the badge. Informational only, never a recommendation.
             {scanLabel ? ` Last scan: ${scanLabel}.` : ""}
           </p>
           {deltaLabel ? (

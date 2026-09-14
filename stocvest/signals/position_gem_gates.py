@@ -5,13 +5,12 @@ composite response body (the six/seven-layer stack + F1-F5 fundamentals pillars)
 No network, no LLM — this is the glass-box screening logic that ranks candidates
 for the ``GET /v1/signals/position/candidates`` API and ``/dashboard/invest``.
 
-Gem (2026-09-14, growth_led_2): a **growth-led discovery**, not a pass-all-nine
+Gem (2026-09-14, growth_led_3): a **growth-led discovery**, not a pass-all-nine
 quality compounder. Membership is hygiene (G8/G9/G3, not a sharp G5 breakdown)
-+ F2 bullish + a **sector** tailwind. News/geo are a catalyst flag, not the
-badge — a headline must not drop a name overnight. Mega-caps are not the hunt;
-they reach Gem only as an exception when that same growth + sector still fire.
-Strong/Monitor stay the home for quality large-caps. Informational screening
-only — never a recommendation or solicitation.
++ F2 bullish + a **sector** tailwind, and **not** a mega-cap. News/geo are a
+catalyst flag, not the badge. Mega-caps stay on Strong/Monitor — they are
+already-found names, not the hunt. Informational screening only — never a
+recommendation or solicitation.
 """
 
 from __future__ import annotations
@@ -415,12 +414,17 @@ def is_gem_hygiene(f: CandidateFeatures, gates: dict[str, bool]) -> bool:
 
 
 def qualifies_as_gem(f: CandidateFeatures, gates: dict[str, bool]) -> bool:
-    """Growth discovery: hygiene + F2 lead + sector tailwind.
+    """Growth discovery: hygiene + F2 lead + sector tailwind, not a mega-cap.
 
-    News/geo do not open or close the badge. Mega-caps use the same rule
-    (the exception). They are not a separate, looser path.
+    News/geo do not open or close the badge. Mega-caps never take Gem —
+    they stay on Strong/Monitor even when the same growth + sector fire.
     """
-    return is_gem_hygiene(f, gates) and is_growth_led(f) and has_sector_tailwind(f)
+    return (
+        is_gem_hygiene(f, gates)
+        and is_growth_led(f)
+        and has_sector_tailwind(f)
+        and not is_mega_cap(f)
+    )
 
 
 def compute_gem_rank(f: CandidateFeatures) -> float:
@@ -466,10 +470,10 @@ def build_gem_why(f: CandidateFeatures, gates: dict[str, bool], tier: str) -> st
         else "review pillars"
     )
     if tier == TIER_GEM:
-        if is_mega_cap(f):
-            return "Mega-cap exception — growth + sector still aligned. Screening only."
         return "Growth-led discovery — F2 bullish with sector tailwind. Screening only."
     if tier == TIER_STRONG:
+        if is_mega_cap(f):
+            return "Already-found mega-cap — Strong home, not the gem hunt. Screening only."
         missing = [g for g in ("G5", "G6", "G7") if not gates.get(g)]
         if missing:
             env = {
