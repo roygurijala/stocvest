@@ -13,6 +13,7 @@ from stocvest.api.services.position_scan import (
     _bottom_quartile_threshold,
     compute_and_persist_position_scan,
     get_position_scan_snapshot_sync,
+    merge_scan_snapshots,
     rank_candidates,
     reset_position_scan_cache_for_tests,
     run_position_scan_async,
@@ -140,6 +141,65 @@ def test_run_scan_uses_injected_compose_and_skips_failures() -> None:
     assert isinstance(snap, PositionScanSnapshot)
     assert snap.universe_size == 3
     assert {c.symbol for c in snap.candidates} == {"AAA", "BBB"}
+
+
+def test_merge_scan_snapshots_unions_and_resorts() -> None:
+    first = PositionScanSnapshot(
+        generated_at=__import__("datetime").datetime(2026, 9, 8, tzinfo=__import__("datetime").timezone.utc),
+        universe_size=1,
+        candidates=rank_candidates([_body("AAPL", fund_score=90, rs=5.0)]),
+    )
+    second = PositionScanSnapshot(
+        generated_at=__import__("datetime").datetime(2026, 9, 9, tzinfo=__import__("datetime").timezone.utc),
+        universe_size=1,
+        candidates=rank_candidates(
+            [_body("RKLB", fund_score=85, rs=15.0, sector_verdict="bullish", market_cap=8e9)]
+        ),
+    )
+    merged = merge_scan_snapshots(first, second, universe_size=26)
+    assert merged.universe_size == 26
+    assert [c.symbol for c in merged.candidates] == ["RKLB", "AAPL"]
+
+
+def test_live_scan_persists_curated_before_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    reset_position_scan_cache_for_tests()
+    store = InMemoryPositionScanStore()
+    reset_position_scan_store_for_tests(store)
+    curated = PositionScanSnapshot(
+        generated_at=__import__("datetime").datetime(2026, 9, 8, tzinfo=__import__("datetime").timezone.utc),
+        universe_size=25,
+        candidates=rank_candidates([_body("AAPL", fund_score=90, rs=5.0)]),
+    )
+    extra = PositionScanSnapshot(
+        generated_at=__import__("datetime").datetime(2026, 9, 9, tzinfo=__import__("datetime").timezone.utc),
+        universe_size=1,
+        candidates=rank_candidates(
+            [_body("RKLB", fund_score=85, rs=15.0, sector_verdict="bullish", market_cap=8e9)]
+        ),
+    )
+
+    async def fake_run(*, universe=None, compose=None, concurrency=6):
+        symbols = list(universe or [])
+        if symbols == list(scan_mod.POSITION_SCAN_UNIVERSE_V1):
+            assert store.get() is None
+            return curated
+        return extra
+
+    async def fake_universe() -> list[str]:
+        assert store.get() is curated
+        return ["RKLB", *scan_mod.POSITION_SCAN_UNIVERSE_V1]
+
+    monkeypatch.setattr(scan_mod, "run_position_scan_async", fake_run)
+    monkeypatch.setattr(
+        "stocvest.api.services.position_universe.build_live_scan_universe",
+        fake_universe,
+    )
+    result = asyncio.run(scan_mod._run_live_position_scan())
+    assert [c.symbol for c in result.candidates] == ["RKLB", "AAPL"]
+    assert store.get() is curated
+
+    reset_position_scan_cache_for_tests()
+    reset_position_scan_store_for_tests(None)
 
 
 def test_snapshot_filter_and_api_dict() -> None:
