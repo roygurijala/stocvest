@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildPortfolioView,
+  portfolioHoldingDeepDiveHref,
   suggestedAddAmount
 } from "@/lib/portfolio/holdings-present";
 import { DEFAULT_PORTFOLIO_SETTINGS, type Holding } from "@/lib/portfolio/types";
@@ -32,6 +33,10 @@ describe("buildPortfolioView", () => {
 
     // AAPL: 10*150=1500 (cost 1000 → +500 / +50%); MSFT: 5*200=1000 (cost 1000 → +0)
     const aapl = view.rows.find((r) => r.symbol === "AAPL")!;
+    expect(aapl.href).toBe(portfolioHoldingDeepDiveHref("AAPL"));
+    expect(aapl.href).toContain("symbol=AAPL");
+    expect(aapl.href).toContain("lane=position");
+    expect(aapl.href).toContain("ref=portfolio");
     expect(aapl.marketValue).toBe(1500);
     expect(aapl.unrealizedPl).toBe(500);
     expect(aapl.unrealizedPlPct).toBe(50);

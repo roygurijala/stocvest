@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import { borderRadius, spacing, typography } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
@@ -564,7 +565,13 @@ export function MyPortfolioClient() {
                 {view.rows.map((r) => (
                   <tr key={r.symbol} data-testid={`holding-row-${r.symbol}`}>
                     <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>
-                      {r.symbol}
+                      <Link
+                        href={r.href}
+                        data-testid={`holding-deep-dive-${r.symbol}`}
+                        style={{ color: colors.accent, textDecoration: "none" }}
+                      >
+                        {r.symbol}
+                      </Link>
                       <span style={{ color: colors.textMuted, fontWeight: 400 }}>
                         {r.lotCount > 1 ? ` · ${r.lotCount} lots` : ""}
                       </span>

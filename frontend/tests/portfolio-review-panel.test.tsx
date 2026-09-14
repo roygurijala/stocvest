@@ -2,6 +2,14 @@ import type { ReactElement } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  )
+}));
+
 import { PortfolioReviewPanel } from "@/components/portfolio/portfolio-review-panel";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { PortfolioReview } from "@/lib/portfolio/review-types";
@@ -129,6 +137,10 @@ describe("PortfolioReviewPanel", () => {
     fireEvent.click(screen.getByTestId("run-review"));
 
     await waitFor(() => expect(screen.getByTestId("review-row-AAPL")).toBeInTheDocument());
+    expect(screen.getByTestId("review-deep-dive-AAPL")).toHaveAttribute(
+      "href",
+      expect.stringContaining("ref=portfolio")
+    );
     expect(screen.getByTestId("review-holdings-table")).toBeInTheDocument();
     expect(screen.getByTestId("review-row-XOM")).toBeInTheDocument();
     expect(screen.getByText("Hold")).toBeInTheDocument();

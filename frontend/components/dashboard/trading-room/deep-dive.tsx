@@ -21,6 +21,7 @@ import { useSearchParams } from "next/navigation";
 import { borderRadius, roleAccents, spacing, typography, animationDurations } from "@/lib/design-system";
 import { DeepDiveEvidenceTabs } from "@/components/dashboard/trading-room/deep-dive-evidence-tabs";
 import { DeepDiveLaneToggle } from "@/components/dashboard/trading-room/deep-dive-lane-toggle";
+import { DeepDiveReturnLink } from "@/components/dashboard/trading-room/deep-dive-return-link";
 import { PositionSetupRead } from "@/components/dashboard/trading-room/position-setup-read";
 import { PositionHolderRead } from "@/components/dashboard/trading-room/position-holder-read";
 import { PositionAnalystPanel } from "@/components/dashboard/trading-room/position-analyst-panel";
@@ -1625,22 +1626,7 @@ export function DeepDive({
         gap: spacing[3]
       }}
     >
-      <button
-        type="button"
-        onClick={onBackToBrief}
-        style={{
-          alignSelf: "flex-start",
-          border: "none",
-          background: "transparent",
-          color: colors.textMuted,
-          fontSize: typography.scale.xs,
-          fontWeight: 600,
-          cursor: "pointer",
-          padding: 0
-        }}
-      >
-        ← Session brief
-      </button>
+      <DeepDiveReturnLink colors={colors} onBackToBrief={onBackToBrief} />
 
       {/* ── Sticky glance header (ADR UX-D4) ── */}
       <div

@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import { borderRadius, spacing, typography } from "@/lib/design-system";
+import { portfolioHoldingDeepDiveHref } from "@/lib/portfolio/holdings-present";
 import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 import { useTheme } from "@/lib/theme-provider";
 import { fetchPortfolioReviewClient } from "@/lib/api/fetch-portfolio-review-client";
@@ -394,6 +396,20 @@ function WhyToggle({
   );
 }
 
+function HoldingSymbolLink({ symbol }: { symbol: string }) {
+  const { colors } = useTheme();
+  return (
+    <Link
+      href={portfolioHoldingDeepDiveHref(symbol)}
+      data-testid={`review-deep-dive-${symbol}`}
+      onClick={(e) => e.stopPropagation()}
+      style={{ color: colors.accent, textDecoration: "none", fontWeight: 700 }}
+    >
+      {symbol}
+    </Link>
+  );
+}
+
 function ReviewDetail({ h }: { h: HoldingReview }) {
   const { colors } = useTheme();
   const extra = remainingRationale(h);
@@ -403,6 +419,20 @@ function ReviewDetail({ h }: { h: HoldingReview }) {
       data-testid={`review-row-detail-${h.symbol}`}
       style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}
     >
+      <Link
+        href={portfolioHoldingDeepDiveHref(h.symbol)}
+        data-testid={`review-detail-deep-dive-${h.symbol}`}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          fontSize: typography.scale.xs,
+          fontWeight: 600,
+          color: colors.accent,
+          textDecoration: "none",
+          width: "fit-content"
+        }}
+      >
+        Open Long Term deep dive
+      </Link>
       {h.isFundVehicle ? (
         <div data-testid={`vehicle-honesty-${h.symbol}`} style={muted}>
           Fund/ETF vehicle — no corporate filings; F1–F5 do not apply.
@@ -466,7 +496,7 @@ function ReviewTableRow({ h }: { h: HoldingReview }) {
         style={{ cursor: "pointer" }}
       >
         <td style={tdStyle(colors, "left", { fontWeight: 700, whiteSpace: "nowrap" })}>
-          {h.symbol}
+          <HoldingSymbolLink symbol={h.symbol} />
         </td>
         <td style={tdStyle(colors, "left")}>
           <ActionBadge h={h} />
@@ -520,9 +550,7 @@ function ReviewCard({ h }: { h: HoldingReview }) {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: spacing[2] }}>
-        <span style={{ fontSize: typography.scale.sm, color: colors.text, fontWeight: 700 }}>
-          {h.symbol}
-        </span>
+        <HoldingSymbolLink symbol={h.symbol} />
         <ActionBadge h={h} />
       </div>
       <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>

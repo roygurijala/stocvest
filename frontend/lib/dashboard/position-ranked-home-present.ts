@@ -104,7 +104,44 @@ export type PositionGemDisplayRow = {
   weakestLabel: string;
   why: string;
   catalyst: boolean;
+  growthLed: boolean;
+  sectorTailwind: boolean;
+  pillars: GemPillar[];
+  failingGates: string[];
 };
+
+/** Glass-box expand under an Invest row — why this name is on the board. */
+export type PositionGemRowDetail = {
+  symbol: string;
+  href: string;
+  why: string;
+  membership: string;
+  f2WindowCaveat: string;
+  valueTrapNote: string;
+  sectorCycleNote: string | null;
+  catalystNote: string | null;
+  pillars: { pillarId: string; label: string; scoreLabel: string; verdictLabel: string }[];
+  failingGates: string[];
+  deepDiveLabel: string;
+};
+
+/** F2 is latest-quarter YoY — not a franchise or a forecast (POS-GEM-1i). */
+export const GEM_F2_WINDOW_CAVEAT =
+  "F2 Growth is the latest quarter vs the same quarter a year ago — not a 3-year franchise or a forecast. A hot print can be a cycle or a geopolitical premium.";
+
+export const GEM_VALUE_TRAP_NOTE =
+  "The value-trap guard only fires when F2 is already weak. Cheap + a hot trailing print is treated as confirmed growth.";
+
+export const GEM_SECTOR_CYCLE_NOTE =
+  "Sector layer is bullish. That can include a commodity or geopolitical bid — the engine does not ask if that bid lasts.";
+
+export const GEM_CATALYST_NOTE =
+  "News/geo is a catalyst on this row, not why it is a Gem.";
+
+export const GEM_MEMBERSHIP_GEM =
+  "Gem because: hygiene + F2 Growth bullish (latest-quarter YoY) + sector tailwind, and not a mega-cap. News/geo is a catalyst, not the badge.";
+
+export const GEM_DEEP_DIVE_LABEL = "Open Long Term deep dive";
 
 const TIER_LABEL: Record<PositionGemTier, string> = {
   gem: "Gem candidate",
@@ -351,8 +388,42 @@ export function buildPositionGemDisplayRows(
         ? `${c.weakestPillarId} · ${c.weakestPillarLabel}`
         : "—",
     why: c.why,
-    catalyst: c.catalyst
+    catalyst: c.catalyst,
+    growthLed: c.growthLed,
+    sectorTailwind: c.sectorTailwind,
+    pillars: c.pillars,
+    failingGates: c.failingGates
   }));
+}
+
+function membershipForTier(row: PositionGemDisplayRow): string {
+  if (row.tier === "gem") return GEM_MEMBERSHIP_GEM;
+  if (row.failingGates.length) {
+    return `${row.tierCopy} Gates missed: ${row.failingGates.join(", ")}.`;
+  }
+  return row.tierCopy;
+}
+
+/** Expand payload for an Invest row — deterministic copy, no LLM, no new thresholds. */
+export function buildPositionGemRowDetail(row: PositionGemDisplayRow): PositionGemRowDetail {
+  return {
+    symbol: row.symbol,
+    href: row.href,
+    why: row.why,
+    membership: membershipForTier(row),
+    f2WindowCaveat: GEM_F2_WINDOW_CAVEAT,
+    valueTrapNote: GEM_VALUE_TRAP_NOTE,
+    sectorCycleNote: row.sectorTailwind ? GEM_SECTOR_CYCLE_NOTE : null,
+    catalystNote: row.catalyst ? GEM_CATALYST_NOTE : null,
+    pillars: row.pillars.map((p) => ({
+      pillarId: p.pillarId,
+      label: p.label,
+      scoreLabel: p.score != null ? String(p.score) : "—",
+      verdictLabel: verdictLabel(p.verdict)
+    })),
+    failingGates: [...row.failingGates],
+    deepDiveLabel: GEM_DEEP_DIVE_LABEL
+  };
 }
 
 // --------------------------------------------------------------- POS-D14 watchlist quality badge

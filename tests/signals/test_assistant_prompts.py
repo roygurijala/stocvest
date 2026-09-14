@@ -1391,7 +1391,13 @@ def test_prompt_carries_position_desk_third_engine_rules() -> None:
     assert "trading_mode=position" in text
     # Glass-box, not a rating; no action words.
     assert "POSITION IS GLASS-BOX, NOT A RATING" in text
+    assert "F1 Profitability & quality" in text
+    assert "F2 Growth" in text
+    assert "F1 Growth" not in text
     assert '"GEM" IS A DETERMINISTIC TIER, NOT A RECOMMENDATION' in text
+    assert "GEM MEMBERSHIP (growth_led_3)" in text
+    assert "latest quarter vs the same quarter a year ago" in text
+    assert "geopolitical bid" in text
     # Never crown a single best gem; never say one desk is better than another.
     assert "Pick a single \"best\" gem" in text
     assert 'better than' in text

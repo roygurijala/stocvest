@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
 import { SignalDisclaimerChip } from "@/components/signal-disclaimer-chip";
 import { PositionCompareTable } from "@/components/invest/position-compare-table";
@@ -11,6 +11,7 @@ import {
   applyPositionGemFilter,
   buildPositionCompareMatrix,
   buildPositionGemDisplayRows,
+  buildPositionGemRowDetail,
   DEFAULT_POSITION_GEM_FILTER,
   emptyPositionGemCopy,
   formatGemListDelta,
@@ -21,6 +22,7 @@ import {
   togglePositionCompareSelection,
   type PositionGemDisplayRow,
   type PositionGemFilter,
+  type PositionGemRowDetail,
   type PositionGemTierFilter
 } from "@/lib/dashboard/position-ranked-home-present";
 import { usePositionCandidates } from "@/lib/hooks/use-position-candidates";
@@ -46,6 +48,7 @@ export function InvestPageClient() {
   const [filter, setFilter] = useState<PositionGemFilter>(DEFAULT_POSITION_GEM_FILTER);
   const [searchInput, setSearchInput] = useState("");
   const [compareSelected, setCompareSelected] = useState<string[]>([]);
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
 
   const { response, isInitialLoading, isPending, error, timedOut, refresh } = usePositionCandidates(
     "all",
@@ -71,6 +74,10 @@ export function InvestPageClient() {
 
   function toggleCompare(symbol: string) {
     setCompareSelected((prev) => togglePositionCompareSelection(prev, symbol));
+  }
+
+  function toggleExpanded(symbol: string) {
+    setExpandedSymbol((prev) => (prev === symbol ? null : symbol));
   }
 
   const scanLabel = useMemo(() => {
@@ -191,6 +198,7 @@ export function InvestPageClient() {
                 // (a name may not exist in the new tier's screen). Filter/slider changes
                 // deliberately keep the selection.
                 setCompareSelected([]);
+                setExpandedSymbol(null);
                 setFilter((f) => ({ ...f, tier: tab.id }));
               }}
               style={{
@@ -299,66 +307,199 @@ export function InvestPageClient() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.symbol}
-                  data-testid={`invest-row-${row.symbol}`}
-                  style={{ borderTop: `1px solid ${colors.border}` }}
-                >
-                  <td style={{ padding: spacing[2] }}>
-                    <input
-                      type="checkbox"
-                      aria-label={`Add ${row.symbol} to compare`}
-                      data-testid={`invest-compare-${row.symbol}`}
-                      checked={compareSelected.includes(row.symbol)}
-                      disabled={
-                        !compareSelected.includes(row.symbol) &&
-                        compareSelected.length >= POSITION_COMPARE_MAX
-                      }
-                      onChange={() => toggleCompare(row.symbol)}
-                    />
-                  </td>
-                  <td style={{ padding: spacing[2], fontWeight: 700 }}>
-                    <Link href={row.href} style={{ color: accent.accent, textDecoration: "none" }}>
-                      {row.symbol}
-                    </Link>
-                  </td>
-                  <td style={{ padding: spacing[2] }} title={row.tierCopy}>
-                    {row.tierLabel}
-                    {row.catalyst ? (
-                      <span style={{ marginLeft: spacing[1], color: colors.textMuted, fontWeight: 500 }}>
-                        · Catalyst
-                      </span>
-                    ) : null}
-                  </td>
-                  {showAction ? (
-                    <td
-                      style={{ padding: spacing[2], fontWeight: 700, color: positionActionColor(row.action, colors) }}
-                      data-testid={`invest-action-${row.symbol}`}
-                    >
-                      {row.actionLabel ?? "—"}
-                    </td>
-                  ) : null}
-                  <td style={{ padding: spacing[2], color: colors.text }}>
-                    {scoreLabel(row.fundamentalsScore)} · {row.fundamentalsLabel}
-                  </td>
-                  <td style={{ padding: spacing[2], color: colors.text }}>
-                    {scoreLabel(row.technicalScore)} · {row.trendLabel}
-                  </td>
-                  <td style={{ padding: spacing[2], color: colors.textMuted }}>{row.sectorLabel}</td>
-                  <td style={{ padding: spacing[2], color: colors.caution }}>{row.weakestLabel}</td>
-                  <td style={{ padding: spacing[2], color: colors.textMuted, maxWidth: 320 }}>{row.why}</td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const open = expandedSymbol === row.symbol;
+                const colSpan = showAction ? 9 : 8;
+                return (
+                  <InvestGemTableRows
+                    key={row.symbol}
+                    row={row}
+                    open={open}
+                    colSpan={colSpan}
+                    showAction={showAction}
+                    compareChecked={compareSelected.includes(row.symbol)}
+                    compareDisabled={
+                      !compareSelected.includes(row.symbol) &&
+                      compareSelected.length >= POSITION_COMPARE_MAX
+                    }
+                    onToggleCompare={() => toggleCompare(row.symbol)}
+                    onToggleExpand={() => toggleExpanded(row.symbol)}
+                    accentColor={accent.accent}
+                    colors={colors}
+                  />
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
       <p style={{ margin: 0, fontSize: typography.scale.xs, color: colors.textMuted, lineHeight: 1.5 }}>
-        {positionGemTierCopy("gem")} Row click opens the full Long Term deep dive (pillars, geometry, evidence).
+        {positionGemTierCopy("gem")} Row click expands why this name is on the board. The ticker opens the Long Term deep dive. Energy and other cycle names stay on the list — Gem is a trailing-print screen, not a hold-through-a-war call.
       </p>
       <SignalDisclaimerChip />
+    </div>
+  );
+}
+
+type InvestRowColors = {
+  text: string;
+  textMuted: string;
+  caution: string;
+  border: string;
+  surface: string;
+  bullish: string;
+  bearish: string;
+};
+
+function InvestGemTableRows({
+  row,
+  open,
+  colSpan,
+  showAction,
+  compareChecked,
+  compareDisabled,
+  onToggleCompare,
+  onToggleExpand,
+  accentColor,
+  colors
+}: {
+  row: PositionGemDisplayRow;
+  open: boolean;
+  colSpan: number;
+  showAction: boolean;
+  compareChecked: boolean;
+  compareDisabled: boolean;
+  onToggleCompare: () => void;
+  onToggleExpand: () => void;
+  accentColor: string;
+  colors: InvestRowColors;
+}) {
+  const detail = open ? buildPositionGemRowDetail(row) : null;
+  return (
+    <>
+      <tr
+        data-testid={`invest-row-${row.symbol}`}
+        aria-expanded={open}
+        onClick={onToggleExpand}
+        style={{ borderTop: `1px solid ${colors.border}`, cursor: "pointer" }}
+      >
+        <td style={{ padding: spacing[2] }} onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            aria-label={`Add ${row.symbol} to compare`}
+            data-testid={`invest-compare-${row.symbol}`}
+            checked={compareChecked}
+            disabled={compareDisabled}
+            onChange={onToggleCompare}
+          />
+        </td>
+        <td style={{ padding: spacing[2], fontWeight: 700 }} onClick={(e) => e.stopPropagation()}>
+          <Link href={row.href} style={{ color: accentColor, textDecoration: "none" }}>
+            {row.symbol}
+          </Link>
+        </td>
+        <td style={{ padding: spacing[2] }} title={row.tierCopy}>
+          {row.tierLabel}
+          {row.catalyst ? (
+            <span style={{ marginLeft: spacing[1], color: colors.textMuted, fontWeight: 500 }}>
+              · Catalyst
+            </span>
+          ) : null}
+        </td>
+        {showAction ? (
+          <td
+            style={{ padding: spacing[2], fontWeight: 700, color: positionActionColor(row.action, colors) }}
+            data-testid={`invest-action-${row.symbol}`}
+          >
+            {row.actionLabel ?? "—"}
+          </td>
+        ) : null}
+        <td style={{ padding: spacing[2], color: colors.text }}>
+          {scoreLabel(row.fundamentalsScore)} · {row.fundamentalsLabel}
+        </td>
+        <td style={{ padding: spacing[2], color: colors.text }}>
+          {scoreLabel(row.technicalScore)} · {row.trendLabel}
+        </td>
+        <td style={{ padding: spacing[2], color: colors.textMuted }}>{row.sectorLabel}</td>
+        <td style={{ padding: spacing[2], color: colors.caution }}>{row.weakestLabel}</td>
+        <td style={{ padding: spacing[2], color: colors.textMuted, maxWidth: 320 }}>
+          <span>{row.why}</span>
+          <span aria-hidden="true" style={{ marginLeft: spacing[1] }}>
+            {open ? "▾" : "▸"}
+          </span>
+        </td>
+      </tr>
+      {detail ? (
+        <tr data-testid={`invest-row-detail-${row.symbol}`}>
+          <td colSpan={colSpan} style={{ padding: `${spacing[2]} ${spacing[3]} ${spacing[3]}`, background: colors.surface }}>
+            <GemRowDetailPanel detail={detail} accentColor={accentColor} colors={colors} />
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
+function GemRowDetailPanel({
+  detail,
+  accentColor,
+  colors
+}: {
+  detail: PositionGemRowDetail;
+  accentColor: string;
+  colors: InvestRowColors;
+}) {
+  const muted: CSSProperties = {
+    margin: 0,
+    fontSize: typography.scale.xs,
+    color: colors.textMuted,
+    lineHeight: 1.5
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
+      <p data-testid="invest-detail-why" style={{ ...muted, color: colors.text }}>
+        {detail.why}
+      </p>
+      <p data-testid="invest-detail-membership" style={muted}>
+        {detail.membership}
+      </p>
+      <p data-testid="invest-detail-f2-window" style={muted}>
+        {detail.f2WindowCaveat}
+      </p>
+      {detail.sectorCycleNote ? (
+        <p data-testid="invest-detail-sector-cycle" style={muted}>
+          {detail.sectorCycleNote}
+        </p>
+      ) : null}
+      {detail.catalystNote ? (
+        <p data-testid="invest-detail-catalyst" style={muted}>
+          {detail.catalystNote}
+        </p>
+      ) : null}
+      <p data-testid="invest-detail-value-trap" style={muted}>
+        {detail.valueTrapNote}
+      </p>
+      {detail.pillars.length > 0 ? (
+        <p data-testid="invest-detail-pillars" style={muted}>
+          Pillars:{" "}
+          {detail.pillars
+            .map((p) => `${p.pillarId} ${p.label} ${p.scoreLabel} ${p.verdictLabel}`)
+            .join(" · ")}
+        </p>
+      ) : null}
+      {detail.failingGates.length > 0 ? (
+        <p data-testid="invest-detail-gates" style={muted}>
+          Gates missed: {detail.failingGates.join(", ")}
+        </p>
+      ) : null}
+      <Link
+        href={detail.href}
+        data-testid="invest-detail-deep-dive"
+        style={{ color: accentColor, fontSize: typography.scale.xs, fontWeight: 600, textDecoration: "none" }}
+      >
+        {detail.deepDiveLabel}
+      </Link>
     </div>
   );
 }

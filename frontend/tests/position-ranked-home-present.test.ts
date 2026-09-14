@@ -4,7 +4,12 @@ import {
   applyPositionGemFilter,
   buildPositionCompareMatrix,
   buildPositionGemDisplayRows,
+  buildPositionGemRowDetail,
   buildPositionGemRailItems,
+  GEM_CATALYST_NOTE,
+  GEM_F2_WINDOW_CAVEAT,
+  GEM_MEMBERSHIP_GEM,
+  GEM_SECTOR_CYCLE_NOTE,
   buildWatchlistQualityBadge,
   buildWatchlistQualityMap,
   DEFAULT_POSITION_GEM_FILTER,
@@ -187,6 +192,52 @@ describe("position-ranked-home-present", () => {
       candidates: [apiRow({ catalyst: true })]
     })!.candidates;
     expect(buildPositionGemDisplayRows(catalysed)[0].catalyst).toBe(true);
+  });
+
+  it("expands a gem row with F2 window, membership, and cycle caveats", () => {
+    const cands = parsePositionCandidates({
+      candidates: [
+        apiRow({
+          symbol: "OVV",
+          growth_led: true,
+          sector_tailwind: true,
+          catalyst: true,
+          pillars: [
+            { pillar_id: "F1", label: "Profitability & quality", score: 75, verdict: "bullish", data_quality: "high" },
+            { pillar_id: "F2", label: "Growth", score: 86, verdict: "bullish", data_quality: "high" }
+          ]
+        })
+      ]
+    })!.candidates;
+    const row = buildPositionGemDisplayRows(cands)[0];
+    const detail = buildPositionGemRowDetail(row);
+    expect(detail.membership).toBe(GEM_MEMBERSHIP_GEM);
+    expect(detail.f2WindowCaveat).toBe(GEM_F2_WINDOW_CAVEAT);
+    expect(detail.sectorCycleNote).toBe(GEM_SECTOR_CYCLE_NOTE);
+    expect(detail.catalystNote).toBe(GEM_CATALYST_NOTE);
+    expect(detail.pillars.map((p) => p.pillarId)).toEqual(["F1", "F2"]);
+    expect(detail.deepDiveLabel).toMatch(/Long Term/);
+    expect(detail.href).toContain("symbol=OVV");
+  });
+
+  it("omits cycle notes when sector/catalyst flags are off and cites missed gates on Strong", () => {
+    const cands = parsePositionCandidates({
+      candidates: [
+        apiRow({
+          symbol: "XOM",
+          tier: "strong",
+          growth_led: false,
+          sector_tailwind: false,
+          catalyst: false,
+          failing_gates: ["G5"]
+        })
+      ]
+    })!.candidates;
+    const detail = buildPositionGemRowDetail(buildPositionGemDisplayRows(cands)[0]);
+    expect(detail.membership).toContain("Gates missed: G5");
+    expect(detail.sectorCycleNote).toBeNull();
+    expect(detail.catalystNote).toBeNull();
+    expect(detail.f2WindowCaveat).toBe(GEM_F2_WINDOW_CAVEAT);
   });
 
   it("shows an em dash when no weakest pillar is present", () => {
