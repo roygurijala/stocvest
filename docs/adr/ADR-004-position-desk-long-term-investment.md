@@ -126,9 +126,9 @@ The product **surfaces candidates** (UI label: **Gem candidate** or **Strong qua
 **Rank score (within qualified set):**  
 `gem_rank = 0.45 × fundamentals_layer + 0.20 × technical_layer + 0.15 × sector_layer + 0.10 × macro_layer + 0.10 × min(F1..F5)` — transparent, documented in `POSITION_FUNDAMENTALS_SPEC.md`.
 
-**Tiers (display only):**
+**Tiers (display only) — superseded 2026-09-13, see addendum “Growth-led gem”:**
 
-| Tier | Criteria | Copy |
+| Tier | Criteria (v1, historical) | Copy |
 |------|----------|------|
 | **Gem candidate** | Passes G1–G9 | “Passes strict quality gates — review pillars before any decision.” |
 | **Strong quality** | Passes G1,G2,G3,G8,G9 but misses one of G5–G7 | “Strong fundamentals; structure or environment needs review.” |
@@ -737,3 +737,35 @@ and "position desk live for users with validated conviction + alerts." Grouped b
 ### D. Deferred / optional
 - **POS-AI-10 v2** — generative cited synthesis (Claude over the retrieved passages) + 10-Q /
   earnings-call transcripts + embedding-based retrieval (the retrieval layer shipped 2026-09-09).
+
+---
+
+## Addendum — Growth-led gem (2026-09-13)
+
+**Supersedes** the v1 “pass G1–G9” Gem-candidate row above. G1–G9 are still computed and
+emitted on `failing_gates[]`. They no longer define the Gem tier.
+
+A **gem** is a growth-led discovery the market has not already priced as “already found”:
+
+| Rule | Source (existing, no new thresholds) |
+|------|--------------------------------------|
+| Hygiene | G8 investable, G9 readable data, G3 no solvency blow-up, not a sharp G5 breakdown (`pct_from_52w_high ≤ −25%`) |
+| Growth lead | F2 Growth pillar verdict **bullish** (latest-quarter YoY already called “strong” at ≥ 15%) |
+| Propellant | Sector **or** news **or** geo layer verdict **bullish** |
+| Size | Hunt mid / large-not-mega. Mega (`market_cap ≥ $200B` or curated stub including SPCX) is **not** the pond |
+
+**Mega-cap exception:** the same growth + tailwind + hygiene rule. No looser path. Quality
+mega-caps that miss that exception stay **Strong** / **Monitor**.
+
+**Scan universe:** live refresh = mid-cap discovery (`LIVE_DISCOVERY_MAX` ≈ 40) merged with
+the curated mega board for Strong/Monitor. The FMP pond is `DISCOVERY_FETCH_LIMIT=1500` with
+`marketCapLowerThan=$200B` so `prefer_mid_cap` sees names under $20B (not the 120 largest megas).
+Persisted snapshot key is `position_scan_snapshot_v2`; `?refresh=1` invalidates then pending.
+Weekly batch uses `BATCH_DISCOVERY_MAX` ≈ 200.
+`assemble_universe(exclude_mega, prefer_mid_cap)` never falls back to AAPL when the
+discovery input is empty — the caller merges the curated slice separately.
+
+**Invest page:** default tab **All**. Empty Gem copy is honest (`0 of N passed gem gates;
+S on Strong, M on Monitor`). AI Long Term read does not pick tickers.
+
+Informational screening only — never a recommendation.

@@ -1,13 +1,14 @@
-"""Position universe scan (POS-D15 stub) — ranked gem candidates.
+"""Position universe scan (POS-D15) — ranked gem candidates.
 
-v1 lite: a curated, liquid US large-cap universe is composited (concurrently),
-scored through the transparent gem gates (G1-G9), ranked by ``gem_rank``, and
-cached as a :class:`PositionScanSnapshot`. This backs
-``GET /v1/signals/position/candidates`` and the ``/dashboard/invest`` home.
+Live refresh composites a mid-cap discovery slice plus the curated mega-cap
+board, scores through gem gates, ranks by ``gem_rank``, and caches a
+:class:`PositionScanSnapshot`. This backs ``GET /v1/signals/position/candidates``
+and ``/dashboard/invest``.
 
-Full weekly batch + FMP pre-filter + ~500-name universe scales after POS-D9
-(see ADR-004 POS-D15 contract). Everything here is dependency-injectable so the
-gate/rank/sort logic is unit-testable without network.
+Gem is growth-led discovery (hygiene + F2 + sector/research tailwind). The
+curated mega list is for Strong/Monitor, with a rare mega-cap gem exception.
+Weekly batch uses the same mix at a larger discovery cap. Everything here is
+dependency-injectable so the gate/rank/sort logic is unit-testable without network.
 """
 
 from __future__ import annotations
@@ -39,8 +40,8 @@ from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
-# v1 lite universe — liquid US large caps across sectors (≥$2B cap, ≥$20M ADV
-# by construction). Scales to ~500 names via weekly batch in POS-D15 full.
+# Curated mega / already-found board — Strong/Monitor home, not the gem hunt.
+# Discovery names come from ``build_live_scan_universe`` / weekly batch.
 POSITION_SCAN_UNIVERSE_V1: tuple[str, ...] = (
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "AVGO", "JPM", "V", "MA",
     "UNH", "JNJ", "PG", "HD", "COST", "KO", "PEP", "XOM", "CVX", "LLY",
@@ -59,8 +60,14 @@ _cache_lock = threading.Lock()
 
 
 def reset_position_scan_cache_for_tests() -> None:
+    clear_position_scan_snapshot_cache()
+
+
+def clear_position_scan_snapshot_cache() -> None:
+    """Drop the in-process snapshot so the next read hits the store (or pending)."""
     global _snapshot_cache
-    _snapshot_cache = None
+    with _cache_lock:
+        _snapshot_cache = None
 
 
 def set_position_scan_snapshot_cache(snapshot: "PositionScanSnapshot", *, ttl_seconds: int = _SCAN_TTL_SECONDS) -> None:
@@ -319,6 +326,20 @@ def run_position_scan(
     return asyncio.run(run_position_scan_async(universe=universe, compose=compose))
 
 
+async def _run_live_position_scan() -> PositionScanSnapshot:
+    """Compose the discovery + curated mega mix. Falls back to the curated stub."""
+    try:
+        from stocvest.api.services.position_universe import build_live_scan_universe
+
+        universe = await build_live_scan_universe()
+    except Exception as exc:  # noqa: BLE001 — never fail the worker on universe build
+        _LOG.warning("live scan universe build failed: %s", type(exc).__name__)
+        universe = list(POSITION_SCAN_UNIVERSE_V1)
+    if not universe:
+        universe = list(POSITION_SCAN_UNIVERSE_V1)
+    return await run_position_scan_async(universe=universe)
+
+
 def get_cached_position_scan_snapshot() -> PositionScanSnapshot | None:
     """Return the in-process snapshot if one exists, WITHOUT ever computing.
 
@@ -356,28 +377,37 @@ def _persist_position_scan_snapshot(snapshot: PositionScanSnapshot) -> None:
         _LOG.warning("position scan persist failed")
 
 
-def get_position_scan_snapshot_sync(*, force: bool = False) -> tuple[PositionScanSnapshot, bool]:
-    """Return (snapshot, cached). Recomputes (fresh asyncio loop) when stale or forced.
+_compute_lock = threading.Lock()
 
-    Request-path rule: prefer a persisted / stale-in-process snapshot over a live
-    25-name composite scan. The HTTP API integration dies at ~29s; a cold universe
-    compose regularly exceeds that and the invest page then shows "unavailable".
-    ``force=True`` (``?refresh=1``) still rescans. Loop-agnostic: cache coherence is
-    guarded by a threading.Lock so repeated warm invocations never trip asyncio's
-    per-loop binding.
+
+def compute_and_persist_position_scan() -> PositionScanSnapshot:
+    """Full universe compose + persist. Workers / async refresh only — never the HTTP path.
+
+    A cold compose regularly exceeds the API Gateway ~29s cap. The GET handler
+    returns ``{pending: true}`` and fires this via async self-invoke.
     """
     global _snapshot_cache
-    if not force:
-        stored = get_cached_position_scan_snapshot()
-        if stored is not None:
-            return stored, True
-    with _cache_lock:
-        if not force:
-            stored = get_cached_position_scan_snapshot()
-            if stored is not None:
-                return stored, True
+    with _compute_lock:
+        snapshot = asyncio.run(_run_live_position_scan())
         now = time.time()
-        snapshot = run_position_scan()
-        _snapshot_cache = (now + _SCAN_TTL_SECONDS, snapshot)
+        with _cache_lock:
+            _snapshot_cache = (now + _SCAN_TTL_SECONDS, snapshot)
         _persist_position_scan_snapshot(snapshot)
-        return snapshot, False
+        return snapshot
+
+
+def get_position_scan_snapshot_sync(*, force: bool = False) -> tuple[PositionScanSnapshot | None, bool]:
+    """Return (snapshot, cached) from in-process + store only.
+
+    Request-path rule: never compose the universe here. An empty store plus a live
+    25-name scan exceeds the HTTP API ~29s cap and the invest page then shows
+    "unavailable". ``force=True`` still recomputes (workers / tests). HTTP handlers
+    must not pass ``force=True`` — they kick :func:`compute_and_persist_position_scan`
+    off the request path.
+    """
+    if force:
+        return compute_and_persist_position_scan(), False
+    stored = get_cached_position_scan_snapshot()
+    if stored is not None:
+        return stored, True
+    return None, False

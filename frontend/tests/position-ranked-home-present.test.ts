@@ -8,6 +8,8 @@ import {
   buildWatchlistQualityBadge,
   buildWatchlistQualityMap,
   DEFAULT_POSITION_GEM_FILTER,
+  emptyPositionGemCopy,
+  isPositionScanPending,
   isPositionScanUnavailable,
   parsePositionCandidates,
   parsePositionGemFilterFromParams,
@@ -83,6 +85,18 @@ describe("position-ranked-home-present", () => {
       degraded: false
     });
     expect(isPositionScanUnavailable(emptyUniverse, undefined)).toBe(false);
+  });
+
+  it("treats a pending empty envelope as scanning, not unavailable", () => {
+    const pending = parsePositionCandidates({
+      candidates: [],
+      count: 0,
+      pending: true,
+      degraded: true
+    });
+    expect(pending?.pending).toBe(true);
+    expect(isPositionScanPending(pending)).toBe(true);
+    expect(isPositionScanUnavailable(pending, undefined)).toBe(false);
   });
 
   it("filters by tier, min scores, and symbol query", () => {
@@ -172,8 +186,19 @@ describe("position-ranked-home-present", () => {
     expect(parsePositionGemFilterFromParams(new URLSearchParams(qs))).toEqual(filter);
   });
 
-  it("defaults unknown tier to gem", () => {
-    expect(parsePositionGemFilterFromParams(new URLSearchParams("tier=banana")).tier).toBe("gem");
+  it("defaults missing and unknown tier to all", () => {
+    expect(parsePositionGemFilterFromParams(new URLSearchParams("")).tier).toBe("all");
+    expect(parsePositionGemFilterFromParams(new URLSearchParams("tier=banana")).tier).toBe("all");
+  });
+
+  it("writes an honest empty-gem line from Strong/Monitor counts", () => {
+    const cands = [
+      parsePositionCandidates({ candidates: [apiRow({ symbol: "AAA", tier: "strong" })] })!.candidates[0],
+      parsePositionCandidates({ candidates: [apiRow({ symbol: "BBB", tier: "monitor" })] })!.candidates[0]
+    ];
+    expect(
+      emptyPositionGemCopy({ ...DEFAULT_POSITION_GEM_FILTER, tier: "gem" }, cands, 25)
+    ).toBe("0 of 25 passed gem gates; 1 on Strong, 1 on Monitor.");
   });
 
   it("exposes non-advisory tier copy and labels", () => {

@@ -73,6 +73,20 @@ def test_in_memory_store_put_get() -> None:
     snap = _snapshot()
     assert store.put(snap) is True
     assert store.get() is snap
+    assert store.invalidate() is True
+    assert store.get() is None
+
+
+def test_snapshot_key_is_growth_led_v2() -> None:
+    assert store_mod._SNAPSHOT_KEY == "position_scan_snapshot_v2"  # noqa: SLF001
+
+
+def test_in_memory_claim_refresh_is_single_flight() -> None:
+    store = InMemoryPositionScanStore()
+    assert store.try_claim_refresh(stale_after_seconds=180) is True
+    assert store.try_claim_refresh(stale_after_seconds=180) is False
+    store._claimed_at = 0.0  # noqa: SLF001 — expire the lock for the next claim
+    assert store.try_claim_refresh(stale_after_seconds=180) is True
 
 
 def test_factory_returns_in_memory_without_table(monkeypatch: pytest.MonkeyPatch) -> None:

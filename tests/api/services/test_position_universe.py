@@ -5,7 +5,14 @@ from __future__ import annotations
 import pytest
 
 from stocvest.api.services.position_scan import POSITION_SCAN_UNIVERSE_V1
-from stocvest.api.services.position_universe import assemble_universe, build_scan_universe
+from stocvest.api.services.position_universe import (
+    DISCOVERY_FETCH_LIMIT,
+    assemble_universe,
+    build_live_scan_universe,
+    build_scan_universe,
+    merge_scan_universe,
+)
+from stocvest.signals.position_gem_gates import MEGA_CAP_USD
 
 pytestmark = pytest.mark.unit
 
@@ -73,6 +80,39 @@ def test_assemble_all_excluded_falls_back() -> None:
     assert out[:1] == ["AAPL"]  # curated fallback
 
 
+def test_assemble_discovery_excludes_mega_and_prefers_mid() -> None:
+    rows = [
+        _row("MEGA", 400e9, 100.0, 5_000_000),  # mega → dropped from the hunt
+        _row("LARGE", 80e9, 100.0, 2_000_000),  # large-not-mega, after mid
+        _row("MIDB", 8e9, 50.0, 2_000_000),
+        _row("MIDA", 5e9, 100.0, 1_000_000),
+    ]
+    out = assemble_universe(
+        rows,
+        min_market_cap_usd=MIN_CAP,
+        min_avg_dollar_volume_usd=MIN_ADV,
+        max_size=10,
+        exclude_mega=True,
+        prefer_mid_cap=True,
+    )
+    assert out == ["MIDB", "MIDA", "LARGE"]
+
+
+def test_assemble_discovery_empty_does_not_fall_back_to_mega_stub() -> None:
+    out = assemble_universe(
+        [],
+        min_market_cap_usd=MIN_CAP,
+        min_avg_dollar_volume_usd=MIN_ADV,
+        max_size=10,
+        exclude_mega=True,
+    )
+    assert out == []
+
+
+def test_merge_scan_universe_discovery_then_curated() -> None:
+    assert merge_scan_universe(["RKLB", "AAPL"])[:3] == ["RKLB", "AAPL", "MSFT"]
+
+
 @pytest.mark.asyncio
 async def test_build_scan_universe_uses_fetch() -> None:
     async def _fetch(*, min_market_cap, limit):
@@ -99,3 +139,35 @@ async def test_build_scan_universe_fallback_on_empty() -> None:
 
     out = await build_scan_universe(fetch=_empty)
     assert out[:1] == ["AAPL"]
+
+
+@pytest.mark.asyncio
+async def test_build_scan_universe_discovery_fetches_non_mega_pool() -> None:
+    seen: dict[str, object] = {}
+
+    async def _fetch(*, min_market_cap, limit, max_market_cap=None):
+        seen["min"] = min_market_cap
+        seen["limit"] = limit
+        seen["max"] = max_market_cap
+        return [_row("RKLB", 8e9, 50.0, 2_000_000), _row("MEGA", 400e9, 100.0, 5_000_000)]
+
+    out = await build_scan_universe(max_size=10, fetch=_fetch, discovery=True)
+    assert seen["limit"] == DISCOVERY_FETCH_LIMIT
+    assert seen["max"] == MEGA_CAP_USD
+    assert out == ["RKLB"]
+
+
+@pytest.mark.asyncio
+async def test_build_live_scan_universe_discovery_then_curated() -> None:
+    async def _fetch(*, min_market_cap, limit, max_market_cap=None):
+        assert min_market_cap >= 0 and limit >= DISCOVERY_FETCH_LIMIT
+        assert max_market_cap == MEGA_CAP_USD
+        return [
+            _row("MEGA", 400e9, 100.0, 5_000_000),
+            _row("RKLB", 8e9, 50.0, 2_000_000),
+        ]
+
+    out = await build_live_scan_universe(fetch=_fetch)
+    assert out[0] == "RKLB"
+    assert "MEGA" not in out
+    assert "AAPL" in out

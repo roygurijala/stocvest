@@ -62,6 +62,7 @@ locals {
     STOCVEST_TRADE_JOURNAL_TABLE                   = aws_dynamodb_table.trade_journal.name
     STOCVEST_TRADE_PLANS_TABLE                     = aws_dynamodb_table.trade_plans.name
     STOCVEST_HOLDINGS_TABLE                        = aws_dynamodb_table.holdings.name
+    STOCVEST_POSITION_SCAN_TABLE                   = aws_dynamodb_table.position_scan.name
     STOCVEST_PDT_STATE_TABLE                       = aws_dynamodb_table.pdt_state.name
     STOCVEST_EMAIL_SENDER                          = "signals@stocvest.ai"
     STOCVEST_PUBLIC_APP_URL                        = "https://stocvest.ai"
@@ -107,6 +108,7 @@ locals {
       aws_dynamodb_table.trade_journal,
       aws_dynamodb_table.trade_plans,
       aws_dynamodb_table.holdings,
+      aws_dynamodb_table.position_scan,
       aws_dynamodb_table.pdt_state,
       aws_dynamodb_table.sector_cache,
       aws_dynamodb_table.audit_events,
@@ -309,6 +311,18 @@ resource "aws_iam_role_policy" "lambda_api_data_access" {
           "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:stocvest-development-api-portfolio_review",
         ]
       },
+      {
+        # POS-D15 — signals GET /v1/signals/position/candidates ?refresh=1 self-invokes
+        # (InvocationType=Event) so the 25-name Long-Term compose runs off the API
+        # Gateway 29s request path. Without this, boto3 invoke fails and a naive
+        # inline fallback blows the HTTP timeout ("investment scan unavailable").
+        Sid    = "LambdaSelfInvokeSignals"
+        Effect = "Allow"
+        Action = ["lambda:InvokeFunction"]
+        Resource = [
+          "arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:stocvest-development-api-signals",
+        ]
+      },
     ]
   })
 }
@@ -320,13 +334,15 @@ resource "aws_lambda_function" "api" {
   role          = aws_iam_role.lambda_api_execution.arn
   handler       = "handler.lambda_handler"
   runtime       = "python3.11"
-  timeout       = each.key == "scanner" ? 300 : each.key == "signal_resolution" ? 120 : each.key == "news_consumer" ? 120 : each.key == "geo_themes" ? 30 : each.key == "macro_warmer" ? 60 : each.key == "sector_daily_cache" ? 120 : each.key == "market_pulse_refresher" ? 15 : each.key == "laggard_jobs" ? 120 : each.key == "news_event_study_report" ? 300 : each.key == "portfolio_review" ? 180 : 60
+  timeout       = each.key == "scanner" ? 300 : each.key == "signal_resolution" ? 120 : each.key == "news_consumer" ? 120 : each.key == "geo_themes" ? 30 : each.key == "macro_warmer" ? 60 : each.key == "sector_daily_cache" ? 120 : each.key == "market_pulse_refresher" ? 15 : each.key == "laggard_jobs" ? 120 : each.key == "news_event_study_report" ? 300 : each.key == "portfolio_review" ? 180 : each.key == "signals" ? 180 : 60
   # portfolio_review composites every holding through the Long-Term engine in one
   # request. That work is CPU-bound and asyncio is single-threaded, so at 512 MB
   # (~0.36 vCPU) an 11-holding portfolio took ~35-51s and blew past the API Gateway
   # HTTP-API integration timeout (~29-30s) → 504 "Could not run the review". 1769 MB
   # gives a full vCPU (~2x faster here; more memory plateaus since a single asyncio
   # thread can't use extra cores), bringing a warm run to ~25s under the cap.
+  # signals timeout is 180s so the async position_scan_refresh Event invoke can
+  # finish a 25-name Long-Term compose off the HTTP path (GET still returns in ms).
   memory_size = each.key == "geo_themes" ? 256 : each.key == "orb_compute" ? 256 : each.key == "macro_warmer" ? 256 : each.key == "sector_daily_cache" ? 512 : each.key == "market_pulse_refresher" ? 256 : each.key == "laggard_jobs" ? 256 : each.key == "portfolio_review" ? 1769 : 512
 
   filename         = data.archive_file.api_lambda_placeholder.output_path

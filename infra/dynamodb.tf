@@ -400,6 +400,23 @@ resource "aws_dynamodb_table" "trade_plans" {
 }
 
 # Manual portfolio holdings — one item per user; keys match DynamoDBHoldingsStore (userId + holdings).
+# POS-D15 — single-item weekly gem-candidate snapshot (hash snapshot_key).
+# Cross-instance so GET /v1/signals/position/candidates never live-composes under API GW.
+resource "aws_dynamodb_table" "position_scan" {
+  name         = "PositionScanSnapshot"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "snapshot_key"
+
+  attribute {
+    name = "snapshot_key"
+    type = "S"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-position-scan"
+  })
+}
+
 resource "aws_dynamodb_table" "holdings" {
   name         = "Holdings"
   billing_mode = "PAY_PER_REQUEST"

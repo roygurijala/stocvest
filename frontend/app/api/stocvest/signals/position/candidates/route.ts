@@ -11,7 +11,8 @@ const DEGRADED = {
   universe_size: 0,
   scan_generated_at: null,
   cached: false,
-  degraded: true
+  degraded: true,
+  pending: false
 };
 
 /** Proxies GET /v1/signals/position/candidates for Client Components (ADR-004 POS-D15). */

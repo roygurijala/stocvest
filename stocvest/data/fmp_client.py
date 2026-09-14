@@ -50,12 +50,14 @@ async def get_position_screener_rows(
     min_market_cap: float,
     limit: int = 1000,
     exchanges: str = "NYSE,NASDAQ,AMEX",
+    max_market_cap: float | None = None,
 ) -> list[dict]:
     """Best-effort FMP company-screener rows for the Position universe pre-filter (POS-D15).
 
     Returns raw rows (``symbol``, ``companyName``, ``marketCap``, ``price``, ``volume``,
     ``isEtf``, ``isFund``, ``exchangeShortName``) for actively-traded, non-ETF/fund US names
-    above ``min_market_cap`` — a cheap trim before the expensive composite scan. The precise
+    above ``min_market_cap`` — a cheap trim before the expensive composite scan. Discovery
+    callers pass ``max_market_cap`` so the pond is not the 120 largest names. The precise
     dollar-volume / leverage / SPAC exclusion is applied downstream. Never raises: any missing
     key / network / parse failure returns ``[]`` so the caller falls back to the curated list.
     """
@@ -71,6 +73,8 @@ async def get_position_screener_rows(
         "limit": str(int(max(1, limit))),
         "apikey": key,
     }
+    if max_market_cap is not None and max_market_cap > 0:
+        params["marketCapLowerThan"] = str(int(max_market_cap))
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
             resp = await client.get(f"{FMP_STABLE_BASE}/company-screener", params=params)

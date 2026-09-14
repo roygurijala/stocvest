@@ -135,6 +135,13 @@ def lambda_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]
             from stocvest.workers.gap_intel_cache_tick import gap_intel_cache_tick_handler
 
             return gap_intel_cache_tick_handler(event, context)
+        # POS-D15 — async self-invoke to compose + persist the gem-candidate snapshot
+        # off the request path (the GET handler fires this on a cache miss / ?refresh=1
+        # so the 25-name Long-Term compose never runs inside the API Gateway 29s window).
+        if isinstance(event, dict) and event.get("position_scan_refresh") is True:
+            from stocvest.api.handlers.signals import position_scan_refresh_handler
+
+            return position_scan_refresh_handler(event, context)
         from stocvest.api.handlers.signals import signals_http_dispatch
 
         return _with_cors_and_audit(event=event, response=signals_http_dispatch(event, context), module=module)

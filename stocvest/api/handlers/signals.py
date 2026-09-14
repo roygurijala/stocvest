@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
+import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -915,11 +917,88 @@ def scanner_trace_handler(event: LambdaEvent, context: LambdaContext) -> dict[st
     return ok(payload)
 
 
+def trigger_async_position_scan_refresh() -> bool:
+    """Fire a background universe compose via async self-invoke (InvocationType=Event).
+
+    Returns ``True`` when the async invoke was dispatched (production Lambda), ``False``
+    when there is no Lambda runtime to self-invoke (local/dev) or the invoke failed.
+    Best-effort; never raises. The GET handler inlines only when this returns False
+    *and* we are not inside AWS (so API Gateway never waits on the 25-name compose).
+    """
+    fn_name = os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+    if not fn_name:
+        return False
+    try:
+        import boto3
+
+        client = boto3.client("lambda")
+        client.invoke(
+            FunctionName=fn_name,
+            InvocationType="Event",
+            Payload=json.dumps({"position_scan_refresh": True}).encode("utf-8"),
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001 — dispatch is best-effort; fall back to pending
+        _LOG.warning("position_scan async refresh dispatch failed: %s", exc)
+        return False
+
+
+def position_scan_refresh_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """Async entrypoint: compose + persist the gem-candidate snapshot (fired by GET)."""
+    _ = event, context
+    try:
+        from stocvest.api.services.position_scan import compute_and_persist_position_scan
+
+        compute_and_persist_position_scan()
+        return {"statusCode": 200, "refreshed": True}
+    except Exception as exc:  # noqa: BLE001 — background job; log and report, never crash
+        _LOG.warning("position_scan refresh failed: %s", exc)
+        return {"statusCode": 500, "refreshed": False}
+
+
+def _pending_position_candidates(tier: str) -> dict[str, Any]:
+    return ok(
+        {
+            "mode": "position",
+            "tier": tier,
+            "candidates": [],
+            "count": 0,
+            "universe_size": 0,
+            "scan_generated_at": None,
+            "cached": False,
+            "degraded": False,
+            "pending": True,
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+        }
+    )
+
+
+def _degraded_position_candidates(tier: str) -> dict[str, Any]:
+    return ok(
+        {
+            "mode": "position",
+            "tier": tier,
+            "candidates": [],
+            "count": 0,
+            "universe_size": 0,
+            "scan_generated_at": None,
+            "cached": False,
+            "degraded": True,
+            "pending": False,
+            "disclaimer": API_SIGNAL_DISCLAIMER,
+        }
+    )
+
+
 def position_candidates_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
     """GET /v1/signals/position/candidates — ranked gem candidates (ADR-004 POS-D15).
 
     Transparent gem-gate screening over a curated liquid US universe. Informational
     only — a "gem candidate" has passed internal quality gates, not a recommendation.
+
+    Request-path rule: never compose the 25-name universe inline. Serve a persisted
+    snapshot, or ``{pending: true}``. ``?refresh=1`` kicks an async self-invoke
+    (local/dev inlines). Poll the plain GET until the snapshot lands.
     """
     _ = context
     rc = build_request_context(event)
@@ -935,26 +1014,43 @@ def position_candidates_handler(event: LambdaEvent, context: LambdaContext) -> d
         limit = 50
     force = str(qs.get("refresh") or "").strip().lower() in ("1", "true", "yes")
 
-    from stocvest.api.services.position_scan import get_position_scan_snapshot_sync
+    from stocvest.api.services.position_scan import (
+        compute_and_persist_position_scan,
+        get_position_scan_snapshot_sync,
+    )
 
     try:
-        snapshot, cached = get_position_scan_snapshot_sync(force=force)
+        snapshot, cached = get_position_scan_snapshot_sync(force=False)
     except Exception as exc:  # scan should never 500 the discovery home
         _LOG.warning("position_candidates scan failed: %s", exc)
-        return ok(
-            {
-                "mode": "position",
-                "tier": tier,
-                "candidates": [],
-                "count": 0,
-                "universe_size": 0,
-                "scan_generated_at": None,
-                "cached": False,
-                "degraded": True,
-                "disclaimer": API_SIGNAL_DISCLAIMER,
-            }
-        )
-    return ok(snapshot.to_api_dict(tier=tier, limit=limit, cached=cached))
+        return _degraded_position_candidates(tier)
+
+    # Warm snapshot, no explicit refresh — serve it. Polling must not spawn jobs.
+    if snapshot is not None and not force:
+        return ok(snapshot.to_api_dict(tier=tier, limit=limit, cached=cached))
+
+    # Miss or ?refresh=1: claim a single in-flight compose (Dynamo lock) so SWR
+    # polls and a parallel ?refresh=1 cannot stack 65-name Lambdas.
+    from stocvest.api.services.position_scan_store import (
+        invalidate_position_scan_snapshot,
+        try_claim_position_scan_refresh,
+    )
+
+    claimed = try_claim_position_scan_refresh()
+    if claimed:
+        # Drop the stale snapshot so subsequent GETs stay pending and poll.
+        invalidate_position_scan_snapshot()
+        dispatched = trigger_async_position_scan_refresh()
+        if not dispatched:
+            if not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+                try:
+                    snapshot = compute_and_persist_position_scan()
+                    return ok(snapshot.to_api_dict(tier=tier, limit=limit, cached=False))
+                except Exception as exc:  # noqa: BLE001 — local/dev still must not 500
+                    _LOG.warning("position_candidates inline scan failed: %s", exc)
+                    return _degraded_position_candidates(tier)
+            _LOG.warning("position_scan async refresh unavailable; returning pending")
+    return _pending_position_candidates(tier)
 
 
 def swing_setups_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:

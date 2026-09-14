@@ -55,7 +55,7 @@ async def test_batch_scans_persists_and_warms_cache(monkeypatch: pytest.MonkeyPa
         assert list(universe) == ["AAA", "BBB", "CCC"]
         return snapshot
 
-    monkeypatch.setattr(batch, "build_scan_universe", _fake_universe)
+    monkeypatch.setattr(batch, "build_batch_scan_universe", _fake_universe)
     monkeypatch.setattr(batch, "run_position_scan_async", _fake_scan)
 
     out = await batch.run_position_scan_batch_async()
@@ -92,7 +92,7 @@ async def test_batch_succeeds_even_if_persist_fails(monkeypatch: pytest.MonkeyPa
     async def _fake_scan(*, universe, concurrency):
         return snapshot
 
-    monkeypatch.setattr(batch, "build_scan_universe", _fake_universe)
+    monkeypatch.setattr(batch, "build_batch_scan_universe", _fake_universe)
     monkeypatch.setattr(batch, "run_position_scan_async", _fake_scan)
 
     out = await batch.run_position_scan_batch_async()
