@@ -432,6 +432,28 @@ resource "aws_dynamodb_table" "holdings" {
   })
 }
 
+# Append-only sale / buy / review-advice events (PORTFOLIO-ADVICE-LEDGER).
+resource "aws_dynamodb_table" "portfolio_advice_ledger" {
+  name         = "PortfolioAdviceLedger"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "userId"
+  range_key    = "eventId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "eventId"
+    type = "S"
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "stocvest-development-ddb-portfolio-advice-ledger"
+  })
+}
+
 # PDT rolling state per user; keys match DynamoDBPDTStateStore (userId, dayTradeDates, pdtExempt).
 resource "aws_dynamodb_table" "pdt_state" {
   name         = "PDTState"

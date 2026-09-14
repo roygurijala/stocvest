@@ -180,6 +180,16 @@ def run_portfolio_review_refresh(
             store.put_cached_review(user_id, review_dict, cached_at, source=source)
         except Exception as exc:  # noqa: BLE001 — a cache-write failure must not fail the review
             _LOG.warning("portfolio_review cache write failed: %s", exc)
+        try:
+            from stocvest.api.services.portfolio_advice_ledger import (
+                record_review_snapshots,
+                resolve_due_outcomes,
+            )
+
+            record_review_snapshots(user_id, review_dict, cached_at, source=source)
+            resolve_due_outcomes(user_id)
+        except Exception as exc:  # noqa: BLE001 — tracking must not fail the review
+            _LOG.warning("portfolio_advice_ledger snapshot skipped: %s", exc)
     return review_dict, cached_at
 
 

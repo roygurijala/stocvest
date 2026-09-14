@@ -282,13 +282,13 @@ export function isPositionScanUnavailable(
   return Boolean(response?.degraded && response.candidates.length === 0);
 }
 
-/** Honest empty-state when Gem is selected but Strong/Monitor already have names. */
+/** Honest empty-state when Hunt/Gem is selected but Strong/Monitor already have names. */
 export function emptyPositionGemCopy(
   filter: PositionGemFilter,
   allCandidates: readonly PositionGemCandidate[],
   universeSize: number
 ): string {
-  if (filter.tier === "gem") {
+  if (filter.tier === "gem" || filter.tier === "all") {
     const strong = allCandidates.filter((c) => c.tier === "strong").length;
     const monitor = allCandidates.filter((c) => c.tier === "monitor").length;
     const n = universeSize > 0 ? universeSize : allCandidates.length;
@@ -297,14 +297,21 @@ export function emptyPositionGemCopy(
   return "No names passed these gates — widen filters or run a symbol lookup above.";
 }
 
-/** Apply transparent client-side filters (tier + pillar-score sliders + symbol search). */
+/** Apply transparent client-side filters (tier + pillar-score sliders + symbol search).
+ *
+ * Invest home (`tier=all`) is the hunt board — gems only. Strong/Monitor (incl.
+ * mega-caps) stay on their own tabs. API `tier=all` still returns every scored
+ * name so watchlist badges and the gem rail can join the full cache.
+ */
 export function applyPositionGemFilter(
   candidates: readonly PositionGemCandidate[],
   filter: PositionGemFilter
 ): PositionGemCandidate[] {
   const q = (filter.symbolQuery ?? "").trim().toUpperCase();
+  const huntHome = filter.tier === "all";
   return candidates.filter((c) => {
-    if (filter.tier !== "all" && c.tier !== filter.tier) return false;
+    if (huntHome && c.tier !== "gem") return false;
+    if (!huntHome && c.tier !== filter.tier) return false;
     if (
       filter.minFundamentals != null &&
       (c.fundamentalsScore == null || c.fundamentalsScore < filter.minFundamentals)

@@ -62,6 +62,7 @@ locals {
     STOCVEST_TRADE_JOURNAL_TABLE                   = aws_dynamodb_table.trade_journal.name
     STOCVEST_TRADE_PLANS_TABLE                     = aws_dynamodb_table.trade_plans.name
     STOCVEST_HOLDINGS_TABLE                        = aws_dynamodb_table.holdings.name
+    STOCVEST_PORTFOLIO_ADVICE_LEDGER_TABLE         = aws_dynamodb_table.portfolio_advice_ledger.name
     STOCVEST_POSITION_SCAN_TABLE                   = aws_dynamodb_table.position_scan.name
     STOCVEST_PDT_STATE_TABLE                       = aws_dynamodb_table.pdt_state.name
     STOCVEST_EMAIL_SENDER                          = "signals@stocvest.ai"
@@ -108,6 +109,7 @@ locals {
       aws_dynamodb_table.trade_journal,
       aws_dynamodb_table.trade_plans,
       aws_dynamodb_table.holdings,
+      aws_dynamodb_table.portfolio_advice_ledger,
       aws_dynamodb_table.position_scan,
       aws_dynamodb_table.pdt_state,
       aws_dynamodb_table.sector_cache,

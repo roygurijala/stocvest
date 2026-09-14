@@ -148,6 +148,22 @@ def run_portfolio_digest_tick(
                 user_id=user_id,
                 user_email=email,
             )
+            try:
+                from stocvest.api.services.holdings_store import holdings_settings_fingerprint
+                from stocvest.api.services.portfolio_advice_ledger import (
+                    record_review_snapshots,
+                    resolve_due_outcomes,
+                )
+
+                source = holdings_settings_fingerprint(holdings, portfolio_settings)
+                cached_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+                record_review_snapshots(user_id, review, cached_at, source=source)
+                resolve_due_outcomes(user_id)
+            except Exception:  # noqa: BLE001 — tracking must not block the digest
+                _LOG.warning(
+                    "portfolio_advice_ledger digest snapshot skipped user=%s",
+                    user_ref_for_logs(user_id),
+                )
             if mailer.send_portfolio_digest_email(to_email=email, review=review):
                 sent += 1
                 # Mark sent BEFORE the next user so a later timeout can't cause a re-send.
