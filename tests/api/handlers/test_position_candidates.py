@@ -187,7 +187,7 @@ def test_refresh_inlines_when_not_in_aws(monkeypatch: pytest.MonkeyPatch) -> Non
     assert [c["symbol"] for c in body["candidates"]] == ["HIGH"]
 
 
-def test_refresh_invalidates_and_returns_pending(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_refresh_keeps_snapshot_and_kicks(monkeypatch: pytest.MonkeyPatch) -> None:
     store = InMemoryPositionScanStore()
     reset_position_scan_store_for_tests(store)
     _patch_snapshot(monkeypatch)
@@ -199,12 +199,11 @@ def test_refresh_invalidates_and_returns_pending(monkeypatch: pytest.MonkeyPatch
         return True
 
     monkeypatch.setattr("stocvest.api.handlers.signals.trigger_async_position_scan_refresh", _kick)
-    res = position_candidates_handler(_event(qs={"refresh": "true"}), {})
+    res = position_candidates_handler(_event(qs={"refresh": "true", "tier": "all"}), {})
     body = json.loads(res["body"])
-    assert body["pending"] is True
-    assert body["candidates"] == []
+    assert body.get("pending") is not True
+    assert [c["symbol"] for c in body["candidates"]] == ["HIGH", "MIDD", "SOFT", "WATCH"]
     assert kicks["n"] == 1
-    assert store.get() is None
 
 
 def test_scan_refresh_handler_computes(monkeypatch: pytest.MonkeyPatch) -> None:

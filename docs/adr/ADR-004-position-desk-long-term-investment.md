@@ -757,10 +757,12 @@ A **gem** is a growth-led discovery the market has not already priced as “alre
 **Mega-cap exception:** the same growth + tailwind + hygiene rule. No looser path. Quality
 mega-caps that miss that exception stay **Strong** / **Monitor**.
 
-**Scan universe:** live refresh = mid-cap discovery (`LIVE_DISCOVERY_MAX` ≈ 40) merged with
-the curated mega board for Strong/Monitor. The FMP pond is `DISCOVERY_FETCH_LIMIT=1500` with
-`marketCapLowerThan=$200B` so `prefer_mid_cap` sees names under $20B (not the 120 largest megas).
-Persisted snapshot key is `position_scan_snapshot_v2`; `?refresh=1` invalidates then pending.
+**Scan universe:** live refresh = curated 25 first (persist immediately), then mid-cap
+discovery (`LIVE_DISCOVERY_MAX` ≈ 15) merged for Strong/Monitor. The FMP pond is
+`DISCOVERY_FETCH_LIMIT=1500` with `marketCapLowerThan=$200B` so `prefer_mid_cap` sees
+names under $20B (not the 120 largest megas).
+Persisted snapshot key is `position_scan_snapshot_v2` (v1 is a read fallback);
+`?refresh=1` keeps the last snapshot while an async compose runs.
 Weekly batch uses `BATCH_DISCOVERY_MAX` ≈ 200.
 `assemble_universe(exclude_mega, prefer_mid_cap)` never falls back to AAPL when the
 discovery input is empty — the caller merges the curated slice separately.

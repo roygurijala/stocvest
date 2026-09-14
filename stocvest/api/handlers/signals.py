@@ -1031,15 +1031,12 @@ def position_candidates_handler(event: LambdaEvent, context: LambdaContext) -> d
 
     # Miss or ?refresh=1: claim a single in-flight compose (Dynamo lock) so SWR
     # polls and a parallel ?refresh=1 cannot stack 65-name Lambdas.
-    from stocvest.api.services.position_scan_store import (
-        invalidate_position_scan_snapshot,
-        try_claim_position_scan_refresh,
-    )
+    # Keep the last snapshot until the new compose persists — deleting it first
+    # left Invest pending forever when the 65-name scan OOM'd / timed out.
+    from stocvest.api.services.position_scan_store import try_claim_position_scan_refresh
 
     claimed = try_claim_position_scan_refresh()
     if claimed:
-        # Drop the stale snapshot so subsequent GETs stay pending and poll.
-        invalidate_position_scan_snapshot()
         dispatched = trigger_async_position_scan_refresh()
         if not dispatched:
             if not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
@@ -1050,6 +1047,8 @@ def position_candidates_handler(event: LambdaEvent, context: LambdaContext) -> d
                     _LOG.warning("position_candidates inline scan failed: %s", exc)
                     return _degraded_position_candidates(tier)
             _LOG.warning("position_scan async refresh unavailable; returning pending")
+    if snapshot is not None:
+        return ok(snapshot.to_api_dict(tier=tier, limit=limit, cached=True))
     return _pending_position_candidates(tier)
 
 

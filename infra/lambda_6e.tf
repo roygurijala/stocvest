@@ -342,8 +342,10 @@ resource "aws_lambda_function" "api" {
   # gives a full vCPU (~2x faster here; more memory plateaus since a single asyncio
   # thread can't use extra cores), bringing a warm run to ~25s under the cap.
   # signals timeout is 180s so the async position_scan_refresh Event invoke can
-  # finish a 25-name Long-Term compose off the HTTP path (GET still returns in ms).
-  memory_size = each.key == "geo_themes" ? 256 : each.key == "orb_compute" ? 256 : each.key == "macro_warmer" ? 256 : each.key == "sector_daily_cache" ? 512 : each.key == "market_pulse_refresher" ? 256 : each.key == "laggard_jobs" ? 256 : each.key == "portfolio_review" ? 1769 : 512
+  # finish a curated-then-discovery Long-Term compose off the HTTP path
+  # (GET still returns in ms). 1769 MB matches portfolio_review — 512 MB OOM'd
+  # the 65-name scan before a snapshot was written.
+  memory_size = each.key == "geo_themes" ? 256 : each.key == "orb_compute" ? 256 : each.key == "macro_warmer" ? 256 : each.key == "sector_daily_cache" ? 512 : each.key == "market_pulse_refresher" ? 256 : each.key == "laggard_jobs" ? 256 : (each.key == "portfolio_review" || each.key == "signals") ? 1769 : 512
 
   filename         = data.archive_file.api_lambda_placeholder.output_path
   source_code_hash = data.archive_file.api_lambda_placeholder.output_base64sha256

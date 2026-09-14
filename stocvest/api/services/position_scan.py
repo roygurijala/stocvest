@@ -326,18 +326,49 @@ def run_position_scan(
     return asyncio.run(run_position_scan_async(universe=universe, compose=compose))
 
 
+def merge_scan_snapshots(
+    first: PositionScanSnapshot,
+    second: PositionScanSnapshot,
+    *,
+    universe_size: int,
+) -> PositionScanSnapshot:
+    """Union candidates by symbol (second wins), then re-sort by gem rank."""
+    by_symbol = {c.symbol: c for c in first.candidates}
+    for candidate in second.candidates:
+        by_symbol[candidate.symbol] = candidate
+    merged = list(by_symbol.values())
+    merged.sort(key=lambda c: (tier_sort_key(c.tier), -c.rank, c.symbol))
+    return PositionScanSnapshot(
+        generated_at=second.generated_at,
+        universe_size=universe_size,
+        candidates=merged,
+    )
+
+
 async def _run_live_position_scan() -> PositionScanSnapshot:
-    """Compose the discovery + curated mega mix. Falls back to the curated stub."""
+    """Curated board first (persist immediately), then mid-cap discovery if time remains.
+
+    The 65-name mix (40 discovery + 25 curated) was blowing the 180s / memory
+    budget on Polygon news pagination, so GET never saw a v2 snapshot. Persist
+    the 25-name board as soon as it scores so Invest is never empty mid-refresh.
+    """
+    curated = list(POSITION_SCAN_UNIVERSE_V1)
+    snapshot = await run_position_scan_async(universe=curated)
+    set_position_scan_snapshot_cache(snapshot)
+    _persist_position_scan_snapshot(snapshot)
+
     try:
         from stocvest.api.services.position_universe import build_live_scan_universe
 
-        universe = await build_live_scan_universe()
+        extra_universe = await build_live_scan_universe()
     except Exception as exc:  # noqa: BLE001 — never fail the worker on universe build
         _LOG.warning("live scan universe build failed: %s", type(exc).__name__)
-        universe = list(POSITION_SCAN_UNIVERSE_V1)
-    if not universe:
-        universe = list(POSITION_SCAN_UNIVERSE_V1)
-    return await run_position_scan_async(universe=universe)
+        return snapshot
+    extra = [symbol for symbol in extra_universe if symbol not in set(curated)]
+    if not extra:
+        return snapshot
+    more = await run_position_scan_async(universe=extra)
+    return merge_scan_snapshots(snapshot, more, universe_size=len(curated) + len(extra))
 
 
 def get_cached_position_scan_snapshot() -> PositionScanSnapshot | None:

@@ -26,8 +26,10 @@ from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
-# v2 invalidates the pre-growth-led 25-name mega snapshot after deploy.
+# v2 is the growth-led snapshot. v1 is read as a last-resort so a failed
+# mid-cap compose cannot hide the last successful 25-name board.
 _SNAPSHOT_KEY = "position_scan_snapshot_v2"
+_LEGACY_SNAPSHOT_KEY = "position_scan_snapshot_v1"
 _LOCK_KEY = "position_scan_refresh_lock_v2"
 
 
@@ -98,8 +100,14 @@ class DynamoPositionScanStore:
         return self._table
 
     def get(self) -> PositionScanSnapshot | None:
+        snap = self._get_key(_SNAPSHOT_KEY)
+        if snap is not None:
+            return snap
+        return self._get_key(_LEGACY_SNAPSHOT_KEY)
+
+    def _get_key(self, key: str) -> PositionScanSnapshot | None:
         try:
-            resp = self._get_table().get_item(Key={"snapshot_key": _SNAPSHOT_KEY})
+            resp = self._get_table().get_item(Key={"snapshot_key": key})
         except Exception as exc:  # noqa: BLE001 — read is best-effort
             _LOG.warning("position scan store get failed: %s", type(exc).__name__)
             return None

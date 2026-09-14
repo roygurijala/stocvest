@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -79,6 +80,23 @@ def test_in_memory_store_put_get() -> None:
 
 def test_snapshot_key_is_growth_led_v2() -> None:
     assert store_mod._SNAPSHOT_KEY == "position_scan_snapshot_v2"  # noqa: SLF001
+    assert store_mod._LEGACY_SNAPSHOT_KEY == "position_scan_snapshot_v1"  # noqa: SLF001
+
+
+def test_dynamo_get_falls_back_to_legacy_v1() -> None:
+    blob = json.dumps(_snapshot().to_store_dict())
+
+    class _FakeTable:
+        def get_item(self, Key: dict) -> dict:
+            if Key.get("snapshot_key") == "position_scan_snapshot_v1":
+                return {"Item": {"snapshot_key": "position_scan_snapshot_v1", "blob": blob}}
+            return {}
+
+    store = DynamoPositionScanStore("PositionScanSnapshot")
+    store._table = _FakeTable()  # noqa: SLF001
+    got = store.get()
+    assert got is not None
+    assert [c.symbol for c in got.candidates] == ["AAA", "BBB"]
 
 
 def test_in_memory_claim_refresh_is_single_flight() -> None:
