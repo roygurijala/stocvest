@@ -259,6 +259,13 @@ export function formatGemListDelta(changes: readonly GemListChange[] | null | un
   return parts.length ? `Since last scan: ${parts.join("; ")}.` : null;
 }
 
+/** Must match ``POSITION_SCAN_ENGINE_VERSION`` in ``position_scan.py``. */
+export const POSITION_SCAN_LIVE_ENGINE_VERSION = "growth_led_3";
+
+export function positionScanEngineIsStale(engineVersion: string | null | undefined): boolean {
+  return (engineVersion ?? "") !== POSITION_SCAN_LIVE_ENGINE_VERSION;
+}
+
 /** True while the background universe compose is still running (not a hard fail). */
 export function isPositionScanPending(response: PositionCandidatesResponse | null): boolean {
   return Boolean(response?.pending && response.candidates.length === 0);

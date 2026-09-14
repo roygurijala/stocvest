@@ -187,6 +187,38 @@ def test_refresh_inlines_when_not_in_aws(monkeypatch: pytest.MonkeyPatch) -> Non
     assert [c["symbol"] for c in body["candidates"]] == ["HIGH"]
 
 
+def test_stale_engine_version_kicks_and_keeps_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A leftover growth_led_2 blob must start a rescore; keep serving it until the new one lands."""
+    reset_position_scan_store_for_tests(InMemoryPositionScanStore())
+    snap = PositionScanSnapshot(
+        generated_at=datetime(2026, 9, 14, 11, 0, tzinfo=timezone.utc),
+        universe_size=25,
+        engine_version="growth_led_2",
+        candidates=[
+            _candidate("XOM", "gem", 80.0),
+            _candidate("SOFT", "strong", 70.0),
+        ],
+    )
+    monkeypatch.setattr(
+        "stocvest.api.services.position_scan.get_position_scan_snapshot_sync",
+        lambda *, force=False: (snap, True),
+    )
+    monkeypatch.setenv("AWS_LAMBDA_FUNCTION_NAME", "stocvest-development-api-signals")
+    kicks = {"n": 0}
+
+    def _kick() -> bool:
+        kicks["n"] += 1
+        return True
+
+    monkeypatch.setattr("stocvest.api.handlers.signals.trigger_async_position_scan_refresh", _kick)
+    res = position_candidates_handler(_event(qs={"tier": "all"}), {})
+    body = json.loads(res["body"])
+    assert body.get("pending") is not True
+    assert [c["symbol"] for c in body["candidates"]] == ["XOM", "SOFT"]
+    assert body["engine_version"] == "growth_led_2"
+    assert kicks["n"] == 1
+
+
 def test_refresh_keeps_snapshot_and_kicks(monkeypatch: pytest.MonkeyPatch) -> None:
     store = InMemoryPositionScanStore()
     reset_position_scan_store_for_tests(store)
