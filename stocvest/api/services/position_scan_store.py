@@ -1,17 +1,12 @@
-"""Cross-instance persistence for the weekly Position scan snapshot — ADR-004 POS-D15.
+"""Cross-instance persistence for the Position scan snapshot — ADR-004 POS-D15.
 
-The weekly batch (one Lambda invocation) scans the expanded universe and persists a single
-snapshot blob; every other Lambda instance (invest page / candidates API / assistant gem
-discovery) reads that blob so the gem list is warm without recomputing.
+One stable Dynamo item holds the last successful list. Engine/gate revisions live
+inside the blob (``PositionScanSnapshot.engine_version``), not in the key. Bumping
+the key to cache-bust (v1 → v2) orphaned Invest when the next compose failed.
 
-Two implementations behind a tiny :class:`PositionScanStore` protocol:
-  * :class:`InMemoryPositionScanStore` — default; process-local (used in tests and as a safe
-    no-persistence fallback).
-  * :class:`DynamoPositionScanStore` — active only when ``STOCVEST_POSITION_SCAN_TABLE`` is set;
-    stores the JSON blob on a single fixed key. Any boto/parse failure degrades to ``None``.
-
-The factory returns the Dynamo store when a table is configured, else the in-memory store, so
-callers never branch on environment.
+On read, a leftover v1/v2 item is copied onto the stable key once (migration),
+then ignored. Writes always go to the stable key. Refresh must overwrite on
+success — never delete the last list first.
 """
 
 from __future__ import annotations
@@ -20,17 +15,20 @@ import json
 import time
 from typing import Any, Protocol
 
-from stocvest.api.services.position_scan import PositionScanSnapshot
+from stocvest.api.services.position_scan import PositionScanSnapshot, PositionScanUniverse
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
-# v2 is the growth-led snapshot. v1 is read as a last-resort so a failed
-# mid-cap compose cannot hide the last successful 25-name board.
-_SNAPSHOT_KEY = "position_scan_snapshot_v2"
-_LEGACY_SNAPSHOT_KEY = "position_scan_snapshot_v1"
-_LOCK_KEY = "position_scan_refresh_lock_v2"
+_SNAPSHOT_KEY = "position_scan_snapshot"
+_UNIVERSE_KEY = "position_scan_universe"
+_LOCK_KEY = "position_scan_refresh_lock"
+# Pre-stable keys. Read-only hydrate, then rewrite onto ``_SNAPSHOT_KEY``.
+_MIGRATION_KEYS: tuple[str, ...] = (
+    "position_scan_snapshot_v2",
+    "position_scan_snapshot_v1",
+)
 
 
 class PositionScanStore(Protocol):
@@ -38,10 +36,12 @@ class PositionScanStore(Protocol):
     def put(self, snapshot: PositionScanSnapshot) -> bool: ...
     def invalidate(self) -> bool: ...
     def try_claim_refresh(self, *, stale_after_seconds: int = 180) -> bool: ...
+    def get_universe(self) -> PositionScanUniverse | None: ...
+    def put_universe(self, universe: PositionScanUniverse) -> bool: ...
 
 
 def invalidate_position_scan_snapshot() -> bool:
-    """Drop the persisted + in-process snapshot so the next GET is pending."""
+    """Drop the in-process cache. Tests / ops only — refresh must not delete Dynamo."""
     from stocvest.api.services.position_scan import clear_position_scan_snapshot_cache
 
     clear_position_scan_snapshot_cache()
@@ -64,6 +64,7 @@ class InMemoryPositionScanStore:
 
     def __init__(self) -> None:
         self._snapshot: PositionScanSnapshot | None = None
+        self._universe: PositionScanUniverse | None = None
         self._claimed_at: float = 0.0
 
     def get(self) -> PositionScanSnapshot | None:
@@ -82,6 +83,13 @@ class InMemoryPositionScanStore:
         if self._claimed_at and (now - self._claimed_at) < max(0, stale_after_seconds):
             return False
         self._claimed_at = now
+        return True
+
+    def get_universe(self) -> PositionScanUniverse | None:
+        return self._universe
+
+    def put_universe(self, universe: PositionScanUniverse) -> bool:
+        self._universe = universe
         return True
 
 
@@ -103,7 +111,13 @@ class DynamoPositionScanStore:
         snap = self._get_key(_SNAPSHOT_KEY)
         if snap is not None:
             return snap
-        return self._get_key(_LEGACY_SNAPSHOT_KEY)
+        for key in _MIGRATION_KEYS:
+            snap = self._get_key(key)
+            if snap is None:
+                continue
+            self.put(snap)
+            return snap
+        return None
 
     def _get_key(self, key: str) -> PositionScanSnapshot | None:
         try:
@@ -165,6 +179,35 @@ class DynamoPositionScanStore:
             if code == "ConditionalCheckFailedException" or "ConditionalCheckFailed" in type(exc).__name__:
                 return False
             _LOG.warning("position scan store claim failed: %s", type(exc).__name__)
+            return False
+
+    def get_universe(self) -> PositionScanUniverse | None:
+        try:
+            resp = self._get_table().get_item(Key={"snapshot_key": _UNIVERSE_KEY})
+        except Exception as exc:  # noqa: BLE001 — read is best-effort
+            _LOG.warning("position scan universe get failed: %s", type(exc).__name__)
+            return None
+        item = resp.get("Item") if isinstance(resp, dict) else None
+        if not isinstance(item, dict):
+            return None
+        raw = item.get("blob")
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw) if isinstance(raw, str) else raw
+        except (ValueError, TypeError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        return PositionScanUniverse.from_store_dict(data)
+
+    def put_universe(self, universe: PositionScanUniverse) -> bool:
+        try:
+            blob = json.dumps(universe.to_store_dict(), separators=(",", ":"))
+            self._get_table().put_item(Item={"snapshot_key": _UNIVERSE_KEY, "blob": blob})
+            return True
+        except Exception as exc:  # noqa: BLE001 — persistence is best-effort
+            _LOG.warning("position scan universe put failed: %s", type(exc).__name__)
             return False
 
 

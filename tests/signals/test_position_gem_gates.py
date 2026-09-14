@@ -18,6 +18,8 @@ from stocvest.signals.position_gem_gates import (
     evaluate_gem_gates,
     extract_candidate_features,
     failing_gates,
+    has_catalyst,
+    has_sector_tailwind,
     min_pillar_score,
     resolve_gem_action,
     resolve_gem_tier,
@@ -190,7 +192,8 @@ def test_sharp_breakdown_blocks_gem() -> None:
     assert resolve_gem_tier(f, gates) != TIER_GEM
 
 
-def test_news_tailwind_qualifies_gem_without_sector() -> None:
+def test_news_is_catalyst_not_gem_membership() -> None:
+    """A bullish headline must not open the gem door when sector is not bullish."""
     body = _discovery_body()
     body["layers"][2]["verdict"] = "neutral"
     body["layers"].append({"layer": "news", "score": 70, "verdict": "bullish", "status": "available", "chips": []})
@@ -198,7 +201,9 @@ def test_news_tailwind_qualifies_gem_without_sector() -> None:
     gates = evaluate_gem_gates(f)
     assert f.news_verdict == "bullish"
     assert f.sector_verdict == "neutral"
-    assert resolve_gem_tier(f, gates) == TIER_GEM
+    assert has_catalyst(f) is True
+    assert has_sector_tailwind(f) is False
+    assert resolve_gem_tier(f, gates) != TIER_GEM
 
 
 def test_no_growth_blocks_gem_even_with_tailwind() -> None:

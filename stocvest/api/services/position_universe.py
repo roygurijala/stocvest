@@ -33,8 +33,8 @@ DEFAULT_MAX_UNIVERSE = 500
 # Same large-cap floor as frontend ``earningsImpactLevel`` medium band.
 LARGE_CAP_USD = 20_000_000_000.0
 # Live async refresh budget (signals Lambda 180s, concurrency 6) + curated mega slice.
-# 40 mid-caps plus news pagination regularly exhausted memory before persist.
-LIVE_DISCOVERY_MAX = 15
+# Scan-lite skips news pagination, so the pond can be 40 mid-caps again.
+LIVE_DISCOVERY_MAX = 40
 # Weekly batch can walk more mid-caps; still excludes mega from the hunt.
 BATCH_DISCOVERY_MAX = 200
 # FMP sorts by market cap desc. A small limit is the 120 largest names — no mid-caps.

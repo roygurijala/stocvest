@@ -11,6 +11,7 @@ import {
   emptyPositionGemCopy,
   isPositionScanPending,
   isPositionScanUnavailable,
+  formatGemListDelta,
   parsePositionCandidates,
   parsePositionGemFilterFromParams,
   positionActionColor,
@@ -56,13 +57,33 @@ describe("position-ranked-home-present", () => {
       count: 2,
       universe_size: 25,
       scan_generated_at: "2026-09-08T00:00:00+00:00",
-      cached: true
+      cached: true,
+      engine_version: "growth_led_2",
+      list_delta: [
+        { symbol: "rklb", change: "entered", reason: "added to hunt pond" },
+        { symbol: "XYZ", change: "exited", reason: "F2 no longer bullish" }
+      ]
     });
     expect(parsed).not.toBeNull();
     expect(parsed?.candidates.map((c) => c.symbol)).toEqual(["AAPL", "MSFT"]);
     expect(parsed?.candidates[1].tier).toBe("strong");
     expect(parsed?.universeSize).toBe(25);
     expect(parsed?.cached).toBe(true);
+    expect(parsed?.engineVersion).toBe("growth_led_2");
+    expect(parsed?.listDelta).toEqual([
+      { symbol: "RKLB", change: "entered", reason: "added to hunt pond" },
+      { symbol: "XYZ", change: "exited", reason: "F2 no longer bullish" }
+    ]);
+  });
+
+  it("formats entered/exited gems into a since-last-scan line", () => {
+    expect(formatGemListDelta([])).toBeNull();
+    expect(
+      formatGemListDelta([
+        { symbol: "RKLB", change: "entered", reason: "now hygiene + F2 + sector" },
+        { symbol: "XYZ", change: "exited", reason: "F2 no longer bullish" }
+      ])
+    ).toBe("Since last scan: +RKLB (now hygiene + F2 + sector); −XYZ (F2 no longer bullish).");
   });
 
   it("returns null for non-object input", () => {
@@ -129,6 +150,11 @@ describe("position-ranked-home-present", () => {
     expect(rows[0].tierLabel).toBe("Gem candidate");
     expect(rows[0].fundamentalsLabel).toBe("Bullish");
     expect(rows[0].weakestLabel).toBe("F4 · Valuation");
+    expect(rows[0].catalyst).toBe(false);
+    const catalysed = parsePositionCandidates({
+      candidates: [apiRow({ catalyst: true })]
+    })!.candidates;
+    expect(buildPositionGemDisplayRows(catalysed)[0].catalyst).toBe(true);
   });
 
   it("shows an em dash when no weakest pillar is present", () => {
