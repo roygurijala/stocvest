@@ -12,11 +12,13 @@ Cost-basis P/L, target-weight concentration, and tax-lot holding period are laye
 as **secondary** context: they refine sizing (how much to add / trim) and add flags,
 but never flip the desk's directional read.
 
-No indicator math or thresholds are invented here (see .cursorrules §8):
+No indicator math is invented here (see .cursorrules §8):
 - verdict + stance come straight from the composite engine,
 - the "overweight" test uses the *effective* target — the user's own
-  ``target_position_pct`` when set, else a personal-mode equal-weight default
-  ``100 / max(N, 8)`` computed at review time (never written back to settings),
+  ``target_position_pct`` when set, else personal-mode **conviction sleeves**
+  (core 10–12 / standard 6–9 / vehicle 4–6 / exit 0–3; single-name max 15)
+  mapped from verdict, stance, structure-broken, and fund-vehicle (never written
+  back to settings; operator-agreed policy, not ticker weights),
 - the "long-term lot" test uses the model's existing >365-day rule.
 
 Everything network-touching is dependency-injected (``compose_fn``, ``snapshot_fn``,
@@ -35,6 +37,13 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Awaitable, Callable
 
+from stocvest.api.services.portfolio_sleeve_policy import (
+    SLEEVE_POLICY_SUMMARY,
+    SleevePolicy,
+    resolve_sleeve_policy,
+    scale_sleeve_policies,
+    weight_vs_sleeve,
+)
 from stocvest.models.portfolio_holding import PortfolioHolding, PortfolioSettings
 from stocvest.signals.position_holder_read import build_position_holder_read
 from stocvest.utils.logging import get_logger
@@ -46,16 +55,8 @@ _REVIEW_DISCLAIMER = (
     "investment advice. Signal data only; you are responsible for your own decisions."
 )
 
-# Header one-liner: explains the already-shipped stance overlay (amounts unchanged).
-_SIZING_RULE = (
-    "If the verdict is Sell, reduce the position even when it is below target. "
-    "If Hold/Neutral and caution, do not add toward target. "
-    "Otherwise move toward the target."
-)
-
-# Personal-mode equal-weight floor: never thinner than an 8-name book (12.5%).
-# User-agreed; do not invent a different denominator.
-_PERSONAL_DEFAULT_TARGET_FLOOR_N = 8
+# Header one-liner: sleeve bands + the already-shipped stance overlay.
+_SIZING_RULE = SLEEVE_POLICY_SUMMARY
 
 # Dependency-injection function types.
 ComposeFn = Callable[[str], Awaitable[dict[str, Any]]]
@@ -112,27 +113,24 @@ def resolve_current_price(snap: Any) -> float | None:
     return None
 
 
-def default_personal_target_pct(holding_count: int) -> float:
-    """Equal-weight default: ``100 / max(N, 8)``. 11 names → ~9.09%; empty book → 12.5%."""
-    n = max(int(holding_count), _PERSONAL_DEFAULT_TARGET_FLOOR_N)
-    return round(100.0 / n, 4)
-
-
 def resolve_effective_target_pct(
     *,
     explicit_target_pct: float | None,
     holding_count: int,
     advice_enabled: bool,
 ) -> tuple[float | None, bool]:
-    """``(effective_pct, used_default)``. Explicit settings win; default only in personal mode.
+    """``(explicit_pct_or_none, uses_default_policy)``.
 
-    Product mode (advice off) + null target → ``(None, False)`` — no amounts.
-    Never persists the default; callers display it as an *effective* review-time target.
+    Explicit settings win (one point target for every name). Personal mode + null
+    target → ``(None, True)`` meaning **per-holding conviction sleeves** (not a
+    single equal-weight pct). Product mode + null → ``(None, False)`` — no amounts.
+    ``holding_count`` is accepted for call-site compatibility; sleeves do not use it.
     """
+    _ = holding_count
     if explicit_target_pct is not None:
         return float(explicit_target_pct), False
     if advice_enabled:
-        return default_personal_target_pct(holding_count), True
+        return None, True
     return None, False
 
 
@@ -261,60 +259,87 @@ def sizing_reason(
     suggested_reduce: float | None,
     portfolio_value: float,
     stance: str | None = None,
+    sleeve: SleevePolicy | None = None,
 ) -> str:
     """Short deterministic sentence for why add/reduce is (or is not) set.
 
-    Does not change amounts — copy only. Uses the effective target (default or explicit).
+    Does not change amounts — copy only. Sleeve bands: add toward the floor,
+    trim to the high. Explicit point target uses the old single-number copy.
     """
     has_add = suggested_add is not None and suggested_add > 0
     has_reduce = suggested_reduce is not None and suggested_reduce > 0
+    add_edge = sleeve.low_pct if sleeve is not None else target_pct
+    trim_edge = sleeve.high_pct if sleeve is not None else target_pct
     under = (
-        target_pct is not None
+        add_edge is not None
         and weight_pct is not None
-        and weight_pct < target_pct
+        and weight_pct < add_edge
     )
     over = (
-        target_pct is not None
+        trim_edge is not None
         and weight_pct is not None
-        and weight_pct > target_pct
+        and weight_pct > trim_edge
+    )
+    in_band = (
+        sleeve is not None
+        and weight_pct is not None
+        and sleeve.low_pct <= weight_pct <= sleeve.high_pct
     )
     caution = (stance or "").strip().lower() == "caution"
+    target_label = (
+        f"the {sleeve.label} {sleeve.band_phrase()} sleeve"
+        if sleeve is not None
+        else (f"the {_fmt_target_pct(target_pct)} target" if target_pct is not None else "the target")
+    )
+    floor_label = (
+        f"the {sleeve.label} {_fmt_target_pct(sleeve.low_pct)} sleeve floor"
+        if sleeve is not None
+        else (f"the {_fmt_target_pct(target_pct)} target" if target_pct is not None else "the target")
+    )
+    high_label = (
+        f"the {sleeve.label} {_fmt_target_pct(sleeve.high_pct)} sleeve"
+        if sleeve is not None
+        else (f"the {_fmt_target_pct(target_pct)} target" if target_pct is not None else "the target")
+    )
 
-    if action == ReviewAction.SELL and has_reduce and target_pct is not None and under:
+    if action == ReviewAction.SELL and has_reduce and under:
         return (
             "Sell overrides the target: reducing the full position even though "
-            f"weight is below the {_fmt_target_pct(target_pct)} target."
+            f"weight is below {target_label}."
         )
-    if action == ReviewAction.HOLD and under and not has_add and caution and target_pct is not None:
+    if action == ReviewAction.HOLD and under and not has_add and caution:
         gap = unfilled_gap_dollars(
-            target_pct=target_pct,
+            target_pct=add_edge,
             weight_pct=weight_pct,
             portfolio_value=portfolio_value,
         )
         if gap is not None:
+            gap_noun = "floor" if sleeve is not None else "target"
             return (
-                f"Hold + caution: not adding toward the {_fmt_target_pct(target_pct)} "
-                f"target (thin R/R). Gap to target would be {_fmt_gap_dollars(gap)}."
+                f"Hold + caution: not adding toward {floor_label} "
+                f"(thin R/R). Gap to {gap_noun} would be {_fmt_gap_dollars(gap)}."
             )
-    if (
-        action in (ReviewAction.HOLD, ReviewAction.TRIM)
-        and over
-        and has_reduce
-        and target_pct is not None
-    ):
-        return f"Over the {_fmt_target_pct(target_pct)} target — trimming the excess only."
-    if action == ReviewAction.BUY_MORE and has_add and target_pct is not None:
-        return (
-            f"Under the {_fmt_target_pct(target_pct)} target — adding the gap (cash-capped)."
-        )
+    if action in (ReviewAction.HOLD, ReviewAction.TRIM) and over and has_reduce:
+        return f"Over {high_label} — trimming the excess only."
+    if action == ReviewAction.BUY_MORE and has_add:
+        return f"Under {floor_label} — adding the gap (cash-capped)."
+    if in_band and not has_add and not has_reduce:
+        return f"Inside {target_label}."
     if target_pct is not None and not has_add and not has_reduce and not under and not over:
         return f"At the {_fmt_target_pct(target_pct)} target"
     return "No size change."
 
 
-def _target_weight_phrase(target: float, *, used_default: bool) -> str:
+def _target_weight_phrase(
+    target: float,
+    *,
+    used_default: bool,
+    sleeve: SleevePolicy | None = None,
+) -> str:
+    if sleeve is not None:
+        return f"the {sleeve.label} {sleeve.band_phrase()} sleeve"
     if used_default:
-        return f"the default ~{target:.1f}% target (8-name floor)"
+        return f"the default ~{target:.1f}% target"
     return f"your {target:.1f}% target"
 
 
@@ -549,6 +574,9 @@ class HoldingReview:
     suggested_reduce_amount: float | None = None
     sizing_reason: str | None = None
     effective_target_pct: float | None = None
+    sleeve: str | None = None
+    sleeve_low_pct: float | None = None
+    sleeve_high_pct: float | None = None
     tax_lot_hint: str | None = None
     long_term_lots: int = 0
     short_term_lots: int = 0
@@ -576,6 +604,9 @@ class HoldingReview:
             "suggestedReduceAmount": self.suggested_reduce_amount,
             "sizingReason": self.sizing_reason,
             "effectiveTargetPct": self.effective_target_pct,
+            "sleeve": self.sleeve,
+            "sleeveLowPct": self.sleeve_low_pct,
+            "sleeveHighPct": self.sleeve_high_pct,
             "taxLotHint": self.tax_lot_hint,
             "longTermLots": self.long_term_lots,
             "shortTermLots": self.short_term_lots,
@@ -652,6 +683,7 @@ class PortfolioReview:
     fully_priced: bool = True
     effective_target_pct: float | None = None
     target_is_default: bool = False
+    sizing_policy: str | None = None
 
     def to_api(self) -> dict[str, Any]:
         return {
@@ -670,6 +702,7 @@ class PortfolioReview:
             "fullyPriced": self.fully_priced,
             "effectiveTargetPct": self.effective_target_pct,
             "targetIsDefault": self.target_is_default,
+            "sizingPolicy": self.sizing_policy,
             "sizingRule": _SIZING_RULE,
             "disclaimer": _REVIEW_DISCLAIMER,
         }
@@ -721,15 +754,19 @@ async def build_portfolio_review(
         advice_enabled=advice_enabled,
     )
 
+    sizing_policy = (
+        "explicit" if target is not None else ("sleeve" if target_is_default else None)
+    )
+
     if not holdings:
-        # Empty book: still expose the 8-name-floor default when personal mode is on,
-        # but skip amounts (nothing to size).
+        # Empty book: sleeve policy is named but there is nothing to size.
         return PortfolioReview(
             generated_at=datetime.now(timezone.utc),
             cash_balance=settings.cash_balance,
             total_market_value=settings.cash_balance,
             effective_target_pct=target,
             target_is_default=target_is_default,
+            sizing_policy=sizing_policy,
         )
 
     symbols = [h.symbol for h in holdings]
@@ -761,31 +798,80 @@ async def build_portfolio_review(
 
     total_value = invested_value + settings.cash_balance
 
-    # 3) Per-holding review rows.
-    reviews: list[HoldingReview] = []
-    concentration: list[ConcentrationFlag] = []
-    remaining_cash = settings.cash_balance  # drawn down across BUY_MORE rows (no over-allocation)
+    # 3) Resolve sleeves (personal default) then size. Explicit target stays one number.
+    draft_rows: list[dict[str, Any]] = []
+    raw_sleeves: list[SleevePolicy] = []
     for (h, price, mkt_value), body in zip(priced, bodies):
         body = body if isinstance(body, dict) else {}
         status = str(body.get("status") or "").strip().lower()
         verdict = str(body.get("signal_summary") or body.get("verdict") or "").strip().lower()
         confidence = _num(body.get("signal_strength"))
-        # Holder-read is owner-oriented management guidance (ship-dark elsewhere) — only
-        # surface it when advice is enabled, matching the deep-dive's gating.
         holder_read = build_position_holder_read(body) if (body and advice_enabled) else None
         stance = str((holder_read or {}).get("stance") or "").strip().lower() or None
-
-        # Signal-first action — suppressed to an informational REVIEW when advice is off.
+        is_vehicle = body.get("is_fund_vehicle") is True
+        structure_broken = body.get("signal_structure_broken") is True
         action = (
             derive_action(verdict=verdict, holder_stance=stance, status=status)
             if advice_enabled
             else ReviewAction.REVIEW
         )
+        row_sleeve = (
+            resolve_sleeve_policy(
+                is_fund_vehicle=is_vehicle,
+                verdict=verdict,
+                stance=stance,
+                structure_broken=structure_broken,
+            )
+            if sizing_policy == "sleeve"
+            else None
+        )
+        raw_sleeves.append(row_sleeve or resolve_sleeve_policy())
+        draft_rows.append(
+            {
+                "h": h,
+                "price": price,
+                "mkt_value": mkt_value,
+                "body": body,
+                "status": status,
+                "verdict": verdict,
+                "confidence": confidence,
+                "holder_read": holder_read,
+                "stance": stance,
+                "is_vehicle": is_vehicle,
+                "action": action,
+            }
+        )
+    scaled_sleeves = (
+        scale_sleeve_policies(raw_sleeves) if sizing_policy == "sleeve" else [None] * len(draft_rows)
+    )
+
+    reviews: list[HoldingReview] = []
+    concentration: list[ConcentrationFlag] = []
+    remaining_cash = settings.cash_balance  # drawn down across BUY_MORE rows (no over-allocation)
+    for draft, row_sleeve in zip(draft_rows, scaled_sleeves):
+        h = draft["h"]
+        price = draft["price"]
+        mkt_value = draft["mkt_value"]
+        body = draft["body"]
+        status = draft["status"]
+        verdict = draft["verdict"]
+        confidence = draft["confidence"]
+        holder_read = draft["holder_read"]
+        stance = draft["stance"]
+        is_vehicle = draft["is_vehicle"]
+        action = draft["action"]
 
         weight_pct = round(mkt_value / total_value * 100.0, 2) if total_value > 0 else None
-        overweight = bool(target is not None and weight_pct is not None and weight_pct > target)
+        add_target = row_sleeve.low_pct if row_sleeve is not None else target
+        trim_target = row_sleeve.high_pct if row_sleeve is not None else target
+        row_target = trim_target if trim_target is not None else add_target
+        if row_sleeve is not None:
+            overweight, _under_floor = weight_vs_sleeve(weight_pct, row_sleeve)
+        else:
+            overweight = bool(
+                row_target is not None and weight_pct is not None and weight_pct > row_target
+            )
 
-        # P/L (null, never fake $0, when unpriced).
         avg = h.average_cost
         if price is not None and avg is not None:
             unrealized_pl = round((price - avg) * h.total_quantity, 2)
@@ -801,17 +887,18 @@ async def build_portfolio_review(
         else:
             rationale = _rationale_lines(
                 action=action, verdict=verdict, stance=stance, status=status,
-                overweight=overweight, unrealized_pl_pct=unrealized_pl_pct, target=target,
+                overweight=overweight, unrealized_pl_pct=unrealized_pl_pct, target=row_target,
                 target_is_default=target_is_default,
-                is_fund_vehicle=body.get("is_fund_vehicle") is True,
+                is_fund_vehicle=is_vehicle,
                 rs_vs_spy_6m_pct=_rs_vs_spy_6m_from_body(body),
+                sleeve=row_sleeve,
             )
 
         add_amt: float | None = None
         reduce_amt: float | None = None
         if advice_enabled:
-            add_gap = suggested_add_amount(mkt_value, total_value, target, remaining_cash)
-            reduce_excess = suggested_reduce_amount(mkt_value, total_value, target)
+            add_gap = suggested_add_amount(mkt_value, total_value, add_target, remaining_cash)
+            reduce_excess = suggested_reduce_amount(mkt_value, total_value, trim_target)
             action, add_amt, reduce_amt, sizing_note = apply_stance_sizing(
                 action=action,
                 overweight=overweight,
@@ -827,12 +914,13 @@ async def build_portfolio_review(
 
         row_sizing_reason = sizing_reason(
             action=action,
-            target_pct=target,
+            target_pct=row_target,
             weight_pct=weight_pct,
             suggested_add=add_amt,
             suggested_reduce=reduce_amt,
             portfolio_value=total_value,
             stance=stance,
+            sleeve=row_sleeve,
         )
 
         if price is None:
@@ -843,13 +931,15 @@ async def build_portfolio_review(
 
         hint, lt, st = tax_lot_hint(h, action, as_of=as_of)
 
-        if advice_enabled and overweight and weight_pct is not None and target is not None:
-            phrase = _target_weight_phrase(target, used_default=target_is_default)
+        if advice_enabled and overweight and weight_pct is not None and row_target is not None:
+            phrase = _target_weight_phrase(
+                row_target, used_default=target_is_default, sleeve=row_sleeve
+            )
             concentration.append(
                 ConcentrationFlag(
                     symbol=h.symbol,
                     weight_pct=weight_pct,
-                    target_pct=target,
+                    target_pct=row_target,
                     message=(
                         f"{h.symbol} is {weight_pct:.1f}% of the portfolio, above {phrase} "
                         "— consider trimming to manage single-name risk."
@@ -875,12 +965,15 @@ async def build_portfolio_review(
                 suggested_add_amount=add_amt,
                 suggested_reduce_amount=reduce_amt,
                 sizing_reason=row_sizing_reason,
-                effective_target_pct=target,
+                effective_target_pct=row_target,
+                sleeve=row_sleeve.label if row_sleeve is not None else None,
+                sleeve_low_pct=row_sleeve.low_pct if row_sleeve is not None else None,
+                sleeve_high_pct=row_sleeve.high_pct if row_sleeve is not None else None,
                 tax_lot_hint=hint,
                 long_term_lots=lt,
                 short_term_lots=st,
                 holder_read=holder_read,
-                is_fund_vehicle=body.get("is_fund_vehicle") is True,
+                is_fund_vehicle=is_vehicle,
             )
         )
 
@@ -929,6 +1022,7 @@ async def build_portfolio_review(
         fully_priced=fully_priced,
         effective_target_pct=target,
         target_is_default=target_is_default,
+        sizing_policy=sizing_policy,
     )
 
 
@@ -960,6 +1054,7 @@ def _rationale_lines(
     target_is_default: bool = False,
     is_fund_vehicle: bool = False,
     rs_vs_spy_6m_pct: float | None = None,
+    sleeve: SleevePolicy | None = None,
 ) -> list[str]:
     lines: list[str] = []
     if action == ReviewAction.REVIEW:
@@ -977,8 +1072,11 @@ def _rationale_lines(
     if stance:
         lines.append(f"Holder read: {stance}.")
     if overweight and target is not None:
-        phrase = _target_weight_phrase(target, used_default=target_is_default)
-        lines.append(f"Position is above {phrase} weight." if not target_is_default else f"Position is above {phrase}.")
+        phrase = _target_weight_phrase(target, used_default=target_is_default, sleeve=sleeve)
+        lines.append(
+            f"Position is above {phrase} weight." if sleeve is None and not target_is_default
+            else f"Position is above {phrase}."
+        )
     if unrealized_pl_pct is not None:
         direction = "up" if unrealized_pl_pct >= 0 else "down"
         lines.append(
@@ -1149,6 +1247,8 @@ def _default_scan() -> list[Any]:
     from stocvest.api.services.position_scan import get_position_scan_snapshot_sync
 
     snapshot, _cached = get_position_scan_snapshot_sync()
+    if snapshot is None:
+        return []
     return list(snapshot.candidates)
 
 

@@ -146,7 +146,7 @@ describe("PortfolioReviewPanel", () => {
     expect(screen.queryByTestId("review-row-detail-AAPL")).not.toBeInTheDocument();
     expect(screen.queryByTestId("review-default-target")).not.toBeInTheDocument();
     expect(screen.getByTestId("review-sizing-rule")).toHaveTextContent(
-      /If the verdict is Sell, reduce the position even when it is below target/
+      /Sell still reduces the full position/
     );
   });
 
@@ -176,22 +176,25 @@ describe("PortfolioReviewPanel", () => {
       /Sell overrides the target: reducing the full position even though weight is below the ~9\.1% target/
     );
     expect(screen.getByTestId("review-sizing-rule")).toHaveTextContent(
-      /If Hold\/Neutral and caution, do not add toward target/
+      /Hold \+ caution does not add/
     );
   });
 
-  test("shows a muted default-target line when the review uses the personal default", async () => {
+  test("shows a muted sleeve-policy line when the review uses conviction sleeves", async () => {
     const review = sampleReview();
-    review.effectiveTargetPct = 9.0909;
+    review.effectiveTargetPct = null;
     review.targetIsDefault = true;
+    review.sizingPolicy = "sleeve";
     fetchMock.mockResolvedValueOnce({ ok: true, review });
     wrap(<PortfolioReviewPanel />);
 
     fireEvent.click(screen.getByTestId("run-review"));
 
     await waitFor(() => expect(screen.getByTestId("review-default-target")).toBeInTheDocument());
-    expect(screen.getByText(/Using default ~9.1% target \(8-name floor\)/)).toBeInTheDocument();
-    expect(screen.getByText(/changeable in Portfolio settings/)).toBeInTheDocument();
+    expect(screen.getByTestId("review-default-target")).toHaveTextContent(
+      /Using conviction sleeves/
+    );
+    expect(screen.getByTestId("review-default-target")).toHaveTextContent(/core 10–12%/);
   });
 
   test("shows an error when the review cannot be fetched", async () => {

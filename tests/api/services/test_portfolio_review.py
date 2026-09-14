@@ -16,7 +16,6 @@ from stocvest.api.services.portfolio_review import (
     build_owner_position_context,
     build_portfolio_review,
     compute_benchmark_comparison,
-    default_personal_target_pct,
     derive_action,
     resolve_current_price,
     resolve_effective_target_pct,
@@ -25,6 +24,10 @@ from stocvest.api.services.portfolio_review import (
     suggested_reduce_amount,
     tax_lot_hint,
     unfilled_gap_dollars,
+)
+from stocvest.api.services.portfolio_sleeve_policy import (
+    PositionSleeve,
+    sleeve_policy_for,
 )
 from stocvest.models.portfolio_holding import (
     HoldingLot,
@@ -118,15 +121,6 @@ def test_suggested_reduce_amount_only_when_overweight():
     assert suggested_reduce_amount(1200.0, 2200.0, None) is None
 
 
-def test_default_personal_target_pct_uses_eight_name_floor():
-    assert default_personal_target_pct(11) == 9.0909
-    assert default_personal_target_pct(0) == 12.5
-    assert default_personal_target_pct(1) == 12.5
-    assert default_personal_target_pct(3) == 12.5
-    assert default_personal_target_pct(8) == 12.5
-    assert default_personal_target_pct(10) == 10.0
-
-
 def test_resolve_effective_target_explicit_wins_over_default():
     pct, used_default = resolve_effective_target_pct(
         explicit_target_pct=5.0, holding_count=11, advice_enabled=True
@@ -134,11 +128,11 @@ def test_resolve_effective_target_explicit_wins_over_default():
     assert pct == 5.0 and used_default is False
 
 
-def test_resolve_effective_target_personal_default_when_null():
+def test_resolve_effective_target_personal_default_is_sleeve_mode():
     pct, used_default = resolve_effective_target_pct(
         explicit_target_pct=None, holding_count=11, advice_enabled=True
     )
-    assert pct == 9.0909 and used_default is True
+    assert pct is None and used_default is True
 
 
 def test_resolve_effective_target_product_mode_null_is_none():
@@ -318,6 +312,20 @@ def test_sizing_reason_at_target_or_no_change():
     assert no_change == "No size change."
 
 
+def test_sizing_reason_in_band_core_sleeve():
+    reason = sizing_reason(
+        action=ReviewAction.HOLD,
+        target_pct=12.0,
+        weight_pct=11.0,
+        suggested_add=None,
+        suggested_reduce=None,
+        portfolio_value=168000.0,
+        stance="constructive",
+        sleeve=sleeve_policy_for(PositionSleeve.CORE),
+    )
+    assert reason == "Inside the core 10–12% sleeve."
+
+
 # ── tax-lot hint ─────────────────────────────────────────────────────────────
 
 def test_tax_lot_hint_mixed_lots_on_sell():
@@ -495,9 +503,10 @@ def test_build_portfolio_review_empty_portfolio():
     assert review.holdings == []
     assert review.total_market_value == 1000.0
     assert review.cash_balance == 1000.0
-    # Empty book: 8-name floor (12.5%) is exposed; nothing to size.
-    assert review.effective_target_pct == 12.5
+    # Empty book: sleeve policy is named; no single equal-weight pct.
+    assert review.effective_target_pct is None
     assert review.target_is_default is True
+    assert review.sizing_policy == "sleeve"
 
 
 def test_build_portfolio_review_advice_disabled_is_informational_only():
@@ -680,8 +689,8 @@ def _prices_and_compose(bodies: dict, prices: dict):
     return snap_fn, compose_fn, spy_bars_fn
 
 
-def test_personal_default_target_eleven_names_is_nine_pct():
-    """11 names → 100/11 ≈ 9.09%; amounts use that default, not a silent settings write."""
+def test_personal_default_uses_standard_sleeve_not_equal_weight():
+    """11 equal neutral names → standard 6–9% sleeve, not 100/11 ≈ 9.09%."""
     holdings = tuple(_holding(f"N{i:02d}", [(1, 10.0, "2024-01-02")]) for i in range(11))
     settings = PortfolioSettings(cash_balance=0.0)  # null target
     prices = {h.symbol: _Snap(last_trade_price=100.0) for h in holdings}
@@ -701,13 +710,148 @@ def test_personal_default_target_eleven_names_is_nine_pct():
             advice_enabled=True,
         )
     )
-    assert review.effective_target_pct == 9.0909
+    assert review.effective_target_pct is None
     assert review.target_is_default is True
+    assert review.sizing_policy == "sleeve"
     assert settings.target_position_pct is None  # never persisted
-    assert all(h.effective_target_pct == 9.0909 for h in review.holdings)
+    assert all(h.sleeve == "standard" for h in review.holdings)
+    assert all(h.sleeve_low_pct == 6.0 and h.sleeve_high_pct == 9.0 for h in review.holdings)
+    assert all(h.effective_target_pct == 9.0 for h in review.holdings)
     payload = review.to_api()
-    assert payload["effectiveTargetPct"] == 9.0909
+    assert payload["sizingPolicy"] == "sleeve"
     assert payload["targetIsDefault"] is True
+    # ~9.09% sits just over the 9% standard high → trim the excess, not back to 9.09.
+    row = review.holdings[0]
+    assert row.weight_pct == pytest.approx(100.0 / 11, abs=0.02)
+    assert row.overweight is True
+    assert row.suggested_reduce_amount is not None and row.suggested_reduce_amount > 0
+
+
+def test_core_sleeve_trims_to_twelve_not_equal_weight():
+    """A lone bullish/constructive name at 100% trims to the 12% core high, not 12.5%."""
+    holdings = (_holding("NVDA", [(1, 10.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=0.0)
+    prices = {"NVDA": _Snap(last_trade_price=100.0), "SPY": _Snap(last_trade_price=500.0)}
+    bodies = {"NVDA": {"status": "ok", "signal_summary": "bullish"}}
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    row = review.holdings[0]
+    assert row.sleeve == "core"
+    assert row.sleeve_low_pct == 10.0 and row.sleeve_high_pct == 12.0
+    assert row.weight_pct == 100.0
+    assert row.overweight is True
+    assert row.suggested_reduce_amount == pytest.approx(88.0, abs=0.02)
+    assert "core" in (row.sizing_reason or "")
+
+
+def test_vehicle_sleeve_trims_to_six():
+    holdings = (_holding("IBIT", [(1, 10.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=0.0)
+    prices = {"IBIT": _Snap(last_trade_price=100.0), "SPY": _Snap(last_trade_price=500.0)}
+    bodies = {
+        "IBIT": {
+            "status": "ok",
+            "signal_summary": "neutral",
+            "is_fund_vehicle": True,
+        }
+    }
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    row = review.holdings[0]
+    assert row.sleeve == "vehicle"
+    assert row.sleeve_high_pct == 6.0
+    assert row.suggested_reduce_amount == pytest.approx(94.0, abs=0.02)
+
+
+def test_structure_broken_exit_sleeve_trims_to_three():
+    holdings = (_holding("SOFI", [(1, 10.0, "2024-01-02")]),)
+    settings = PortfolioSettings(cash_balance=0.0)
+    prices = {"SOFI": _Snap(last_trade_price=100.0), "SPY": _Snap(last_trade_price=500.0)}
+    bodies = {
+        "SOFI": {
+            "status": "ok",
+            "signal_summary": "neutral",
+            "signal_structure_broken": True,
+        }
+    }
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    row = review.holdings[0]
+    assert row.sleeve == "exit"
+    assert row.sleeve_high_pct == 3.0
+    assert row.action == ReviewAction.HOLD
+    assert row.suggested_reduce_amount == pytest.approx(97.0, abs=0.02)
+
+
+def test_in_band_core_does_not_trim():
+    """Core at 11% (inside 10–12) is not overweight — winners may sit in the band."""
+    holdings = (
+        _holding("NVDA", [(11, 10.0, "2024-01-02")]),
+        _holding("CASHY", [(89, 10.0, "2024-01-02")]),
+    )
+    settings = PortfolioSettings(cash_balance=0.0)
+    prices = {
+        "NVDA": _Snap(last_trade_price=10.0),
+        "CASHY": _Snap(last_trade_price=10.0),
+        "SPY": _Snap(last_trade_price=500.0),
+    }
+    bodies = {
+        "NVDA": {"status": "ok", "signal_summary": "bullish"},
+        "CASHY": {"status": "ok", "signal_summary": "neutral"},
+    }
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    nvda = next(h for h in review.holdings if h.symbol == "NVDA")
+    assert nvda.sleeve == "core"
+    assert nvda.weight_pct == 11.0
+    assert nvda.overweight is False
+    assert nvda.suggested_add_amount is None
+    assert nvda.suggested_reduce_amount is None
+    assert "Inside the core" in (nvda.sizing_reason or "")
 
 
 def test_explicit_target_wins_over_personal_default():
@@ -731,6 +875,7 @@ def test_explicit_target_wins_over_personal_default():
     )
     assert review.effective_target_pct == 20.0
     assert review.target_is_default is False
+    assert review.sizing_policy == "explicit"
     # 80 / 180 ≈ 44.4% > 20% → overweight; BUY_MORE downgrades to HOLD + trim excess
     row = review.holdings[0]
     assert row.overweight is True
@@ -981,5 +1126,6 @@ def test_review_action_emits_no_amounts_even_with_default_target():
     assert row.action == ReviewAction.REVIEW
     assert row.suggested_add_amount is None
     assert row.suggested_reduce_amount is None
-    assert review.effective_target_pct == 12.5
+    assert review.effective_target_pct is None
     assert review.target_is_default is True
+    assert review.sizing_policy == "sleeve"

@@ -5,9 +5,9 @@
 
 export type ReviewAction = "buy_more" | "hold" | "trim" | "sell" | "review";
 
-/** Review-level stance-overlay one-liner (amounts unchanged). */
+/** Review-level sleeve + stance-overlay one-liner. */
 export const PORTFOLIO_REVIEW_SIZING_RULE =
-  "If the verdict is Sell, reduce the position even when it is below target. If Hold/Neutral and caution, do not add toward target. Otherwise move toward the target.";
+  "Conviction sleeves: core 10–12%, standard 6–9%, vehicle 4–6%, exit 0–3%; single-name max 15%. Add only below the sleeve floor; trim only above the sleeve high. Sell still reduces the full position. Hold + caution does not add.";
 
 export interface HoldingReview {
   symbol: string;
@@ -28,6 +28,9 @@ export interface HoldingReview {
   suggestedReduceAmount: number | null;
   sizingReason?: string | null;
   effectiveTargetPct?: number | null;
+  sleeve?: string | null;
+  sleeveLowPct?: number | null;
+  sleeveHighPct?: number | null;
   taxLotHint: string | null;
   longTermLots: number;
   shortTermLots: number;
@@ -84,6 +87,7 @@ export interface PortfolioReview {
   fullyPriced: boolean;
   effectiveTargetPct?: number | null;
   targetIsDefault?: boolean;
+  sizingPolicy?: "sleeve" | "explicit" | null;
   sizingRule?: string;
   disclaimer: string;
 }
