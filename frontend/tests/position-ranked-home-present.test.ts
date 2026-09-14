@@ -14,6 +14,8 @@ import {
   formatGemListDelta,
   parsePositionCandidates,
   parsePositionGemFilterFromParams,
+  positionScanEngineIsStale,
+  POSITION_SCAN_LIVE_ENGINE_VERSION,
   positionActionColor,
   positionGemFilterToQuery,
   positionGemTierCopy,
@@ -70,6 +72,7 @@ describe("position-ranked-home-present", () => {
     expect(parsed?.universeSize).toBe(25);
     expect(parsed?.cached).toBe(true);
     expect(parsed?.engineVersion).toBe("growth_led_3");
+    expect(parsed?.engineVersion).toBe(POSITION_SCAN_LIVE_ENGINE_VERSION);
     expect(parsed?.listDelta).toEqual([
       { symbol: "RKLB", change: "entered", reason: "added to hunt pond" },
       { symbol: "XYZ", change: "exited", reason: "F2 no longer bullish" }
@@ -106,6 +109,14 @@ describe("position-ranked-home-present", () => {
       degraded: false
     });
     expect(isPositionScanUnavailable(emptyUniverse, undefined)).toBe(false);
+  });
+
+  it("treats a leftover engine_version as stale so Invest can rescore", () => {
+    expect(positionScanEngineIsStale("growth_led_3")).toBe(false);
+    expect(positionScanEngineIsStale(POSITION_SCAN_LIVE_ENGINE_VERSION)).toBe(false);
+    expect(positionScanEngineIsStale("growth_led_2")).toBe(true);
+    expect(positionScanEngineIsStale(null)).toBe(true);
+    expect(positionScanEngineIsStale("")).toBe(true);
   });
 
   it("treats a pending empty envelope as scanning, not unavailable", () => {

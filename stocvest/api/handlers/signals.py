@@ -1015,6 +1015,7 @@ def position_candidates_handler(event: LambdaEvent, context: LambdaContext) -> d
     force = str(qs.get("refresh") or "").strip().lower() in ("1", "true", "yes")
 
     from stocvest.api.services.position_scan import (
+        POSITION_SCAN_ENGINE_VERSION,
         compute_and_persist_position_scan,
         get_position_scan_snapshot_sync,
     )
@@ -1025,12 +1026,18 @@ def position_candidates_handler(event: LambdaEvent, context: LambdaContext) -> d
         _LOG.warning("position_candidates scan failed: %s", exc)
         return _degraded_position_candidates(tier)
 
-    # Warm snapshot, no explicit refresh — serve it. Polling must not spawn jobs.
-    if snapshot is not None and not force:
+    stale_engine = (
+        snapshot is not None
+        and (snapshot.engine_version or "") != POSITION_SCAN_ENGINE_VERSION
+    )
+    # Warm snapshot on the current gate contract — serve it. Polling must not
+    # spawn jobs. A leftover engine_version (e.g. growth_led_2 after a gate bump)
+    # is treated like ?refresh=1 so Invest does not sit on the last mega-as-Gem list.
+    if snapshot is not None and not force and not stale_engine:
         return ok(snapshot.to_api_dict(tier=tier, limit=limit, cached=cached))
 
-    # Miss or ?refresh=1: claim a single in-flight compose (Dynamo lock) so SWR
-    # polls and a parallel ?refresh=1 cannot stack 65-name Lambdas.
+    # Miss, stale engine, or ?refresh=1: claim a single in-flight compose (Dynamo lock)
+    # so SWR polls and a parallel ?refresh=1 cannot stack 65-name Lambdas.
     # Keep the last snapshot until the new compose persists — deleting it first
     # left Invest pending forever when the 65-name scan OOM'd / timed out.
     from stocvest.api.services.position_scan_store import try_claim_position_scan_refresh
