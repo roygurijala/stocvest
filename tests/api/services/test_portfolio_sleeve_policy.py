@@ -18,11 +18,17 @@ from stocvest.api.services.portfolio_sleeve_policy import (
 pytestmark = pytest.mark.unit
 
 
-def test_core_is_bullish_constructive_operating_company() -> None:
+def test_core_is_bullish_operating_company() -> None:
     assert (
         resolve_position_sleeve(verdict="bullish", stance="constructive")
         == PositionSleeve.CORE
     )
+
+
+def test_bullish_hold_is_still_core() -> None:
+    """Constructive gates adding, not the sleeve. A bullish Hold may sit at 10–15%."""
+    assert resolve_position_sleeve(verdict="bullish", stance="caution") == PositionSleeve.CORE
+    assert resolve_position_sleeve(verdict="bullish") == PositionSleeve.CORE
 
 
 def test_vehicle_beats_core() -> None:
@@ -71,7 +77,7 @@ def test_standard_is_the_fallback() -> None:
 
 def test_bands_match_agreed_policy() -> None:
     assert sleeve_policy_for(PositionSleeve.CORE) == SleevePolicy(
-        PositionSleeve.CORE, 10.0, 12.0
+        PositionSleeve.CORE, 10.0, 15.0
     )
     assert sleeve_policy_for(PositionSleeve.STANDARD) == SleevePolicy(
         PositionSleeve.STANDARD, 6.0, 9.0
@@ -109,6 +115,6 @@ def test_scale_compresses_when_highs_exceed_100() -> None:
     policies = [sleeve_policy_for(PositionSleeve.CORE) for _ in range(12)]
     scaled = scale_sleeve_policies(policies)
     assert sum(p.high_pct for p in scaled) == pytest.approx(100.0, abs=0.02)
-    assert scaled[0].high_pct < 12.0
+    assert scaled[0].high_pct < 15.0
     assert scaled[0].low_pct < scaled[0].high_pct
     assert scaled[0].sleeve == PositionSleeve.CORE

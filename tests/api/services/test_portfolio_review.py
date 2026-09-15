@@ -162,7 +162,7 @@ def test_apply_stance_sizing_hold_over_target_trims_excess_only():
         reduce_excess=180.0,
         market_value=1180.0,
     )
-    assert action == ReviewAction.HOLD
+    assert action == ReviewAction.TRIM
     assert add_amt is None and reduce_amt == 180.0 and note is None
 
 
@@ -323,7 +323,7 @@ def test_sizing_reason_in_band_core_sleeve():
         stance="constructive",
         sleeve=sleeve_policy_for(PositionSleeve.CORE),
     )
-    assert reason == "Inside the core 10–12% sleeve."
+    assert reason == "Inside the core 10–15% sleeve."
 
 
 # ── tax-lot hint ─────────────────────────────────────────────────────────────
@@ -427,9 +427,9 @@ def test_build_portfolio_review_end_to_end():
     by_sym = {h.symbol: h for h in review.holdings}
 
     # AAPL: mkt 1200 / total 2200 = 54.5% > 50% target → overweight; bullish+constructive
-    # would be BUY_MORE but it's over target so add=0 → downgraded to HOLD and trim excess.
+    # would be BUY_MORE but it's over target so add=0 → TRIM the excess.
     aapl = by_sym["AAPL"]
-    assert aapl.action == ReviewAction.HOLD
+    assert aapl.action == ReviewAction.TRIM
     assert aapl.overweight is True
     assert aapl.unrealized_pl == 200.0  # (120-100)*10
     assert aapl.suggested_add_amount is None
@@ -727,8 +727,8 @@ def test_personal_default_uses_standard_sleeve_not_equal_weight():
     assert row.suggested_reduce_amount is not None and row.suggested_reduce_amount > 0
 
 
-def test_core_sleeve_trims_to_twelve_not_equal_weight():
-    """A lone bullish/constructive name at 100% trims to the 12% core high, not 12.5%."""
+def test_core_sleeve_trims_to_fifteen_not_equal_weight():
+    """A lone bullish name at 100% trims to the 15% core high, not an equal-weight split."""
     holdings = (_holding("NVDA", [(1, 10.0, "2024-01-02")]),)
     settings = PortfolioSettings(cash_balance=0.0)
     prices = {"NVDA": _Snap(last_trade_price=100.0), "SPY": _Snap(last_trade_price=500.0)}
@@ -748,10 +748,10 @@ def test_core_sleeve_trims_to_twelve_not_equal_weight():
     )
     row = review.holdings[0]
     assert row.sleeve == "core"
-    assert row.sleeve_low_pct == 10.0 and row.sleeve_high_pct == 12.0
+    assert row.sleeve_low_pct == 10.0 and row.sleeve_high_pct == 15.0
     assert row.weight_pct == 100.0
     assert row.overweight is True
-    assert row.suggested_reduce_amount == pytest.approx(88.0, abs=0.02)
+    assert row.suggested_reduce_amount == pytest.approx(85.0, abs=0.02)
     assert "core" in (row.sizing_reason or "")
 
 
@@ -812,12 +812,12 @@ def test_structure_broken_exit_sleeve_trims_to_three():
     row = review.holdings[0]
     assert row.sleeve == "exit"
     assert row.sleeve_high_pct == 3.0
-    assert row.action == ReviewAction.HOLD
+    assert row.action == ReviewAction.TRIM
     assert row.suggested_reduce_amount == pytest.approx(97.0, abs=0.02)
 
 
 def test_in_band_core_does_not_trim():
-    """Core at 11% (inside 10–12) is not overweight — winners may sit in the band."""
+    """Core at 11% (inside 10–15) is not overweight — winners may sit in the band."""
     holdings = (
         _holding("NVDA", [(11, 10.0, "2024-01-02")]),
         _holding("CASHY", [(89, 10.0, "2024-01-02")]),
@@ -876,7 +876,7 @@ def test_explicit_target_wins_over_personal_default():
     assert review.effective_target_pct == 20.0
     assert review.target_is_default is False
     assert review.sizing_policy == "explicit"
-    # 80 / 180 ≈ 44.4% > 20% → overweight; BUY_MORE downgrades to HOLD + trim excess
+    # 80 / 180 ≈ 44.4% > 20% → overweight; BUY_MORE downgrades to TRIM the excess
     row = review.holdings[0]
     assert row.overweight is True
     assert row.suggested_add_amount is None

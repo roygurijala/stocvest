@@ -12,7 +12,10 @@ Deliberately conservative. Overrides only:
   misleading (pre-profit biotech; REITs, where depreciation distorts P/E vs P/FFO);
 * **(c)** suppress the generic high-D/E *red flag* for business models that are
   structurally levered (banks, REITs), replacing it with an informational chip so the
-  glass-box read explains *why* leverage is not scored as a solvency red flag there.
+  glass-box read explains *why* leverage is not scored as a solvency red flag there;
+* **(d)** for bank-family buckets only, suppress remaining *industrial* F3/F1 rules
+  (interest coverage, cash vs short-term debt, ROA 4%/12% bands) — chip only, no
+  replacement CET1 / 1–1.5% ROA thresholds.
 
 Precise sector proxies (bank CET1 / NPL, P/TBV; REIT P/FFO / REIT-debt) and the F7/F8
 pillars are **POS-AI-5 v2** — they require verified FMP inputs and a coordinated pillar-set
@@ -40,7 +43,8 @@ class SectorOverrideFlags:
     de_weight_valuation: bool = False
     #: F3 — do not score raw debt/equity: this business model is structurally levered
     #: (banks fund with deposits; REITs with mortgage debt), so a high D/E is not a
-    #: solvency red flag. Interest-coverage / liquidity checks still apply.
+    #: solvency red flag. REIT interest-coverage / cash-vs-ST-debt still apply;
+    #: bank-family buckets suppress those separately.
     structural_high_leverage: bool = False
     #: F1 — do not penalize negative free cash flow: for lenders (banks/consumer finance)
     #: FCF is dominated by loan originations held on balance sheet, so it is structurally
@@ -50,6 +54,12 @@ class SectorOverrideFlags:
     #: industrial current-asset/liability structure, so a sub-1.0 ratio is not a liquidity
     #: red flag. Gated behind fundamentals-v2.
     suppress_current_ratio: bool = False
+    #: F3 — do not score industrial interest-coverage bands. For a lender that ratio is
+    #: cost of funds, not corporate coupon coverage. Chip only; no CET1 substitute.
+    suppress_interest_coverage: bool = False
+    #: F3 — do not score cash vs short-term debt. Bank deposits / wholesale funding are
+    #: not industrial ST debt. Chip only.
+    suppress_cash_vs_st_debt: bool = False
     #: F4 — optional chip text explaining the sector-appropriate valuation lens; when set it
     #: replaces the default de-weight chip.
     valuation_note: str | None = None
@@ -70,13 +80,15 @@ def _build_sector_override_table() -> dict[str, SectorOverrideFlags]:
     table: dict[str, SectorOverrideFlags] = {}
     for bucket in _BANK_BUCKETS:
         # Banks/insurers: ROA over ROIC, and leverage is structural (deposits/float).
-        # FCF (loan originations) and the classic current ratio are non-meaningful for
-        # lenders, so v2 suppresses those generic penalties.
+        # FCF / current ratio (v2) plus industrial interest-coverage, cash-vs-ST-debt,
+        # and ROA 4%/12% bands are non-meaningful for lenders — chip only.
         table[bucket] = SectorOverrideFlags(
             use_roa_not_roic=True,
             structural_high_leverage=True,
             suppress_fcf_penalty=True,
             suppress_current_ratio=True,
+            suppress_interest_coverage=True,
+            suppress_cash_vs_st_debt=True,
             sector_label=bucket,
         )
     for bucket in _REIT_BUCKETS:

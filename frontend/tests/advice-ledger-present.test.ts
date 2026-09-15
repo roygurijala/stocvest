@@ -136,6 +136,37 @@ describe("followThroughForReview", () => {
     const other = sale({ eventId: "x", symbol: "AAPL", occurredAt: "2026-08-20" });
     expect(followThroughForReview(r, [earlier, r, other])).toBe("followed");
   });
+
+  test("next-day sell restamp still followed after the prior-day sale", () => {
+    const first = review({
+      eventId: "2026-09-14#rev",
+      occurredAt: "2026-09-14",
+      adviceAction: "sell",
+      symbol: "ARKQ"
+    });
+    const sold = sale({
+      eventId: "2026-09-14#sale",
+      occurredAt: "2026-09-14",
+      symbol: "ARKQ"
+    });
+    const restamp = review({
+      eventId: "2026-09-15#rev",
+      occurredAt: "2026-09-15",
+      adviceAction: "sell",
+      symbol: "ARKQ"
+    });
+    expect(followThroughForReview(first, [first, sold, restamp])).toBe("followed");
+    expect(followThroughForReview(restamp, [first, sold, restamp])).toBe("followed");
+  });
+
+  test("hold that already suggested a reduce is followed by a sale", () => {
+    const r = review({
+      adviceAction: "hold",
+      adviceSuggestedReduceAmount: 40,
+      symbol: "XOVR"
+    });
+    expect(followThroughForReview(r, [r, sale({ symbol: "XOVR" })])).toBe("followed");
+  });
 });
 
 describe("labels", () => {

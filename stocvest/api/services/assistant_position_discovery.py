@@ -13,8 +13,10 @@ scanner:
   deterministic pillar diff matrix across 2–4 cached candidates that presents differences
   only — the assistant never crowns a single "best" pick.
 
-The assistant only *narrates* these; the tier is the fixed output of gates G1–G9 and is
-never invented, upgraded, or overridden.
+The assistant only *narrates* these; the tier is the fixed ``growth_led_3`` output
+(hygiene + F2 Growth bullish + sector tailwind, not a mega-cap). G1–G9 are still
+emitted as ``failing_gates``; they do not define Gem. Never invent, upgrade, or
+override the tier.
 """
 
 from __future__ import annotations
@@ -30,6 +32,14 @@ _LOG = get_logger(__name__)
 # More than a handful of gems is a wall of text with no added insight.
 _MAX_GEMS = 6
 _INVEST_HREF = "/dashboard/invest"
+# Locked onto the live scan contract so Claude cannot narrate retired G1–G9 gems.
+_GEM_ENGINE_NOTE = (
+    "engine=growth_led_3; gem=hygiene + F2 Growth bullish (latest-quarter YoY) + "
+    "sector tailwind, not a mega-cap; news/geo=catalyst only; "
+    "F2 is not a franchise or a forecast; a sector bid can be a commodity or "
+    "geopolitical premium and the engine does not ask if it lasts; "
+    "value-trap guard only when F2 is already weak; Gem is a screen not a recommendation"
+)
 
 
 # ── Journey A — discovery ─────────────────────────────────────────────────────
@@ -43,6 +53,9 @@ class GemRow:
     fundamentals_verdict: str
     weakest_pillar_label: str | None
     why: str
+    growth_led: bool = False
+    sector_tailwind: bool = False
+    catalyst: bool = False
 
 
 @dataclass
@@ -62,6 +75,9 @@ def _row(c: GemCandidate) -> GemRow:
         fundamentals_verdict=c.fundamentals_verdict,
         weakest_pillar_label=c.weakest_pillar_label,
         why=c.why,
+        growth_led=c.growth_led,
+        sector_tailwind=c.sector_tailwind,
+        catalyst=c.catalyst,
     )
 
 
@@ -112,11 +128,17 @@ def serialize_position_gem_context(result: PositionGemResult) -> str:
         lines.append(f"scan_generated_at={result.generated_at}")
     lines.append(f"universe_size={result.universe_size}")
     lines.append(f"invest_href={_INVEST_HREF}")
+    lines.append(f"engine_note={_GEM_ENGINE_NOTE}")
     lines.append(f"top_{len(result.rows)}:")
     for r in result.rows:
         weak = f"; weakest {r.weakest_pillar_label}" if r.weakest_pillar_label else ""
+        flags = (
+            f"; growth_led={str(r.growth_led).lower()}; "
+            f"sector_tailwind={str(r.sector_tailwind).lower()}; "
+            f"catalyst={str(r.catalyst).lower()}"
+        )
         lines.append(
-            f"  - {r.symbol}: tier={r.tier}, fundamentals={r.fundamentals_verdict}{weak} — {r.why}"
+            f"  - {r.symbol}: tier={r.tier}, fundamentals={r.fundamentals_verdict}{weak}{flags} — {r.why}"
         )
     lines.append("")
     return "\n".join(lines)
@@ -157,6 +179,9 @@ class GemLookupResult:
     weakest_pillar_label: str | None = None
     why: str | None = None
     pillars: list[dict[str, Any]] = field(default_factory=list)
+    growth_led: bool = False
+    sector_tailwind: bool = False
+    catalyst: bool = False
     generated_at: str | None = None
     source: str = "scan_cache"  # scan_cache | not_on_universe | not_loaded | error
 
@@ -183,6 +208,9 @@ def fetch_gem_lookup_context(symbol: str) -> GemLookupResult:
                 res.weakest_pillar_label = c.weakest_pillar_label
                 res.why = c.why
                 res.pillars = list(c.pillars)
+                res.growth_led = c.growth_led
+                res.sector_tailwind = c.sector_tailwind
+                res.catalyst = c.catalyst
                 return res
         res.source = "not_on_universe"
         return res
@@ -216,8 +244,12 @@ def serialize_gem_lookup_context(result: GemLookupResult) -> str:
     lines = [f"=== POSITION GEM LOOKUP ({sym}) ==="]
     if result.generated_at:
         lines.append(f"scan_generated_at={result.generated_at}")
+    lines.append(f"engine_note={_GEM_ENGINE_NOTE}")
     lines.append(f"tier={result.tier}")
     lines.append(f"fundamentals_verdict={result.fundamentals_verdict}")
+    lines.append(f"growth_led={str(result.growth_led).lower()}")
+    lines.append(f"sector_tailwind={str(result.sector_tailwind).lower()}")
+    lines.append(f"catalyst={str(result.catalyst).lower()}")
     if result.weakest_pillar_label:
         lines.append(f"weakest_pillar={result.weakest_pillar_label}")
     for p in result.pillars:
@@ -373,6 +405,7 @@ def serialize_gem_compare_context(result: GemCompareResult) -> str:
     ]
     if result.generated_at:
         lines.append(f"scan_generated_at={result.generated_at}")
+    lines.append(f"engine_note={_GEM_ENGINE_NOTE}")
     lines.append(f"symbols={','.join(result.symbols)}")
     lines.append(f"invest_href={_INVEST_HREF}")
     for cell in result.cells:

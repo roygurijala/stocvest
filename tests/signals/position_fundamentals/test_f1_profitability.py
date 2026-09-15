@@ -39,6 +39,32 @@ class TestF1Profitability:
         result = score_f1_profitability(snap, sector_flags=flags)
         assert result.status == "active"
         assert any("ROA" in c for c in result.chips)
+        assert any("industrial bands not applied" in c for c in result.chips)
+
+    def test_bank_roa_does_not_use_industrial_bands(self) -> None:
+        snap = PositionFundamentalsSnapshot(
+            symbol="JPM",
+            configured=True,
+            ratios=[
+                FinancialRatios(
+                    symbol="JPM",
+                    as_of_date=date(2026, 6, 30),
+                    return_on_equity=0.16,
+                    return_on_assets=0.013,
+                    net_profit_margin=0.18,
+                )
+            ],
+            income_statements=[
+                IncomeStatement(symbol="JPM", as_of_date=date(2026, 6, 30), revenue=40e9)
+            ],
+        )
+        bank = score_f1_profitability(snap, sector_flags=SectorOverrideFlags(use_roa_not_roic=True))
+        generic = score_f1_profitability(snap)
+        assert any("ROA 1% — industrial bands not applied" in c for c in bank.chips)
+        assert not any("ROA" in c and "low" in c for c in bank.chips)
+        assert any("low" in c for c in generic.chips)
+        assert bank.score is not None and generic.score is not None
+        assert bank.score > generic.score
 
     def test_low_roe_scores_lower(self) -> None:
         snap = PositionFundamentalsSnapshot(

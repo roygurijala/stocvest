@@ -85,6 +85,8 @@ def test_discovery_lists_gems_then_strong(monkeypatch: pytest.MonkeyPatch) -> No
     assert "MSFT: tier=gem" in block
     assert "KO: tier=strong" in block
     assert "invest_href=/dashboard/invest" in block
+    assert "engine=growth_led_3" in block
+    assert "latest-quarter YoY" in block
 
     payload = position_gem_payload(result)
     assert payload is not None
@@ -141,6 +143,8 @@ def test_lookup_found_cites_tier_and_pillars(monkeypatch: pytest.MonkeyPatch) ->
     assert "=== POSITION GEM LOOKUP (MSFT) ===" in block
     assert "tier=gem" in block
     assert "pillar F4 Valuation" in block
+    assert "engine=growth_led_3" in block
+    assert "growth_led=" in block
 
     payload = gem_lookup_payload(result)
     assert payload is not None

@@ -8,10 +8,17 @@
  * and weights stay coherent) but report `unrealizedPl = null` and `priced = false`
  * so the UI can show "—" rather than a fake $0 gain.
  */
+import { dashboardTradingRoomHref } from "@/lib/nav/dashboard-trading-room-deeplink";
 import type { Holding, PortfolioSettings } from "@/lib/portfolio/types";
+
+/** Holdings / review tickers open the Long Term deep dive and return here. */
+export function portfolioHoldingDeepDiveHref(symbol: string): string {
+  return dashboardTradingRoomHref(symbol, "position", { ref: "portfolio" });
+}
 
 export interface HoldingView {
   symbol: string;
+  href: string;
   quantity: number;
   averageCost: number | null;
   totalCost: number;
@@ -66,6 +73,7 @@ function buildRow(holding: Holding, priceOf: PriceResolver): HoldingView {
 
   return {
     symbol: holding.symbol,
+    href: portfolioHoldingDeepDiveHref(holding.symbol),
     quantity,
     averageCost,
     totalCost,
