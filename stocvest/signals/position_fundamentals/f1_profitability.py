@@ -63,15 +63,16 @@ def score_f1_profitability(
             else latest_ratio.return_on_capital_employed or latest_ratio.return_on_assets
         )
         if quality_metric is not None:
-            label = "ROA" if flags.use_roa_not_roic else "ROIC/ROCE"
-            if quality_metric >= 0.12:
+            if flags.use_roa_not_roic:
+                # Industrial 4%/12% ROA bands do not apply to lenders. Chip only —
+                # no replacement 1–1.5% bank-ROA thresholds.
+                chips.append(f"ROA {quality_metric:.0%} — industrial bands not applied")
+            elif quality_metric >= 0.12:
                 base = apply_score_delta(base, 10)
-                chips.append(f"{label} {quality_metric:.0%} — efficient")
+                chips.append(f"ROIC/ROCE {quality_metric:.0%} — efficient")
             elif quality_metric < 0.04:
                 base = apply_score_delta(base, -10)
-                chips.append(f"{label} {quality_metric:.0%} — low")
-            elif flags.use_roa_not_roic:
-                chips.append(f"{label} {quality_metric:.0%}")
+                chips.append(f"ROIC/ROCE {quality_metric:.0%} — low")
 
         for margin, name in (
             (normalize_pct_rate(latest_ratio.gross_profit_margin), "Gross margin"),

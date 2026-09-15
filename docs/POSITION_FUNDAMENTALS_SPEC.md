@@ -188,8 +188,9 @@ an inappropriate *generic* red flag — and never invent new numeric thresholds.
 
 | Sector bucket (`SectorMapper`) | Flag | Effect |
 |---|---|---|
-| `banks`, `insurance`, `consumer_finance`, `investment_services` | `use_roa_not_roic` | F1 quality metric uses ROA (not ROIC/ROCE) |
-| `banks` … + `real_estate`/`reits` | `structural_high_leverage` | F3 does **not** score raw D/E or fire the "Elevated leverage" red flag (surfaced as an informational chip); interest-coverage & liquidity checks still apply |
+| `banks`, `insurance`, `consumer_finance`, `investment_services` | `use_roa_not_roic` | F1 uses ROA (not ROIC/ROCE) and does **not** score industrial 4%/12% ROA bands (chip only; no 1–1.5% replacement) |
+| `banks` … + `real_estate`/`reits` | `structural_high_leverage` | F3 does **not** score raw D/E or fire the "Elevated leverage" red flag (informational chip) |
+| `banks`, `insurance`, `consumer_finance`, `investment_services` | `suppress_interest_coverage` + `suppress_cash_vs_st_debt` | F3 chips industrial coverage and cash-vs-ST-debt; does **not** score them (no CET1 substitute). REITs still score those two. |
 | `real_estate`/`reits` | `de_weight_valuation` + `valuation_note` | F4 −5 de-emphasis with chip "REIT — judge valuation on P/FFO, not P/E" (GAAP P/E distorted by depreciation) |
 | `biotech`, `pharma` | `de_weight_valuation` | F4 −5 with chip "Pre-profit sector — valuation de-weighted" |
 
