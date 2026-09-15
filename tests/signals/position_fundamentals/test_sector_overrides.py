@@ -60,6 +60,8 @@ def test_banks_use_roa_and_structural_leverage() -> None:
     flags = resolve_sector_override_flags("banks")
     assert flags.use_roa_not_roic is True
     assert flags.structural_high_leverage is True
+    assert flags.suppress_interest_coverage is True
+    assert flags.suppress_cash_vs_st_debt is True
     assert flags.de_weight_valuation is False
 
 
@@ -76,6 +78,8 @@ def test_reit_real_estate_bucket_gets_structural_and_valuation_note() -> None:
     """The SectorMapper bucket for REITs is 'real_estate' — it must resolve to overrides."""
     flags = resolve_sector_override_flags("real_estate")
     assert flags.structural_high_leverage is True
+    assert flags.suppress_interest_coverage is False
+    assert flags.suppress_cash_vs_st_debt is False
     assert flags.de_weight_valuation is True
     assert flags.valuation_note == "REIT — judge valuation on P/FFO, not P/E"
 

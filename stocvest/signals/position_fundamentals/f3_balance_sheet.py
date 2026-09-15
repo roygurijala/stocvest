@@ -54,7 +54,12 @@ def score_f3_balance_sheet(
                 chips.append(f"Current ratio {current:.1f} — tight liquidity")
 
         coverage = latest_ratio.interest_coverage
-        if coverage is not None:
+        if coverage is not None and flags.suppress_interest_coverage:
+            # Lender cost-of-funds, not industrial coupon coverage — chip only.
+            chips.append(
+                f"Interest coverage {coverage:.1f}x — not a solvency metric for this sector"
+            )
+        elif coverage is not None:
             if coverage >= 5.0:
                 base = apply_score_delta(base, 12)
                 chips.append(f"Interest coverage {coverage:.1f}x")
@@ -83,7 +88,13 @@ def score_f3_balance_sheet(
         cash = latest_balance.cash_and_equivalents
         st_debt = latest_balance.short_term_debt
         if cash is not None and st_debt is not None and st_debt > 0:
-            if cash >= st_debt:
+            if flags.suppress_cash_vs_st_debt:
+                # Deposits / wholesale funding are not industrial ST debt — chip only.
+                relation = "covers" if cash >= st_debt else "below"
+                chips.append(
+                    f"Cash {relation} short-term debt — not a solvency metric for this sector"
+                )
+            elif cash >= st_debt:
                 base = apply_score_delta(base, 6)
                 chips.append("Cash covers short-term debt")
             else:
