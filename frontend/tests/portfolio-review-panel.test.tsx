@@ -206,7 +206,7 @@ describe("PortfolioReviewPanel", () => {
     expect(screen.getByTestId("review-default-target")).toHaveTextContent(
       /Using conviction sleeves/
     );
-    expect(screen.getByTestId("review-default-target")).toHaveTextContent(/core 10–12%/);
+    expect(screen.getByTestId("review-default-target")).toHaveTextContent(/core 10–15%/);
   });
 
   test("shows an error when the review cannot be fetched", async () => {

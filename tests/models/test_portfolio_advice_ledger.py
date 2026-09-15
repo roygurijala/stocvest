@@ -159,3 +159,56 @@ def test_follow_through_and_summary() -> None:
     assert summary["realizedPl"] == 95.0
     assert summary["followThrough"]["followed"] == 1  # WMT sell followed; AAPL hold diverged
     assert summary["followThrough"]["diverged"] == 1
+
+
+def test_follow_through_sell_episode_credits_prior_day_sale() -> None:
+    """A 9/14 sale still follows a 9/15 Sell restamp of the same advice."""
+    first = PortfolioLedgerEvent(
+        event_id="2026-09-14#rev",
+        user_id="u1",
+        kind=KIND_REVIEW,
+        symbol="ARKQ",
+        occurred_at="2026-09-14",
+        advice_action="sell",
+    )
+    sale = PortfolioLedgerEvent(
+        event_id="2026-09-14#sale",
+        user_id="u1",
+        kind=KIND_SALE,
+        symbol="ARKQ",
+        occurred_at="2026-09-14",
+        quantity=1,
+    )
+    restamp = PortfolioLedgerEvent(
+        event_id="2026-09-15#rev",
+        user_id="u1",
+        kind=KIND_REVIEW,
+        symbol="ARKQ",
+        occurred_at="2026-09-15",
+        advice_action="sell",
+    )
+    events = (first, sale, restamp)
+    assert follow_through(first, events) == FOLLOWED
+    assert follow_through(restamp, events) == FOLLOWED
+
+
+def test_follow_through_hold_with_reduce_is_followed_by_sale() -> None:
+    """Hold that already asked to trim (overweight sleeve) is followed by a sale."""
+    review = PortfolioLedgerEvent(
+        event_id="2026-09-14#xovr",
+        user_id="u1",
+        kind=KIND_REVIEW,
+        symbol="XOVR",
+        occurred_at="2026-09-14",
+        advice_action="hold",
+        advice_suggested_reduce=40.0,
+    )
+    sale = PortfolioLedgerEvent(
+        event_id="2026-09-14#sale",
+        user_id="u1",
+        kind=KIND_SALE,
+        symbol="XOVR",
+        occurred_at="2026-09-14",
+        quantity=2,
+    )
+    assert follow_through(review, (review, sale)) == FOLLOWED

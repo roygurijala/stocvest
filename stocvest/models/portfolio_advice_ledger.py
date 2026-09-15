@@ -411,23 +411,61 @@ def review_events_from_payload(
     return out
 
 
+def _is_reduce_advice(event: PortfolioLedgerEvent) -> bool:
+    """Sell/trim, or Hold that already asked for a reduce (overweight sleeve)."""
+    action = (event.advice_action or "").lower()
+    if action in _SELL_LIKE:
+        return True
+    reduce = event.advice_suggested_reduce
+    return action == "hold" and reduce is not None and reduce > 0
+
+
+def _episode_start(
+    review: PortfolioLedgerEvent,
+    same_symbol: tuple[PortfolioLedgerEvent, ...] | list[PortfolioLedgerEvent],
+) -> str:
+    """Earliest consecutive reduce-advice review for this symbol (inclusive).
+
+    A next-day Sell snapshot after the user already sold must not reset the
+    follow-through window to "no sale yet."
+    """
+    reviews = sorted(
+        (e for e in same_symbol if e.kind == KIND_REVIEW),
+        key=lambda e: (e.occurred_at, e.event_id),
+    )
+    start = review.occurred_at
+    for event in reversed(reviews):
+        if (event.occurred_at, event.event_id) > (review.occurred_at, review.event_id):
+            continue
+        if event.event_id == review.event_id or _is_reduce_advice(event):
+            start = event.occurred_at
+            continue
+        break
+    return start
+
+
 def follow_through(
     review: PortfolioLedgerEvent,
     later: tuple[PortfolioLedgerEvent, ...] | list[PortfolioLedgerEvent],
 ) -> str:
-    """Did a later sale/buy match the frozen review action? Computed at read time."""
+    """Did a later sale/buy match the frozen review action? Computed at read time.
+
+    Sell/trim (and Hold that already suggested a reduce) credit any sale on or
+    after the start of the consecutive same-advice episode — so a 9/14 sale still
+    counts as followed for a 9/15 Sell restamp. Plain Hold still diverges only on
+    a sale on/after that review date.
+    """
     if review.kind != KIND_REVIEW:
         return FOLLOW_NA
     action = (review.advice_action or "").lower()
-    after = [
-        e
-        for e in later
-        if e.symbol == review.symbol and e.occurred_at >= review.occurred_at and e.event_id != review.event_id
-    ]
+    same = [e for e in later if e.symbol == review.symbol and e.event_id != review.event_id]
+    if action in _SELL_LIKE or _is_reduce_advice(review):
+        start = _episode_start(review, later)
+        sales = any(e.kind == KIND_SALE and e.occurred_at >= start for e in same)
+        return FOLLOWED if sales else IGNORED
+    after = [e for e in same if e.occurred_at >= review.occurred_at]
     sales = any(e.kind == KIND_SALE for e in after)
     buys = any(e.kind == KIND_BUY for e in after)
-    if action in _SELL_LIKE:
-        return FOLLOWED if sales else IGNORED
     if action == "buy_more":
         return FOLLOWED if buys else IGNORED
     if action == "hold":
