@@ -91,18 +91,49 @@ function str(raw: unknown): string | null {
   return s || null;
 }
 
+function isReduceAdvice(event: PortfolioLedgerEvent): boolean {
+  const action = (event.adviceAction || "").toLowerCase();
+  if (action === "sell" || action === "trim") return true;
+  const reduce = event.adviceSuggestedReduceAmount;
+  return action === "hold" && reduce != null && reduce > 0;
+}
+
+function episodeStart(review: PortfolioLedgerEvent, all: readonly PortfolioLedgerEvent[]): string {
+  const reviews = all
+    .filter((e) => e.kind === "review" && e.symbol === review.symbol)
+    .slice()
+    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.eventId.localeCompare(b.eventId));
+  let start = review.occurredAt;
+  for (let i = reviews.length - 1; i >= 0; i -= 1) {
+    const event = reviews[i];
+    const afterReview =
+      event.occurredAt > review.occurredAt ||
+      (event.occurredAt === review.occurredAt && event.eventId > review.eventId);
+    if (afterReview) continue;
+    if (event.eventId === review.eventId || isReduceAdvice(event)) {
+      start = event.occurredAt;
+      continue;
+    }
+    break;
+  }
+  return start;
+}
+
 export function followThroughForReview(
   review: PortfolioLedgerEvent,
   all: readonly PortfolioLedgerEvent[]
 ): PortfolioFollowThrough {
   if (review.kind !== "review") return "n/a";
-  const later = all.filter(
-    (e) => e.symbol === review.symbol && e.occurredAt >= review.occurredAt && e.eventId !== review.eventId
-  );
+  const action = (review.adviceAction || "").toLowerCase();
+  const same = all.filter((e) => e.symbol === review.symbol && e.eventId !== review.eventId);
+  if (action === "sell" || action === "trim" || isReduceAdvice(review)) {
+    const start = episodeStart(review, all);
+    const sales = same.some((e) => e.kind === "sale" && e.occurredAt >= start);
+    return sales ? "followed" : "ignored";
+  }
+  const later = same.filter((e) => e.occurredAt >= review.occurredAt);
   const sales = later.some((e) => e.kind === "sale");
   const buys = later.some((e) => e.kind === "buy");
-  const action = (review.adviceAction || "").toLowerCase();
-  if (action === "sell" || action === "trim") return sales ? "followed" : "ignored";
   if (action === "buy_more") return buys ? "followed" : "ignored";
   if (action === "hold") return sales ? "diverged" : "followed";
   return "n/a";

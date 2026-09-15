@@ -6,12 +6,15 @@ Risk is the band + a single-name cap. No Kelly / correlation math.
 
 Bands (add toward the floor, trim to the high, never above the cap):
 
-    core      10–12%   operating company, bullish + constructive
-    standard   6–9%    hold / caution / intact but not a core add
+    core      10–15%   bullish operating company (great-potential names may sit here)
+    standard   6–9%    hold / caution / intact but not bullish
     vehicle    4–6%    fund/ETF product
     exit       0–3%    bearish + defensive, or structure-broken (non-vehicle)
 
-    single-name max 15%
+    single-name max 15% (core high uses the cap)
+
+Constructive vs not still gates BUY_MORE vs HOLD — it does not shrink a bullish
+name into the 6–9% standard band.
 
 Explicit ``targetPositionPct`` in settings still wins (one point target for every
 name). Product mode + null target still emits no amounts.
@@ -32,7 +35,7 @@ class PositionSleeve(str, Enum):
 
 # Operator-agreed personal policy. Do not invent a different band without a new decision.
 SLEEVE_BANDS: dict[PositionSleeve, tuple[float, float]] = {
-    PositionSleeve.CORE: (10.0, 12.0),
+    PositionSleeve.CORE: (10.0, 15.0),
     PositionSleeve.STANDARD: (6.0, 9.0),
     PositionSleeve.VEHICLE: (4.0, 6.0),
     PositionSleeve.EXIT: (0.0, 3.0),
@@ -41,7 +44,7 @@ SLEEVE_BANDS: dict[PositionSleeve, tuple[float, float]] = {
 SINGLE_NAME_MAX_PCT = 15.0
 
 SLEEVE_POLICY_SUMMARY = (
-    "Conviction sleeves: core 10–12%, standard 6–9%, vehicle 4–6%, exit 0–3%; "
+    "Conviction sleeves: core 10–15%, standard 6–9%, vehicle 4–6%, exit 0–3%; "
     "single-name max 15%. Add only below the sleeve floor; trim only above the "
     "sleeve high. Sell still reduces the full position. Hold + caution does not add."
 )
@@ -78,7 +81,8 @@ def resolve_position_sleeve(
     """Map existing desk signals to a sleeve. No new numeric thresholds.
 
     Order: full-exit read (bearish + defensive) → structure-broken operating
-    company → fund vehicle → core add → standard.
+    company → fund vehicle → bullish operating company (core) → standard.
+    Constructive is not required for core — it only gates whether we add.
     """
     verdict_l = (verdict or "").strip().lower()
     stance_l = (stance or "").strip().lower()
@@ -88,7 +92,7 @@ def resolve_position_sleeve(
         return PositionSleeve.EXIT
     if is_fund_vehicle:
         return PositionSleeve.VEHICLE
-    if verdict_l == "bullish" and stance_l == "constructive":
+    if verdict_l == "bullish":
         return PositionSleeve.CORE
     return PositionSleeve.STANDARD
 

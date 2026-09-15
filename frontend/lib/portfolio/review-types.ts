@@ -7,7 +7,7 @@ export type ReviewAction = "buy_more" | "hold" | "trim" | "sell" | "review";
 
 /** Review-level sleeve + stance-overlay one-liner. */
 export const PORTFOLIO_REVIEW_SIZING_RULE =
-  "Conviction sleeves: core 10–12%, standard 6–9%, vehicle 4–6%, exit 0–3%; single-name max 15%. Add only below the sleeve floor; trim only above the sleeve high. Sell still reduces the full position. Hold + caution does not add.";
+  "Conviction sleeves: core 10–15%, standard 6–9%, vehicle 4–6%, exit 0–3%; single-name max 15%. Add only below the sleeve floor; trim only above the sleeve high. Sell still reduces the full position. Hold + caution does not add.";
 
 export interface HoldingReview {
   symbol: string;

@@ -16,7 +16,7 @@ No indicator math is invented here (see .cursorrules §8):
 - verdict + stance come straight from the composite engine,
 - the "overweight" test uses the *effective* target — the user's own
   ``target_position_pct`` when set, else personal-mode **conviction sleeves**
-  (core 10–12 / standard 6–9 / vehicle 4–6 / exit 0–3; single-name max 15)
+  (core 10–15 / standard 6–9 / vehicle 4–6 / exit 0–3; single-name max 15)
   mapped from verdict, stance, structure-broken, and fund-vehicle (never written
   back to settings; operator-agreed policy, not ticker weights),
 - the "long-term lot" test uses the model's existing >365-day rule.
@@ -188,7 +188,7 @@ def apply_stance_sizing(
 
     Uses existing desk actions only — no new numeric thresholds:
     - ``buy_more`` / constructive → fill the underweight gap (cash-capped add)
-    - ``hold`` + already over target → trim the excess only
+    - ``hold`` / ``buy_more`` + already over target → TRIM the excess only
     - ``hold`` + under target (caution / thin R/R) → no add
     - ``trim`` → excess toward target, not to zero
     - ``sell`` → full market value, not a made-up 75%
@@ -204,17 +204,18 @@ def apply_stance_sizing(
             if cash_available is not None and cash_available <= 0 and not overweight:
                 extra = "No cash available to add toward target — holding rather than adding."
                 return ReviewAction.HOLD, None, None, extra
+            if overweight:
+                extra = "Already over target weight — trimming the excess rather than adding."
+                return ReviewAction.TRIM, None, reduce_excess, extra
             extra = (
                 "Already at/over target weight (or no cash available) — holding rather than adding."
             )
-            if overweight:
-                return ReviewAction.HOLD, None, reduce_excess, extra
             return ReviewAction.HOLD, None, None, extra
         return action, add_gap, None, None
 
     if action == ReviewAction.HOLD:
         if overweight:
-            return action, None, reduce_excess, None
+            return ReviewAction.TRIM, None, reduce_excess, None
         return action, None, None, None
 
     if action == ReviewAction.TRIM:

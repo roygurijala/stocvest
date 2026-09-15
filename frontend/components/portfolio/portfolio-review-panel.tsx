@@ -185,7 +185,7 @@ export function PortfolioReviewPanel({ onReviewComplete }: { onReviewComplete?: 
 
           {review.targetIsDefault && review.sizingPolicy === "sleeve" ? (
             <div data-testid="review-default-target" style={muted}>
-              Using conviction sleeves (core 10–12% · standard 6–9% · vehicle 4–6% ·
+              Using conviction sleeves (core 10–15% · standard 6–9% · vehicle 4–6% ·
               exit 0–3%; max 15%). An explicit target in Portfolio settings still wins.
             </div>
           ) : review.targetIsDefault && review.effectiveTargetPct != null ? (
