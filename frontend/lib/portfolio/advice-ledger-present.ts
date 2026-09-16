@@ -48,6 +48,7 @@ function parseEvent(row: Record<string, unknown>): PortfolioLedgerEvent | null {
     priceAtAdvice: num(row.priceAtAdvice),
     weightPct: num(row.weightPct),
     adviceAttributionStatus: str(row.adviceAttributionStatus),
+    lastConfirmedAt: str(row.adviceLastConfirmedAt) ?? str(row.lastConfirmedAt),
     priceAfter30d: num(row.priceAfter30d),
     priceAfter90d: num(row.priceAfter90d),
     outcome30d: str(row.outcome30d),
@@ -161,4 +162,162 @@ export function adviceActionLabel(action: string | null | undefined): string {
   if (action === "hold") return "Hold";
   if (action === "review") return "Review";
   return action;
+}
+
+function episodeKey(event: PortfolioLedgerEvent): string {
+  const addOn = (event.adviceSuggestedAddAmount ?? 0) > 0;
+  const reduceOn = (event.adviceSuggestedReduceAmount ?? 0) > 0;
+  return `${(event.adviceAction || "").toLowerCase()}|${addOn ? 1 : 0}|${reduceOn ? 1 : 0}`;
+}
+
+export type AdviceEpisodeRow = {
+  eventId: string;
+  symbol: string;
+  action: string | null;
+  suggestedAddAmount: number | null;
+  suggestedReduceAmount: number | null;
+  startedAt: string;
+  lastConfirmedAt: string;
+  priceAtAdvice: number | null;
+  outcome30d: string | null;
+  outcome90d: string | null;
+  followThrough: PortfolioFollowThrough;
+};
+
+/** Collapse consecutive same-call restamps so the table is one row per recommendation. */
+export function buildAdviceEpisodeRows(
+  events: readonly PortfolioLedgerEvent[]
+): AdviceEpisodeRow[] {
+  const reviews = events
+    .filter((e) => e.kind === "review")
+    .slice()
+    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.eventId.localeCompare(b.eventId));
+  const groups: PortfolioLedgerEvent[][] = [];
+  const lastGroupBySymbol = new Map<string, PortfolioLedgerEvent[]>();
+  for (const event of reviews) {
+    const prev = lastGroupBySymbol.get(event.symbol);
+    const last = prev?.[prev.length - 1];
+    if (last && episodeKey(last) === episodeKey(event)) {
+      prev.push(event);
+      continue;
+    }
+    const next = [event];
+    groups.push(next);
+    lastGroupBySymbol.set(event.symbol, next);
+  }
+  const rows = groups.map((group) => {
+    const first = group[0];
+    const last = group[group.length - 1];
+    return {
+      eventId: first.eventId,
+      symbol: first.symbol,
+      action: first.adviceAction,
+      suggestedAddAmount: first.adviceSuggestedAddAmount,
+      suggestedReduceAmount: first.adviceSuggestedReduceAmount,
+      startedAt: first.occurredAt,
+      lastConfirmedAt: last.lastConfirmedAt || last.occurredAt,
+      priceAtAdvice: first.priceAtAdvice,
+      outcome30d: first.outcome30d,
+      outcome90d: first.outcome90d,
+      followThrough: followThroughForReview(first, events)
+    };
+  });
+  rows.sort(
+    (a, b) =>
+      b.lastConfirmedAt.localeCompare(a.lastConfirmedAt) ||
+      b.startedAt.localeCompare(a.startedAt) ||
+      a.symbol.localeCompare(b.symbol)
+  );
+  return rows;
+}
+
+/** Calendar day of the call — "Sep 14". */
+export function formatAdviceDay(iso: string): string {
+  const raw = (iso || "").slice(0, 10);
+  const [y, m, d] = raw.split("-").map(Number);
+  if (!y || !m || !d) return iso || "";
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC"
+  });
+}
+
+/** "Sep 14" or "Sep 14–15" when the same call was confirmed later. */
+export function formatEpisodeWindow(startedAt: string, lastConfirmedAt: string): string {
+  const start = formatAdviceDay(startedAt);
+  if (!lastConfirmedAt || lastConfirmedAt.slice(0, 10) === startedAt.slice(0, 10)) return start;
+  const last = formatAdviceDay(lastConfirmedAt);
+  const startMonth = start.split(" ")[0];
+  const lastParts = last.split(" ");
+  if (startMonth === lastParts[0] && lastParts[1]) return `${start}–${lastParts[1]}`;
+  return `${start} – ${last}`;
+}
+
+function resolvedOutcome(outcome: string | null | undefined): string | null {
+  if (outcome === "favorable" || outcome === "unfavorable" || outcome === "neutral") return outcome;
+  return null;
+}
+
+/** Hide pending — only show a result once 30d or 90d has actually printed. */
+export function episodeResultLabel(row: Pick<AdviceEpisodeRow, "outcome30d" | "outcome90d">): string {
+  const parts: string[] = [];
+  const d30 = resolvedOutcome(row.outcome30d);
+  const d90 = resolvedOutcome(row.outcome90d);
+  if (d30) parts.push(`30d ${outcomeLabel(d30).toLowerCase()}`);
+  if (d90) parts.push(`90d ${outcomeLabel(d90).toLowerCase()}`);
+  return parts.join(" · ");
+}
+
+/** Hold+reduce is a trim; hold+add is an add. Amount size is not shown. */
+export function episodeCallLabel(
+  row: Pick<AdviceEpisodeRow, "action" | "suggestedAddAmount" | "suggestedReduceAmount">
+): string {
+  const action = (row.action || "").toLowerCase();
+  const addOn = (row.suggestedAddAmount ?? 0) > 0;
+  const reduceOn = (row.suggestedReduceAmount ?? 0) > 0;
+  if (action === "sell") return "Sell";
+  if (action === "trim" || (action === "hold" && reduceOn)) return "Trim";
+  if (action === "buy_more") return "Buy more";
+  if (action === "hold" && addOn) return "Add";
+  if (action === "hold") return "Hold";
+  if (action === "review") return "Review";
+  return adviceActionLabel(row.action);
+}
+
+/** Followed is the quiet default. Only exceptions belong on the row. */
+export function episodeStanceLabel(row: Pick<AdviceEpisodeRow, "followThrough">): string {
+  if (row.followThrough === "diverged") return "Sold";
+  if (row.followThrough === "ignored") return "Open";
+  return "";
+}
+
+/** Result if it has printed; otherwise only an exception stance. */
+export function episodeAfterLabel(row: AdviceEpisodeRow): string {
+  const result = episodeResultLabel(row);
+  const stance = episodeStanceLabel(row);
+  if (result && stance) return `${result} · ${stance.toLowerCase()}`;
+  return result || stance;
+}
+
+export function episodeAfterTone(row: AdviceEpisodeRow): "good" | "bad" | "quiet" {
+  const d30 = resolvedOutcome(row.outcome30d);
+  const d90 = resolvedOutcome(row.outcome90d);
+  if (d30 === "unfavorable" || d90 === "unfavorable") return "bad";
+  if (row.followThrough === "diverged") return "bad";
+  if (d30 === "favorable" || d90 === "favorable") return "good";
+  return "quiet";
+}
+
+export function adviceTrackSummaryLine(rows: readonly AdviceEpisodeRow[]): string {
+  const n = rows.length;
+  if (n === 0) return "";
+  const open = rows.filter((r) => r.followThrough === "ignored").length;
+  const diverged = rows.filter((r) => r.followThrough === "diverged").length;
+  const withResult = rows.filter((r) => episodeResultLabel(r) !== "").length;
+  const bits = [`${n} recommendation${n === 1 ? "" : "s"}`];
+  if (open) bits.push(`${open} still open`);
+  if (diverged) bits.push(`${diverged} diverged`);
+  if (withResult) bits.push(`${withResult} scored`);
+  return `${bits.join(" · ")}.`;
 }

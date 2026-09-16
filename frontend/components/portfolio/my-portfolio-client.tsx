@@ -17,9 +17,11 @@ import {
 } from "@/lib/api/fetch-holdings-client";
 import {
   adviceActionLabel,
-  followThroughForReview,
-  followThroughLabel,
-  outcomeLabel
+  buildAdviceEpisodeRows,
+  episodeAfterLabel,
+  episodeAfterTone,
+  episodeCallLabel,
+  formatAdviceDay
 } from "@/lib/portfolio/advice-ledger-present";
 import { buildPortfolioView, type PortfolioView } from "@/lib/portfolio/holdings-present";
 import { PortfolioReviewPanel } from "@/components/portfolio/portfolio-review-panel";
@@ -319,8 +321,10 @@ export function MyPortfolioClient() {
 
   const benchPrice = prices.get(settings.benchmarkSymbol.toUpperCase());
   const sales = ledger?.events.filter((e) => e.kind === "sale") ?? [];
-  const reviews = ledger?.events.filter((e) => e.kind === "review") ?? [];
-  const ledgerEvents = ledger?.events ?? [];
+  const adviceEpisodes = useMemo(
+    () => buildAdviceEpisodeRows(ledger?.events ?? []),
+    [ledger?.events]
+  );
 
   // ── styles ──────────────────────────────────────────────────────────────
   const card: React.CSSProperties = {
@@ -974,48 +978,37 @@ export function MyPortfolioClient() {
           Advice track
         </div>
         <p style={{ fontSize: typography.scale.xs, color: colors.textMuted, margin: `0 0 ${spacing[3]}` }}>
-          Each daily review is frozen, then scored 30 and 90 calendar days later. Sell/trim is
-          favorable if price fell; hold/buy-more is favorable if price rose (same 0.1% band as
-          the signal ledger). Follow-through is whether you later sold, bought, or held.
-          {ledger?.summary
-            ? ` 30d ${ledger.summary.outcome30d.favorable ?? 0} favorable / ${ledger.summary.outcome30d.unfavorable ?? 0} unfavorable / ${ledger.summary.outcome30d.pending ?? 0} pending · followed ${ledger.summary.followThrough.followed} · ignored ${ledger.summary.followThrough.ignored} · diverged ${ledger.summary.followThrough.diverged}.`
-            : ""}
+          Each call, from the day it started.
         </p>
-        {reviews.length === 0 ? (
+        {adviceEpisodes.length === 0 ? (
           <div style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
-            Run a daily review to start tracking advice. 30- and 90-day outcomes fill on later
-            reviews once those dates pass.
+            Run a daily review to start the track.
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  <th style={{ ...th, textAlign: "left" }}>Date</th>
                   <th style={{ ...th, textAlign: "left" }}>Symbol</th>
-                  <th style={{ ...th, textAlign: "left" }}>Advice</th>
-                  <th style={th}>Price then</th>
-                  <th style={{ ...th, textAlign: "left" }}>30d</th>
-                  <th style={{ ...th, textAlign: "left" }}>90d</th>
-                  <th style={{ ...th, textAlign: "left" }}>You</th>
+                  <th style={{ ...th, textAlign: "left" }}>Call</th>
+                  <th style={{ ...th, textAlign: "left" }}>Since</th>
+                  <th style={th}>Price</th>
+                  <th style={{ ...th, textAlign: "left" }}>After</th>
                 </tr>
               </thead>
               <tbody>
-                {[...reviews].reverse().map((e) => {
-                  const ft = followThroughForReview(e, ledgerEvents);
+                {adviceEpisodes.map((row) => {
+                  const after = episodeAfterLabel(row);
+                  const tone = episodeAfterTone(row);
+                  const afterColor =
+                    tone === "good" ? colors.bullish : tone === "bad" ? colors.bearish : colors.textMuted;
                   return (
-                    <tr key={e.eventId || `${e.symbol}-review-${e.occurredAt}`}>
-                      <td style={{ ...td, textAlign: "left" }}>{e.occurredAt || "—"}</td>
-                      <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{e.symbol}</td>
-                      <td style={{ ...td, textAlign: "left" }}>{adviceActionLabel(e.adviceAction)}</td>
-                      <td style={td}>{fmtUsd(e.priceAtAdvice)}</td>
-                      <td style={{ ...td, textAlign: "left", color: outcomeColor(e.outcome30d, colors) }}>
-                        {outcomeLabel(e.outcome30d)}
-                      </td>
-                      <td style={{ ...td, textAlign: "left", color: outcomeColor(e.outcome90d, colors) }}>
-                        {outcomeLabel(e.outcome90d)}
-                      </td>
-                      <td style={{ ...td, textAlign: "left" }}>{followThroughLabel(ft)}</td>
+                    <tr key={row.eventId || `${row.symbol}-${row.startedAt}`}>
+                      <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{row.symbol}</td>
+                      <td style={{ ...td, textAlign: "left" }}>{episodeCallLabel(row)}</td>
+                      <td style={{ ...td, textAlign: "left" }}>{formatAdviceDay(row.startedAt)}</td>
+                      <td style={td}>{fmtUsd(row.priceAtAdvice)}</td>
+                      <td style={{ ...td, textAlign: "left", color: afterColor }}>{after}</td>
                     </tr>
                   );
                 })}
@@ -1026,13 +1019,4 @@ export function MyPortfolioClient() {
       </div>
     </div>
   );
-}
-
-function outcomeColor(
-  outcome: string | null | undefined,
-  colors: { bullish: string; bearish: string; textMuted: string }
-): string {
-  if (outcome === "favorable") return colors.bullish;
-  if (outcome === "unfavorable") return colors.bearish;
-  return colors.textMuted;
 }

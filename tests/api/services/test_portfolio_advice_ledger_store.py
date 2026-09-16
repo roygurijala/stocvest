@@ -60,6 +60,24 @@ def test_record_review_snapshots_and_resolve_30d() -> None:
     assert api["count"] == 1
     assert api["summary"]["outcome30d"]["favorable"] == 1
 
+    restamp = {
+        "generatedAt": "2026-06-02T20:00:00+00:00",
+        "holdings": [
+            {
+                "symbol": "WMT",
+                "action": "sell",
+                "currentPrice": 98.0,
+                "verdict": "bearish",
+            }
+        ],
+    }
+    n2 = record_review_snapshots(
+        "u1", restamp, "2026-06-02T20:00:00+00:00", source="fp2", store=store
+    )
+    assert n2 == 0
+    assert len(store.list_events("u1")) == 1
+    assert store.list_events("u1")[0].advice_last_confirmed_at == "2026-06-02"
+
 
 def test_due_horizons_90d() -> None:
     event = PortfolioLedgerEvent(

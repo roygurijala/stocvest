@@ -10,7 +10,7 @@ from stocvest.models.portfolio_advice_ledger import (
     KIND_REVIEW,
     PortfolioLedgerEvent,
     ledger_summary,
-    review_events_from_payload,
+    plan_review_writes,
 )
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
@@ -148,19 +148,21 @@ def record_review_snapshots(
     source: str | None = None,
     store: PortfolioAdviceLedgerStore | None = None,
 ) -> int:
-    """Append per-holding review events; skip same-day duplicate action+source."""
+    """Append a review row only when the episode changes; otherwise confirm the open one."""
     ledger = store or get_portfolio_advice_ledger_store()
     existing = ledger.list_events(user_id)
-    events = review_events_from_payload(
+    plan = plan_review_writes(
         user_id=user_id,
         review=review,
         cached_at=cached_at,
         source=source,
         existing=existing,
     )
-    for event in events:
+    for event in plan.append:
         ledger.append(event)
-    return len(events)
+    for event in plan.confirm:
+        ledger.put_event(event)
+    return len(plan.append)
 
 
 def _horizon_due(occurred_at: str, *, days: int, today: date) -> bool:

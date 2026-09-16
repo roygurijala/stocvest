@@ -64,6 +64,7 @@ export interface PortfolioLedgerEvent {
   priceAtAdvice: number | null;
   weightPct: number | null;
   adviceAttributionStatus: string | null;
+  lastConfirmedAt: string | null;
   priceAfter30d: number | null;
   priceAfter90d: number | null;
   outcome30d: string | null;
