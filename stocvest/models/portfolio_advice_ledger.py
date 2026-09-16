@@ -197,6 +197,7 @@ class PortfolioLedgerEvent:
     price_at_advice: float | None = None
     weight_pct: float | None = None
     advice_attribution_status: str | None = None  # stamped | no_review_snapshot
+    advice_last_confirmed_at: str | None = None  # latest same-episode review date
 
     price_after_30d: float | None = None
     price_after_90d: float | None = None
@@ -230,6 +231,7 @@ class PortfolioLedgerEvent:
             "priceAtAdvice": self.price_at_advice,
             "weightPct": self.weight_pct,
             "adviceAttributionStatus": self.advice_attribution_status,
+            "adviceLastConfirmedAt": self.advice_last_confirmed_at,
             "priceAfter30d": self.price_after_30d,
             "priceAfter90d": self.price_after_90d,
             "outcome30d": self.outcome_30d,
@@ -320,6 +322,9 @@ class PortfolioLedgerEvent:
             advice_attribution_status=_opt_str(
                 item.get("adviceAttributionStatus") or item.get("advice_attribution_status")
             ),
+            advice_last_confirmed_at=_opt_str(
+                item.get("adviceLastConfirmedAt") or item.get("advice_last_confirmed_at")
+            ),
             price_after_30d=_opt_float(item.get("priceAfter30d") or item.get("price_after_30d")),
             price_after_90d=_opt_float(item.get("priceAfter90d") or item.get("price_after_90d")),
             outcome_30d=_opt_str(item.get("outcome30d") or item.get("outcome_30d")),
@@ -369,22 +374,59 @@ def advice_stamp_from_review_row(row: dict[str, Any] | None, *, cached_at: str |
     }
 
 
-def review_events_from_payload(
+def advice_episode_key(
+    action: str | None,
+    suggested_add: float | None = None,
+    suggested_reduce: float | None = None,
+) -> tuple[str, bool, bool]:
+    """Identity of an advice episode — action plus whether add/reduce is on.
+
+    Amount size is ignored; crossing zero (asked to add/reduce vs not) is a new call.
+    """
+    return (
+        (action or "").strip().lower(),
+        bool(suggested_add is not None and suggested_add > 0),
+        bool(suggested_reduce is not None and suggested_reduce > 0),
+    )
+
+
+def _event_episode_key(event: PortfolioLedgerEvent) -> tuple[str, bool, bool]:
+    return advice_episode_key(
+        event.advice_action, event.advice_suggested_add, event.advice_suggested_reduce
+    )
+
+
+def _latest_review_for_symbol(
+    events: tuple[PortfolioLedgerEvent, ...] | list[PortfolioLedgerEvent],
+    symbol: str,
+) -> PortfolioLedgerEvent | None:
+    reviews = [e for e in events if e.kind == KIND_REVIEW and e.symbol == symbol]
+    if not reviews:
+        return None
+    return max(reviews, key=lambda e: (e.occurred_at, e.event_id))
+
+
+@dataclass(frozen=True)
+class ReviewWritePlan:
+    """New episodes to append; same-episode restamps only touch last-confirmed."""
+
+    append: tuple[PortfolioLedgerEvent, ...]
+    confirm: tuple[PortfolioLedgerEvent, ...]
+
+
+def plan_review_writes(
     *,
     user_id: str,
     review: dict[str, Any],
     cached_at: str,
     source: str | None,
     existing: tuple[PortfolioLedgerEvent, ...] = (),
-) -> list[PortfolioLedgerEvent]:
-    """One review event per holding. Skip if the same action+source already landed today."""
+) -> ReviewWritePlan:
+    """Write a review row only when the recommendation episode changes."""
     occurred = _coerce_iso_date(review.get("generatedAt") or cached_at)
-    seen = {
-        (e.symbol, e.advice_action, e.advice_review_source or "", e.occurred_at)
-        for e in existing
-        if e.kind == KIND_REVIEW
-    }
-    out: list[PortfolioLedgerEvent] = []
+    append: list[PortfolioLedgerEvent] = []
+    confirm: list[PortfolioLedgerEvent] = []
+    planned: list[PortfolioLedgerEvent] = list(existing)
     for raw in review.get("holdings") or []:
         if not isinstance(raw, dict):
             continue
@@ -393,21 +435,85 @@ def review_events_from_payload(
             continue
         stamp = advice_stamp_from_review_row(raw, cached_at=cached_at)
         action = stamp.get("advice_action")
-        key = (symbol, action, source or "", occurred)
-        if key in seen:
+        if not action:
             continue
-        seen.add(key)
-        out.append(
-            PortfolioLedgerEvent(
-                event_id=new_event_id(occurred_at=occurred),
-                user_id=user_id,
-                kind=KIND_REVIEW,
-                symbol=symbol,
-                occurred_at=occurred,
-                advice_review_source=source,
-                **stamp,
-            )
+        key = advice_episode_key(
+            action, stamp.get("advice_suggested_add"), stamp.get("advice_suggested_reduce")
         )
+        latest = _latest_review_for_symbol(planned, symbol)
+        if latest is not None and _event_episode_key(latest) == key:
+            if occurred <= (latest.advice_last_confirmed_at or latest.occurred_at):
+                continue
+            touched = dataclass_replace(latest, advice_last_confirmed_at=occurred)
+            confirm.append(touched)
+            planned = [touched if e.event_id == latest.event_id else e for e in planned]
+            continue
+        event = PortfolioLedgerEvent(
+            event_id=new_event_id(occurred_at=occurred),
+            user_id=user_id,
+            kind=KIND_REVIEW,
+            symbol=symbol,
+            occurred_at=occurred,
+            advice_review_source=source,
+            advice_last_confirmed_at=occurred,
+            **stamp,
+        )
+        append.append(event)
+        planned.append(event)
+    return ReviewWritePlan(append=tuple(append), confirm=tuple(confirm))
+
+
+def review_events_from_payload(
+    *,
+    user_id: str,
+    review: dict[str, Any],
+    cached_at: str,
+    source: str | None,
+    existing: tuple[PortfolioLedgerEvent, ...] = (),
+) -> list[PortfolioLedgerEvent]:
+    """New review rows only — same-episode restamps are confirmations, not appends."""
+    return list(
+        plan_review_writes(
+            user_id=user_id,
+            review=review,
+            cached_at=cached_at,
+            source=source,
+            existing=existing,
+        ).append
+    )
+
+
+def collapse_review_episodes(
+    events: tuple[PortfolioLedgerEvent, ...] | list[PortfolioLedgerEvent],
+) -> list[PortfolioLedgerEvent]:
+    """One representative per consecutive same-episode run (first day + last confirmed)."""
+    reviews = sorted(
+        (e for e in events if e.kind == KIND_REVIEW),
+        key=lambda e: (e.symbol, e.occurred_at, e.event_id),
+    )
+    out: list[PortfolioLedgerEvent] = []
+    first: PortfolioLedgerEvent | None = None
+    last: PortfolioLedgerEvent | None = None
+    key: tuple[str, bool, bool] | None = None
+    symbol: str | None = None
+
+    def flush() -> None:
+        if first is None or last is None:
+            return
+        confirmed = last.advice_last_confirmed_at or last.occurred_at
+        out.append(dataclass_replace(first, advice_last_confirmed_at=confirmed))
+
+    for event in reviews:
+        event_key = _event_episode_key(event)
+        if first is None or event.symbol != symbol or event_key != key:
+            flush()
+            first = event
+            last = event
+            key = event_key
+            symbol = event.symbol
+            continue
+        last = event
+    flush()
     return out
 
 
@@ -475,16 +581,17 @@ def follow_through(
 
 def ledger_summary(events: tuple[PortfolioLedgerEvent, ...] | list[PortfolioLedgerEvent]) -> dict[str, Any]:
     sales = [e for e in events if e.kind == KIND_SALE]
-    reviews = [e for e in events if e.kind == KIND_REVIEW]
+    reviews = collapse_review_episodes(events)
     realized = round(sum(e.realized_pl or 0.0 for e in sales), 2)
 
     def _bucket(attr: str) -> dict[str, int]:
         counts = {OUTCOME_FAVORABLE: 0, OUTCOME_UNFAVORABLE: 0, OUTCOME_NEUTRAL: 0, OUTCOME_PENDING: 0}
-        for e in events:
-            if e.kind == KIND_REVIEW and (e.advice_action or "") == "review":
-                continue
-            if e.kind not in (KIND_REVIEW, KIND_SALE, KIND_BUY):
-                continue
+        scored = [
+            e
+            for e in (*sales, *(e for e in events if e.kind == KIND_BUY), *reviews)
+            if not (e.kind == KIND_REVIEW and (e.advice_action or "") == "review")
+        ]
+        for e in scored:
             val = getattr(e, attr)
             if val in counts:
                 counts[val] += 1

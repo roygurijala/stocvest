@@ -15,8 +15,10 @@ from stocvest.models.portfolio_advice_ledger import (
     advice_outcome,
     apply_sale,
     added_quantity,
+    collapse_review_episodes,
     follow_through,
     ledger_summary,
+    plan_review_writes,
     review_events_from_payload,
 )
 from stocvest.models.portfolio_holding import HoldingLot, PortfolioHolding
@@ -212,3 +214,93 @@ def test_follow_through_hold_with_reduce_is_followed_by_sale() -> None:
         quantity=2,
     )
     assert follow_through(review, (review, sale)) == FOLLOWED
+
+
+def test_plan_review_writes_confirms_same_episode_next_day() -> None:
+    review = {
+        "generatedAt": "2026-09-14T16:00:00+00:00",
+        "holdings": [
+            {"symbol": "NVDA", "action": "hold", "currentPrice": 212.0, "suggestedReduceAmount": 0}
+        ],
+    }
+    first = review_events_from_payload(
+        user_id="u1", review=review, cached_at="2026-09-14T16:00:00+00:00", source="a"
+    )
+    assert len(first) == 1
+    nxt = {
+        "generatedAt": "2026-09-15T16:00:00+00:00",
+        "holdings": [
+            {"symbol": "NVDA", "action": "hold", "currentPrice": 200.0, "suggestedReduceAmount": 0}
+        ],
+    }
+    plan = plan_review_writes(
+        user_id="u1",
+        review=nxt,
+        cached_at="2026-09-15T16:00:00+00:00",
+        source="b",
+        existing=tuple(first),
+    )
+    assert plan.append == ()
+    assert len(plan.confirm) == 1
+    assert plan.confirm[0].event_id == first[0].event_id
+    assert plan.confirm[0].advice_last_confirmed_at == "2026-09-15"
+    assert plan.confirm[0].price_at_advice == 212.0
+
+
+def test_plan_review_writes_new_row_when_reduce_turns_on() -> None:
+    hold = {
+        "generatedAt": "2026-09-14T16:00:00+00:00",
+        "holdings": [{"symbol": "MSFT", "action": "hold", "currentPrice": 500.0}],
+    }
+    first = review_events_from_payload(
+        user_id="u1", review=hold, cached_at="2026-09-14T16:00:00+00:00", source="a"
+    )
+    trim_like = {
+        "generatedAt": "2026-09-15T16:00:00+00:00",
+        "holdings": [
+            {
+                "symbol": "MSFT",
+                "action": "hold",
+                "currentPrice": 505.0,
+                "suggestedReduceAmount": 40.0,
+            }
+        ],
+    }
+    plan = plan_review_writes(
+        user_id="u1",
+        review=trim_like,
+        cached_at="2026-09-15T16:00:00+00:00",
+        source="b",
+        existing=tuple(first),
+    )
+    assert len(plan.append) == 1
+    assert plan.confirm == ()
+    assert plan.append[0].advice_suggested_reduce == 40.0
+
+
+def test_collapse_review_episodes_and_summary_count_once() -> None:
+    first = PortfolioLedgerEvent(
+        event_id="2026-09-14#nvda",
+        user_id="u1",
+        kind=KIND_REVIEW,
+        symbol="NVDA",
+        occurred_at="2026-09-14",
+        advice_action="hold",
+        price_at_advice=212.0,
+    )
+    restamp = PortfolioLedgerEvent(
+        event_id="2026-09-15#nvda",
+        user_id="u1",
+        kind=KIND_REVIEW,
+        symbol="NVDA",
+        occurred_at="2026-09-15",
+        advice_action="hold",
+        price_at_advice=200.0,
+    )
+    collapsed = collapse_review_episodes((first, restamp))
+    assert len(collapsed) == 1
+    assert collapsed[0].occurred_at == "2026-09-14"
+    assert collapsed[0].advice_last_confirmed_at == "2026-09-15"
+    summary = ledger_summary((first, restamp))
+    assert summary["followThrough"]["followed"] == 1
+    assert summary["outcome30d"]["pending"] == 1
