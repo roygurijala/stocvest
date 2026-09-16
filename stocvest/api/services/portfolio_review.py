@@ -639,6 +639,12 @@ class ConsiderAddCandidate:
     tier: str
     verdict: str
     why: str
+    sleeve: str | None = None
+    sleeve_low_pct: float | None = None
+    sleeve_high_pct: float | None = None
+    target_pct: float | None = None
+    suggested_add_amount: float | None = None
+    sizing_reason: str | None = None
 
     def to_api(self) -> dict[str, Any]:
         return {
@@ -646,6 +652,12 @@ class ConsiderAddCandidate:
             "tier": self.tier,
             "verdict": self.verdict,
             "why": self.why,
+            "sleeve": self.sleeve,
+            "sleeveLowPct": self.sleeve_low_pct,
+            "sleeveHighPct": self.sleeve_high_pct,
+            "targetPct": self.target_pct,
+            "suggestedAddAmount": self.suggested_add_amount,
+            "sizingReason": self.sizing_reason,
         }
 
 
@@ -998,8 +1010,19 @@ async def build_portfolio_review(
     )
 
     # 7) "Consider adding" — gem candidates the user does not already hold (advice-gated).
+    #    Same sleeve / explicit target as holdings; add toward the floor from $0, cash-capped
+    #    after existing BUY_MORE draws so we do not over-allocate cash.
     consider = (
-        _consider_adding(scan_fn, held={h.symbol for h in holdings}) if advice_enabled else []
+        _consider_adding(
+            scan_fn,
+            held={h.symbol for h in holdings},
+            total_value=total_value,
+            cash_available=remaining_cash,
+            sizing_policy=sizing_policy,
+            explicit_target_pct=target,
+        )
+        if advice_enabled
+        else []
     )
 
     _LOG.info(
@@ -1092,7 +1115,70 @@ def _rationale_lines(
     return lines
 
 
-def _consider_adding(scan_fn: ScanFn | None, *, held: set[str]) -> list[ConsiderAddCandidate]:
+def consider_add_sizing(
+    *,
+    total_value: float,
+    cash_available: float,
+    verdict: str | None,
+    sizing_policy: str | None,
+    explicit_target_pct: float | None,
+) -> tuple[SleevePolicy | None, float | None, float | None, str | None]:
+    """Starter size for an unheld name — same sleeve/explicit target as holdings.
+
+    Market value is $0, so the add is the sleeve floor (or the explicit point
+    target), cash-capped. Product mode (no policy) stays directional.
+    """
+    sleeve: SleevePolicy | None = None
+    target: float | None = None
+    if sizing_policy == "sleeve":
+        sleeve = resolve_sleeve_policy(verdict=verdict)
+        target = sleeve.low_pct
+    elif sizing_policy == "explicit":
+        target = explicit_target_pct
+    add = suggested_add_amount(0.0, total_value, target, cash_available)
+    reason = _consider_add_sizing_reason(
+        sleeve=sleeve, target_pct=target, add=add, total_value=total_value
+    )
+    return sleeve, target, add, reason
+
+
+def _consider_add_sizing_reason(
+    *,
+    sleeve: SleevePolicy | None,
+    target_pct: float | None,
+    add: float | None,
+    total_value: float,
+) -> str | None:
+    if target_pct is None:
+        return None
+    book = (target_pct / 100.0) * total_value if total_value > 0 else 0.0
+    if sleeve is not None:
+        band = f"the {sleeve.label} {sleeve.band_phrase()} sleeve"
+        floor = f"the {sleeve.label} ~{sleeve.low_pct:.0f}% floor"
+    else:
+        band = f"the {_fmt_target_pct(target_pct)} target"
+        floor = band
+    if add is not None and add > 0:
+        if book > 0 and add + 0.005 < book:
+            return (
+                f"Starter at {band} — add {_fmt_gap_dollars(add)} "
+                f"(cash available; full {floor} is {_fmt_gap_dollars(book)})."
+            )
+        return f"Starter at {band} — add {_fmt_gap_dollars(add)} to reach {floor}."
+    if book > 0:
+        return f"Starter at {band} is {_fmt_gap_dollars(book)}. No cash left to start it."
+    return f"Starter at {band}."
+
+
+def _consider_adding(
+    scan_fn: ScanFn | None,
+    *,
+    held: set[str],
+    total_value: float = 0.0,
+    cash_available: float = 0.0,
+    sizing_policy: str | None = None,
+    explicit_target_pct: float | None = None,
+) -> list[ConsiderAddCandidate]:
     """Gem-candidate list, filtered to names not already held (gems + strong tiers)."""
     try:
         candidates = list(scan_fn()) if scan_fn is not None else _default_scan()
@@ -1100,6 +1186,7 @@ def _consider_adding(scan_fn: ScanFn | None, *, held: set[str]) -> list[Consider
         _LOG.warning("portfolio_review consider_adding failed: %s", exc)
         return []
     out: list[ConsiderAddCandidate] = []
+    remaining = cash_available
     for c in candidates:
         sym = str(getattr(c, "symbol", "") or "").strip().upper()
         tier = str(getattr(c, "tier", "") or "").strip().lower()
@@ -1107,12 +1194,28 @@ def _consider_adding(scan_fn: ScanFn | None, *, held: set[str]) -> list[Consider
             continue
         if tier not in ("gem", "strong"):
             continue
+        verdict = str(getattr(c, "verdict", "") or "neutral")
+        sleeve, target, add, reason = consider_add_sizing(
+            total_value=total_value,
+            cash_available=remaining,
+            verdict=verdict,
+            sizing_policy=sizing_policy,
+            explicit_target_pct=explicit_target_pct,
+        )
+        if add is not None and add > 0:
+            remaining = round(max(0.0, remaining - add), 2)
         out.append(
             ConsiderAddCandidate(
                 symbol=sym,
                 tier=tier,
-                verdict=str(getattr(c, "verdict", "") or "neutral"),
+                verdict=verdict,
                 why=str(getattr(c, "why", "") or ""),
+                sleeve=sleeve.label if sleeve is not None else None,
+                sleeve_low_pct=sleeve.low_pct if sleeve is not None else None,
+                sleeve_high_pct=sleeve.high_pct if sleeve is not None else None,
+                target_pct=target,
+                suggested_add_amount=add,
+                sizing_reason=reason,
             )
         )
     return out[:5]

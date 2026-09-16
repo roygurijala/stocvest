@@ -10,7 +10,10 @@ vi.mock("next/link", () => ({
   )
 }));
 
-import { PortfolioReviewPanel } from "@/components/portfolio/portfolio-review-panel";
+import {
+  considerAddSizeLine,
+  PortfolioReviewPanel
+} from "@/components/portfolio/portfolio-review-panel";
 import { ThemeProvider } from "@/lib/theme-provider";
 import type { PortfolioReview } from "@/lib/portfolio/review-types";
 import { PORTFOLIO_REVIEW_SIZING_RULE } from "@/lib/portfolio/review-types";
@@ -107,7 +110,19 @@ function sampleReview(): PortfolioReview {
         message: "AAPL is 54.5% of the portfolio, above your 50.0% target."
       }
     ],
-    considerAdding: [{ symbol: "NVDA", tier: "gem", verdict: "bullish", why: "cheap + strong" }],
+    considerAdding: [
+      {
+        symbol: "NVDA",
+        tier: "gem",
+        verdict: "bullish",
+        why: "cheap + strong",
+        sleeve: "core",
+        sleeveLowPct: 10,
+        sleeveHighPct: 15,
+        targetPct: 10,
+        suggestedAddAmount: 220
+      }
+    ],
     benchmark: {
       benchmarkSymbol: "SPY",
       investedCost: 2000,
@@ -146,7 +161,11 @@ describe("PortfolioReviewPanel", () => {
     expect(screen.getByText("Hold")).toBeInTheDocument();
     expect(screen.getByText("Sell")).toBeInTheDocument();
     expect(screen.getByText(/above your 50.0% target/)).toBeInTheDocument();
-    expect(screen.getByText(/NVDA/)).toBeInTheDocument();
+    expect(screen.getByTestId("consider-add-NVDA")).toHaveTextContent(/NVDA/);
+    expect(screen.getByTestId("consider-add-NVDA")).toHaveTextContent(
+      /add ~\$220.*core 10–15% sleeve/
+    );
+    expect(screen.getByTestId("consider-add-NVDA")).toHaveTextContent(/cheap \+ strong/);
     expect(screen.getByText(/SPY \(money-weighted\)/)).toBeInTheDocument();
     expect(screen.getAllByText(/vs cost/).length).toBeGreaterThan(0);
     expect(screen.getByText(/add ~\$150/)).toBeInTheDocument();
@@ -279,5 +298,42 @@ describe("PortfolioReviewPanel", () => {
     await waitFor(() =>
       expect(screen.getByText(/No holdings to review yet/i)).toBeInTheDocument()
     );
+  });
+});
+
+describe("considerAddSizeLine", () => {
+  test("names the sleeve percent and the cash-capped dollars", () => {
+    expect(
+      considerAddSizeLine({
+        symbol: "OVV",
+        tier: "gem",
+        verdict: "bullish",
+        why: "growth-led",
+        sleeve: "core",
+        sleeveLowPct: 10,
+        sleeveHighPct: 15,
+        targetPct: 10,
+        suggestedAddAmount: 1240
+      })
+    ).toMatch(/add ~\$1,240.*core 10–15% sleeve/);
+  });
+
+  test("when cash is gone, still names the percent of the book", () => {
+    expect(
+      considerAddSizeLine(
+        {
+          symbol: "OVV",
+          tier: "gem",
+          verdict: "bullish",
+          why: "growth-led",
+          sleeve: "core",
+          sleeveLowPct: 10,
+          sleeveHighPct: 15,
+          targetPct: 10,
+          suggestedAddAmount: 0
+        },
+        20_000
+      )
+    ).toMatch(/core 10–15% sleeve is ~\$2,000.*no cash left/i);
   });
 });
