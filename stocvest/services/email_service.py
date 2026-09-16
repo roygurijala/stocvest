@@ -215,11 +215,17 @@ class EmailService:
             )
 
         conc = [str(c.get("message") or "") for c in (review.get("concentration") or []) if c.get("message")]
-        adds = [
-            f"{c.get('symbol')} ({c.get('tier')}) — {c.get('why')}"
-            for c in (review.get("considerAdding") or [])
-            if c.get("symbol")
-        ]
+        adds = []
+        for c in review.get("considerAdding") or []:
+            if not c.get("symbol"):
+                continue
+            tier = f" ({c.get('tier')})" if c.get("tier") else ""
+            size = c.get("sizingReason") or ""
+            why = c.get("why") or ""
+            extras_bits = [p for p in (size, why) if p]
+            adds.append(
+                f"{c.get('symbol')}{tier}" + (f" — {' · '.join(extras_bits)}" if extras_bits else "")
+            )
         extras = _bullets("Concentration", conc) + _bullets("Consider adding", adds)
 
         return self._email_shell(

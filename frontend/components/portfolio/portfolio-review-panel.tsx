@@ -9,6 +9,7 @@ import { useIsMobileLayout } from "@/lib/hooks/use-is-mobile-layout";
 import { useTheme } from "@/lib/theme-provider";
 import { fetchPortfolioReviewClient } from "@/lib/api/fetch-portfolio-review-client";
 import type {
+  ConsiderAddCandidate,
   HoldingReview,
   PortfolioReview,
   ReviewAction
@@ -41,6 +42,28 @@ export function holdingDoThis(h: HoldingReview): string {
   if (h.suggestedAddAmount) return `add ~${fmtUsd(h.suggestedAddAmount)}`;
   if (h.suggestedReduceAmount) return `reduce ~${fmtUsd(h.suggestedReduceAmount)}`;
   return "—";
+}
+
+/** Starter size for an unheld name — % sleeve and cash-capped dollars. */
+export function considerAddSizeLine(
+  c: ConsiderAddCandidate,
+  portfolioValue?: number
+): string {
+  const add = c.suggestedAddAmount;
+  const band =
+    c.sleeve && c.sleeveLowPct != null && c.sleeveHighPct != null
+      ? `${c.sleeve} ${c.sleeveLowPct.toFixed(0)}–${c.sleeveHighPct.toFixed(0)}% sleeve`
+      : c.targetPct != null
+        ? `${c.targetPct.toFixed(1)}% target`
+        : "";
+  if (add != null && add > 0) {
+    return band ? `add ~${fmtUsd(add)} to start a ${band}` : `add ~${fmtUsd(add)}`;
+  }
+  if (band && c.targetPct != null && portfolioValue != null && portfolioValue > 0) {
+    const book = (c.targetPct / 100) * portfolioValue;
+    return `${band} is ~${fmtUsd(book)} of the book — no cash left to start it`;
+  }
+  return (c.sizingReason || "").trim();
 }
 
 function remainingRationale(h: HoldingReview): string[] {
@@ -266,11 +289,29 @@ export function PortfolioReviewPanel({ onReviewComplete }: { onReviewComplete?: 
                 Consider adding
               </div>
               <ul style={{ margin: `${spacing[1]} 0 0`, paddingLeft: spacing[4] }}>
-                {review.considerAdding.map((c) => (
-                  <li key={c.symbol} style={{ fontSize: typography.scale.sm, color: colors.text }}>
-                    <strong>{c.symbol}</strong> ({c.tier}) — {c.why}
-                  </li>
-                ))}
+                {review.considerAdding.map((c) => {
+                  const size = considerAddSizeLine(c, review.totalMarketValue);
+                  return (
+                    <li
+                      key={c.symbol}
+                      data-testid={`consider-add-${c.symbol}`}
+                      style={{ fontSize: typography.scale.sm, color: colors.text, marginBottom: spacing[2] }}
+                    >
+                      <div>
+                        <strong>{c.symbol}</strong>
+                        {c.tier ? (
+                          <span style={{ color: colors.textMuted }}>{` · ${c.tier}`}</span>
+                        ) : null}
+                        {size ? ` — ${size}` : null}
+                      </div>
+                      {c.why ? (
+                        <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+                          {c.why}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ) : null}

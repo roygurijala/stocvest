@@ -57,6 +57,12 @@ export interface ConsiderAddCandidate {
   tier: string;
   verdict: string;
   why: string;
+  sleeve?: string | null;
+  sleeveLowPct?: number | null;
+  sleeveHighPct?: number | null;
+  targetPct?: number | null;
+  suggestedAddAmount?: number | null;
+  sizingReason?: string | null;
 }
 
 export interface BenchmarkComparison {

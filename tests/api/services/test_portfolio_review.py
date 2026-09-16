@@ -16,6 +16,7 @@ from stocvest.api.services.portfolio_review import (
     build_owner_position_context,
     build_portfolio_review,
     compute_benchmark_comparison,
+    consider_add_sizing,
     derive_action,
     resolve_current_price,
     resolve_effective_target_pct,
@@ -446,7 +447,14 @@ def test_build_portfolio_review_end_to_end():
     assert [c.symbol for c in review.concentration] == ["AAPL"]
 
     # Consider-adding: gem tier, excludes already-held AAPL, drops monitor KO.
+    # Explicit 50% target on a $2,200 book is $1,100; cash-capped at the leftover $250.
     assert [c.symbol for c in review.consider_adding] == ["NVDA"]
+    nvda_add = review.consider_adding[0]
+    assert nvda_add.suggested_add_amount == 250.0
+    assert nvda_add.target_pct == 50.0
+    assert nvda_add.sleeve is None
+    assert nvda_add.sizing_reason is not None
+    assert "50.0%" in nvda_add.sizing_reason
 
     # Benchmark present and computed.
     assert review.benchmark is not None
@@ -1129,3 +1137,106 @@ def test_review_action_emits_no_amounts_even_with_default_target():
     assert review.effective_target_pct is None
     assert review.target_is_default is True
     assert review.sizing_policy == "sleeve"
+
+
+def test_consider_add_sizing_bullish_gem_uses_core_floor() -> None:
+    sleeve, target, add, reason = consider_add_sizing(
+        total_value=20_000.0,
+        cash_available=3_000.0,
+        verdict="bullish",
+        sizing_policy="sleeve",
+        explicit_target_pct=None,
+    )
+    assert sleeve is not None
+    assert sleeve.sleeve == PositionSleeve.CORE
+    assert target == 10.0
+    assert add == 2_000.0  # 10% of $20k, under the $3k cash
+    assert reason is not None
+    assert "core 10–15%" in reason
+    assert "$2,000.00" in reason
+
+
+def test_consider_add_sizing_cash_caps_and_names_the_full_floor() -> None:
+    _sleeve, _target, add, reason = consider_add_sizing(
+        total_value=20_000.0,
+        cash_available=400.0,
+        verdict="bullish",
+        sizing_policy="sleeve",
+        explicit_target_pct=None,
+    )
+    assert add == 400.0
+    assert reason is not None
+    assert "$400.00" in reason
+    assert "$2,000.00" in reason
+
+
+def test_consider_add_sizing_no_cash_still_names_the_percent() -> None:
+    _sleeve, target, add, reason = consider_add_sizing(
+        total_value=20_000.0,
+        cash_available=0.0,
+        verdict="bullish",
+        sizing_policy="sleeve",
+        explicit_target_pct=None,
+    )
+    assert target == 10.0
+    assert add == 0.0
+    assert reason is not None
+    assert "No cash left" in reason
+
+
+def test_consider_add_sizing_product_mode_stays_directional() -> None:
+    sleeve, target, add, reason = consider_add_sizing(
+        total_value=20_000.0,
+        cash_available=3_000.0,
+        verdict="bullish",
+        sizing_policy=None,
+        explicit_target_pct=None,
+    )
+    assert sleeve is None
+    assert target is None
+    assert add is None
+    assert reason is None
+
+
+def test_build_portfolio_review_sizes_unheld_gem_to_core_floor() -> None:
+    holdings = (_holding("AAPL", [(10, 100.0, "2020-01-01")]),)
+    settings = PortfolioSettings(cash_balance=3_000.0, target_position_pct=None)
+    prices = {
+        "AAPL": _Snap(last_trade_price=120.0),
+        "SPY": _Snap(last_trade_price=500.0),
+    }
+
+    async def snap_fn(symbols):
+        return {s: prices[s] for s in symbols if s in prices}
+
+    async def compose_fn(sym):
+        return {"status": "ok", "signal_summary": "bullish"}
+
+    async def spy_bars_fn(sym, from_date):
+        return [_Bar(date(2020, 1, 2), 300.0)]
+
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [_Cand("OVV", "gem", verdict="bullish", why="growth-led")],
+            as_of=date(2026, 9, 15),
+            advice_enabled=True,
+        )
+    )
+    assert review.sizing_policy == "sleeve"
+    assert [c.symbol for c in review.consider_adding] == ["OVV"]
+    ovv = review.consider_adding[0]
+    assert ovv.sleeve == "core"
+    assert ovv.sleeve_low_pct == 10.0
+    assert ovv.sleeve_high_pct == 15.0
+    assert ovv.target_pct == 10.0
+    # Book is AAPL $1,200 + $3,000 cash = $4,200 → 10% floor = $420.
+    assert review.total_market_value == 4_200.0
+    assert ovv.suggested_add_amount == 420.0
+    payload = ovv.to_api()
+    assert payload["suggestedAddAmount"] == 420.0
+    assert payload["sleeve"] == "core"
