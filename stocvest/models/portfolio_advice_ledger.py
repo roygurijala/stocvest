@@ -379,15 +379,21 @@ def advice_episode_key(
     suggested_add: float | None = None,
     suggested_reduce: float | None = None,
 ) -> tuple[str, bool, bool]:
-    """Identity of an advice episode — action plus whether add/reduce is on.
+    """Identity of an advice episode — the call, not the label spelling.
 
-    Amount size is ignored; crossing zero (asked to add/reduce vs not) is a new call.
+    Hold+reduce and trim are the same reduce call. Hold+add and buy_more are
+    the same add call. Amount size is ignored; crossing zero is a new episode.
     """
-    return (
-        (action or "").strip().lower(),
-        bool(suggested_add is not None and suggested_add > 0),
-        bool(suggested_reduce is not None and suggested_reduce > 0),
-    )
+    kind = (action or "").strip().lower()
+    add_on = bool(suggested_add is not None and suggested_add > 0)
+    reduce_on = bool(suggested_reduce is not None and suggested_reduce > 0)
+    if kind == "trim" or (kind == "hold" and reduce_on):
+        return ("trim", False, True)
+    if kind == "buy_more" or (kind == "hold" and add_on):
+        return ("add", True, False)
+    if kind == "hold":
+        return ("hold", False, False)
+    return (kind, add_on, reduce_on)
 
 
 def _event_episode_key(event: PortfolioLedgerEvent) -> tuple[str, bool, bool]:
