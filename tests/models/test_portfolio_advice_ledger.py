@@ -278,6 +278,44 @@ def test_plan_review_writes_new_row_when_reduce_turns_on() -> None:
     assert plan.append[0].advice_suggested_reduce == 40.0
 
 
+def test_plan_review_writes_hold_reduce_then_trim_is_same_episode() -> None:
+    hold_reduce = {
+        "generatedAt": "2026-09-14T16:00:00+00:00",
+        "holdings": [
+            {
+                "symbol": "NVDA",
+                "action": "hold",
+                "currentPrice": 212.0,
+                "suggestedReduceAmount": 40.0,
+            }
+        ],
+    }
+    first = review_events_from_payload(
+        user_id="u1", review=hold_reduce, cached_at="2026-09-14T16:00:00+00:00", source="a"
+    )
+    trim = {
+        "generatedAt": "2026-09-16T16:00:00+00:00",
+        "holdings": [
+            {
+                "symbol": "NVDA",
+                "action": "trim",
+                "currentPrice": 212.0,
+                "suggestedReduceAmount": 50.0,
+            }
+        ],
+    }
+    plan = plan_review_writes(
+        user_id="u1",
+        review=trim,
+        cached_at="2026-09-16T16:00:00+00:00",
+        source="b",
+        existing=tuple(first),
+    )
+    assert plan.append == ()
+    assert len(plan.confirm) == 1
+    assert plan.confirm[0].event_id == first[0].event_id
+
+
 def test_collapse_review_episodes_and_summary_count_once() -> None:
     first = PortfolioLedgerEvent(
         event_id="2026-09-14#nvda",
@@ -304,3 +342,30 @@ def test_collapse_review_episodes_and_summary_count_once() -> None:
     summary = ledger_summary((first, restamp))
     assert summary["followThrough"]["followed"] == 1
     assert summary["outcome30d"]["pending"] == 1
+
+
+def test_collapse_hold_reduce_and_trim_as_one_episode() -> None:
+    first = PortfolioLedgerEvent(
+        event_id="2026-09-14#nvda",
+        user_id="u1",
+        kind=KIND_REVIEW,
+        symbol="NVDA",
+        occurred_at="2026-09-14",
+        advice_action="hold",
+        advice_suggested_reduce=40.0,
+        price_at_advice=212.0,
+    )
+    later = PortfolioLedgerEvent(
+        event_id="2026-09-16#nvda",
+        user_id="u1",
+        kind=KIND_REVIEW,
+        symbol="NVDA",
+        occurred_at="2026-09-16",
+        advice_action="trim",
+        advice_suggested_reduce=50.0,
+        price_at_advice=212.0,
+    )
+    collapsed = collapse_review_episodes((first, later))
+    assert len(collapsed) == 1
+    assert collapsed[0].occurred_at == "2026-09-14"
+    assert collapsed[0].advice_last_confirmed_at == "2026-09-16"

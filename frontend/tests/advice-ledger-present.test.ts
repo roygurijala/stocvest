@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   adviceActionLabel,
+  adviceTrackSinceLine,
   adviceTrackSummaryLine,
   buildAdviceEpisodeRows,
   episodeAfterLabel,
@@ -13,7 +14,8 @@ import {
   formatAdviceDay,
   formatEpisodeWindow,
   outcomeLabel,
-  parsePortfolioLedger
+  parsePortfolioLedger,
+  selectAdviceTrackRows
 } from "@/lib/portfolio/advice-ledger-present";
 import type { PortfolioLedgerEvent } from "@/lib/portfolio/types";
 
@@ -267,6 +269,29 @@ describe("advice episodes", () => {
     expect(episodeCallLabel(rows[1])).toBe("Hold");
   });
 
+  test("treats hold-with-reduce and later trim as one call", () => {
+    const holdReduce = review({
+      eventId: "a",
+      symbol: "NVDA",
+      occurredAt: "2026-09-14",
+      adviceAction: "hold",
+      adviceSuggestedReduceAmount: 40,
+      priceAtAdvice: 212
+    });
+    const trim = review({
+      eventId: "b",
+      symbol: "NVDA",
+      occurredAt: "2026-09-16",
+      adviceAction: "trim",
+      adviceSuggestedReduceAmount: 50,
+      priceAtAdvice: 212
+    });
+    const rows = buildAdviceEpisodeRows([holdReduce, trim]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].startedAt).toBe("2026-09-14");
+    expect(episodeCallLabel(rows[0])).toBe("Trim");
+  });
+
   test("hides pending results and only labels exceptions", () => {
     const openHold = review({ symbol: "NVDA", occurredAt: "2026-09-15" });
     const openSell = review({
@@ -285,17 +310,56 @@ describe("advice episodes", () => {
     expect(episodeResultLabel({ outcome30d: null, outcome90d: null })).toBe("");
     expect(episodeResultLabel({ outcome30d: "favorable", outcome90d: null })).toBe("30d favorable");
     expect(episodeStanceLabel({ followThrough: "followed" })).toBe("");
-    expect(episodeStanceLabel({ followThrough: "ignored" })).toBe("Open");
+    expect(episodeStanceLabel({ followThrough: "ignored" })).toBe("");
     expect(episodeStanceLabel({ followThrough: "diverged" })).toBe("Sold");
     const holdRow = buildAdviceEpisodeRows([openHold])[0];
     const sellRow = buildAdviceEpisodeRows([openSell])[0];
     const scoredRow = buildAdviceEpisodeRows([scored, sale({ symbol: "WMT" })])[0];
     expect(episodeAfterLabel(holdRow)).toBe("");
-    expect(episodeAfterLabel(sellRow)).toBe("Open");
+    expect(episodeAfterLabel(sellRow)).toBe("");
     expect(episodeAfterLabel(scoredRow)).toBe("30d favorable");
     const rows = buildAdviceEpisodeRows([openHold, scored]);
     expect(adviceTrackSummaryLine(rows)).toMatch(/2 recommendations/);
     expect(adviceTrackSummaryLine(rows)).toMatch(/1 scored/);
     expect(adviceTrackSummaryLine(rows)).not.toMatch(/pending/i);
+  });
+
+  test("list keeps the current call per symbol and older calls only when After has meaning", () => {
+    const oldTrim = review({
+      eventId: "c1",
+      symbol: "CRWD",
+      occurredAt: "2026-09-14",
+      adviceAction: "trim",
+      adviceSuggestedReduceAmount: 20
+    });
+    const newHold = review({
+      eventId: "c2",
+      symbol: "CRWD",
+      occurredAt: "2026-09-16",
+      adviceAction: "hold"
+    });
+    const scoredSell = review({
+      eventId: "w1",
+      symbol: "WMT",
+      occurredAt: "2026-08-01",
+      adviceAction: "sell",
+      outcome30d: "favorable"
+    });
+    const laterHold = review({
+      eventId: "w2",
+      symbol: "WMT",
+      occurredAt: "2026-09-14",
+      adviceAction: "hold"
+    });
+    const listed = selectAdviceTrackRows(
+      buildAdviceEpisodeRows([oldTrim, newHold, scoredSell, laterHold])
+    );
+    expect(listed.map((r) => `${r.symbol}:${episodeCallLabel(r)}:${r.startedAt}`)).toEqual([
+      "CRWD:Hold:2026-09-16",
+      "WMT:Hold:2026-09-14",
+      "WMT:Sell:2026-08-01"
+    ]);
+    expect(adviceTrackSinceLine("2026-09-14", "$212.39")).toBe("since Sep 14 at $212.39");
+    expect(adviceTrackSinceLine("2026-09-14", "—")).toBe("since Sep 14");
   });
 });

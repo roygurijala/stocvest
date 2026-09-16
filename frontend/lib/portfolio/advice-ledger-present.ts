@@ -165,9 +165,14 @@ export function adviceActionLabel(action: string | null | undefined): string {
 }
 
 function episodeKey(event: PortfolioLedgerEvent): string {
+  const action = (event.adviceAction || "").toLowerCase();
   const addOn = (event.adviceSuggestedAddAmount ?? 0) > 0;
   const reduceOn = (event.adviceSuggestedReduceAmount ?? 0) > 0;
-  return `${(event.adviceAction || "").toLowerCase()}|${addOn ? 1 : 0}|${reduceOn ? 1 : 0}`;
+  if (action === "trim" || (action === "hold" && reduceOn)) return "trim";
+  if (action === "buy_more" || (action === "hold" && addOn)) return "add";
+  if (action === "hold") return "hold";
+  if (action === "sell") return "sell";
+  return `${action}|${addOn ? 1 : 0}|${reduceOn ? 1 : 0}`;
 }
 
 export type AdviceEpisodeRow = {
@@ -184,7 +189,7 @@ export type AdviceEpisodeRow = {
   followThrough: PortfolioFollowThrough;
 };
 
-/** Collapse consecutive same-call restamps so the table is one row per recommendation. */
+/** Collapse leftover same-call restamps so each recommendation is one episode. */
 export function buildAdviceEpisodeRows(
   events: readonly PortfolioLedgerEvent[]
 ): AdviceEpisodeRow[] {
@@ -285,10 +290,9 @@ export function episodeCallLabel(
   return adviceActionLabel(row.action);
 }
 
-/** Followed is the quiet default. Only exceptions belong on the row. */
+/** Followed and still-open are quiet. Only a hold you sold against is labeled. */
 export function episodeStanceLabel(row: Pick<AdviceEpisodeRow, "followThrough">): string {
   if (row.followThrough === "diverged") return "Sold";
-  if (row.followThrough === "ignored") return "Open";
   return "";
 }
 
@@ -320,4 +324,36 @@ export function adviceTrackSummaryLine(rows: readonly AdviceEpisodeRow[]): strin
   if (diverged) bits.push(`${diverged} diverged`);
   if (withResult) bits.push(`${withResult} scored`);
   return `${bits.join(" · ")}.`;
+}
+
+function isLaterEpisode(a: AdviceEpisodeRow, b: AdviceEpisodeRow): boolean {
+  return (
+    a.lastConfirmedAt.localeCompare(b.lastConfirmedAt) > 0 ||
+    (a.lastConfirmedAt === b.lastConfirmedAt && a.startedAt.localeCompare(b.startedAt) > 0)
+  );
+}
+
+/** Current call per symbol, plus older calls only when After has meaning. */
+export function selectAdviceTrackRows(rows: readonly AdviceEpisodeRow[]): AdviceEpisodeRow[] {
+  const latest = new Map<string, AdviceEpisodeRow>();
+  for (const row of rows) {
+    const cur = latest.get(row.symbol);
+    if (!cur || isLaterEpisode(row, cur)) latest.set(row.symbol, row);
+  }
+  const current = [...latest.values()].sort(
+    (a, b) =>
+      b.lastConfirmedAt.localeCompare(a.lastConfirmedAt) ||
+      b.startedAt.localeCompare(a.startedAt) ||
+      a.symbol.localeCompare(b.symbol)
+  );
+  const earlier = rows.filter((row) => latest.get(row.symbol) !== row && episodeAfterLabel(row));
+  return [...current, ...earlier];
+}
+
+/** "since Sep 14 at $212.39" — price omitted when missing. */
+export function adviceTrackSinceLine(startedAt: string, priceLabel?: string | null): string {
+  const day = formatAdviceDay(startedAt);
+  const price = (priceLabel || "").trim();
+  if (price && price !== "—") return `since ${day} at ${price}`;
+  return day ? `since ${day}` : "";
 }

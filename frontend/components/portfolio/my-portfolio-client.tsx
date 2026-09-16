@@ -17,13 +17,18 @@ import {
 } from "@/lib/api/fetch-holdings-client";
 import {
   adviceActionLabel,
+  adviceTrackSinceLine,
   buildAdviceEpisodeRows,
   episodeAfterLabel,
   episodeAfterTone,
   episodeCallLabel,
-  formatAdviceDay
+  selectAdviceTrackRows
 } from "@/lib/portfolio/advice-ledger-present";
-import { buildPortfolioView, type PortfolioView } from "@/lib/portfolio/holdings-present";
+import {
+  buildPortfolioView,
+  portfolioHoldingDeepDiveHref,
+  type PortfolioView
+} from "@/lib/portfolio/holdings-present";
 import { PortfolioReviewPanel } from "@/components/portfolio/portfolio-review-panel";
 import {
   DEFAULT_PORTFOLIO_SETTINGS,
@@ -322,7 +327,7 @@ export function MyPortfolioClient() {
   const benchPrice = prices.get(settings.benchmarkSymbol.toUpperCase());
   const sales = ledger?.events.filter((e) => e.kind === "sale") ?? [];
   const adviceEpisodes = useMemo(
-    () => buildAdviceEpisodeRows(ledger?.events ?? []),
+    () => selectAdviceTrackRows(buildAdviceEpisodeRows(ledger?.events ?? [])),
     [ledger?.events]
   );
 
@@ -978,45 +983,89 @@ export function MyPortfolioClient() {
           Advice track
         </div>
         <p style={{ fontSize: typography.scale.xs, color: colors.textMuted, margin: `0 0 ${spacing[3]}` }}>
-          Each call, from the day it started.
+          The current call per name. A result appears only after 30 or 90 days.
         </p>
         {adviceEpisodes.length === 0 ? (
           <div style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
             Run a daily review to start the track.
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={{ ...th, textAlign: "left" }}>Symbol</th>
-                  <th style={{ ...th, textAlign: "left" }}>Call</th>
-                  <th style={{ ...th, textAlign: "left" }}>Since</th>
-                  <th style={th}>Price</th>
-                  <th style={{ ...th, textAlign: "left" }}>After</th>
-                </tr>
-              </thead>
-              <tbody>
-                {adviceEpisodes.map((row) => {
-                  const after = episodeAfterLabel(row);
-                  const tone = episodeAfterTone(row);
-                  const afterColor =
-                    tone === "good" ? colors.bullish : tone === "bad" ? colors.bearish : colors.textMuted;
-                  return (
-                    <tr key={row.eventId || `${row.symbol}-${row.startedAt}`}>
-                      <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{row.symbol}</td>
-                      <td style={{ ...td, textAlign: "left" }}>{episodeCallLabel(row)}</td>
-                      <td style={{ ...td, textAlign: "left" }}>{formatAdviceDay(row.startedAt)}</td>
-                      <td style={td}>{fmtUsd(row.priceAtAdvice)}</td>
-                      <td style={{ ...td, textAlign: "left", color: afterColor }}>{after}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ul
+            style={{
+              listStyle: "none",
+              margin: 0,
+              padding: 0,
+              display: "flex",
+              flexDirection: "column"
+            }}
+          >
+            {adviceEpisodes.map((row, i) => {
+              const after = episodeAfterLabel(row);
+              const tone = episodeAfterTone(row);
+              const afterColor =
+                tone === "good" ? colors.bullish : tone === "bad" ? colors.bearish : colors.textMuted;
+              return (
+                <li
+                  key={row.eventId || `${row.symbol}-${row.startedAt}`}
+                  data-testid={`advice-track-${row.symbol}-${row.startedAt.slice(0, 10)}`}
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "baseline",
+                    gap: `${spacing[2]} ${spacing[3]}`,
+                    padding: `${spacing[2]} 0`,
+                    borderTop: i === 0 ? "none" : `1px solid ${colors.border}`,
+                    fontSize: typography.scale.sm,
+                    color: colors.text
+                  }}
+                >
+                  <Link
+                    href={portfolioHoldingDeepDiveHref(row.symbol)}
+                    style={{ color: colors.accent, textDecoration: "none", fontWeight: 700 }}
+                  >
+                    {row.symbol}
+                  </Link>
+                  <AdviceActionBadge label={episodeCallLabel(row)} />
+                  <span style={{ color: colors.textMuted }}>
+                    {adviceTrackSinceLine(row.startedAt, fmtUsd(row.priceAtAdvice))}
+                  </span>
+                  {after ? <span style={{ color: afterColor, marginLeft: "auto" }}>{after}</span> : null}
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
     </div>
+  );
+}
+
+function adviceBadgeColor(
+  label: string,
+  colors: { bullish: string; bearish: string; caution: string; textMuted: string }
+): string {
+  const key = label.toLowerCase();
+  if (key === "buy more" || key === "add") return colors.bullish;
+  if (key === "sell") return colors.bearish;
+  if (key === "trim") return colors.caution;
+  return colors.textMuted;
+}
+
+function AdviceActionBadge({ label }: { label: string }) {
+  const { colors } = useTheme();
+  return (
+    <span
+      style={{
+        background: adviceBadgeColor(label, colors),
+        color: "#fff",
+        borderRadius: borderRadius.sm,
+        padding: `2px ${spacing[2]}`,
+        fontSize: typography.scale.xs,
+        fontWeight: 700,
+        whiteSpace: "nowrap"
+      }}
+    >
+      {label}
+    </span>
   );
 }
