@@ -29,12 +29,35 @@ function fmtPct(n: number | null | undefined): string {
   return `${sign}${n.toFixed(1)}%`;
 }
 
-/** Collapsed Why cell: sizingReason, else first rationale line, truncated. */
+/** Collapsed Why cell: signal driver, else sizingReason, else first rationale. */
 export function holdingWhyLine(h: HoldingReview, maxChars = WHY_LINE_MAX): string {
-  const raw = (h.sizingReason?.trim() || h.rationale.find((s) => s.trim()) || "").trim();
+  const raw = (
+    h.driverLine?.trim() ||
+    h.sizingReason?.trim() ||
+    h.rationale.find((s) => s.trim()) ||
+    ""
+  ).trim();
   if (!raw) return h.actionLabel || "—";
   if (raw.length <= maxChars) return raw;
   return `${raw.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+}
+
+/**
+ * How the book did against the benchmark over the same money-weighted window.
+ * `ahead` is null when the two are close enough to call it a tie.
+ */
+export function benchmarkEdge(
+  portfolioReturnPct: number | null | undefined,
+  benchmarkReturnPct: number | null | undefined
+): { label: string; ahead: boolean | null } | null {
+  if (portfolioReturnPct == null || !Number.isFinite(portfolioReturnPct)) return null;
+  if (benchmarkReturnPct == null || !Number.isFinite(benchmarkReturnPct)) return null;
+  const diff = portfolioReturnPct - benchmarkReturnPct;
+  if (Math.abs(diff) < 0.05) return { label: "dead even", ahead: null };
+  return {
+    label: `${diff > 0 ? "ahead" : "behind"} by ${Math.abs(diff).toFixed(1)} pts`,
+    ahead: diff > 0
+  };
 }
 
 /** Collapsed Do-this cell. Prefer add, else reduce, else an em dash. */
@@ -67,10 +90,15 @@ export function considerAddSizeLine(
 }
 
 function remainingRationale(h: HoldingReview): string[] {
-  if (h.sizingReason?.trim()) return h.rationale;
-  const firstIdx = h.rationale.findIndex((s) => s.trim());
-  if (firstIdx < 0) return [];
-  return h.rationale.filter((_, i) => i !== firstIdx);
+  const why = holdingWhyLine(h);
+  const extra: string[] = [];
+  const sizing = (h.sizingReason || "").trim();
+  if (sizing && sizing !== why) extra.push(sizing);
+  for (const line of h.rationale) {
+    const text = line.trim();
+    if (text && text !== why && !extra.includes(text)) extra.push(text);
+  }
+  return extra;
 }
 
 /**
@@ -179,32 +207,60 @@ export function PortfolioReviewPanel({ onReviewComplete }: { onReviewComplete?: 
 
       {review ? (
         <div style={{ display: "flex", flexDirection: "column", gap: spacing[4] }}>
-          {/* Portfolio return vs benchmark */}
+          {/* Portfolio return vs benchmark over the same buy dates */}
           {review.benchmark ? (
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: spacing[4],
-                fontSize: typography.scale.sm,
-                color: colors.text
-              }}
-            >
-              <span>
-                Your return:{" "}
-                <strong
-                  style={{
-                    color:
-                      (review.portfolioReturnPct ?? 0) >= 0 ? colors.bullish : colors.bearish
-                  }}
-                >
-                  {fmtPct(review.portfolioReturnPct)}
-                </strong>
-              </span>
-              <span>
-                {review.benchmark.benchmarkSymbol} (money-weighted):{" "}
-                <strong>{fmtPct(review.benchmark.benchmarkReturnPct)}</strong>
-              </span>
+            <div style={{ display: "flex", flexDirection: "column", gap: spacing[1] }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: spacing[4],
+                  fontSize: typography.scale.sm,
+                  color: colors.text
+                }}
+              >
+                <span>
+                  Your book:{" "}
+                  <strong
+                    style={{
+                      color:
+                        (review.portfolioReturnPct ?? 0) >= 0 ? colors.bullish : colors.bearish
+                    }}
+                  >
+                    {fmtPct(review.portfolioReturnPct)}
+                  </strong>
+                </span>
+                <span>
+                  {review.benchmark.benchmarkSymbol} on your buy dates:{" "}
+                  <strong>{fmtPct(review.benchmark.benchmarkReturnPct)}</strong>
+                </span>
+                {(() => {
+                  const edge = benchmarkEdge(
+                    review.portfolioReturnPct,
+                    review.benchmark.benchmarkReturnPct
+                  );
+                  if (!edge) return null;
+                  return (
+                    <span
+                      data-testid="benchmark-edge"
+                      style={{
+                        color:
+                          edge.ahead == null
+                            ? colors.textMuted
+                            : edge.ahead
+                              ? colors.bullish
+                              : colors.bearish,
+                        fontWeight: 600
+                      }}
+                    >
+                      {edge.label}
+                    </span>
+                  );
+                })()}
+              </div>
+              <div data-testid="benchmark-note" style={muted}>
+                {review.benchmark.note}
+              </div>
             </div>
           ) : null}
 
@@ -304,6 +360,14 @@ export function PortfolioReviewPanel({ onReviewComplete }: { onReviewComplete?: 
                         ) : null}
                         {size ? ` — ${size}` : null}
                       </div>
+                      {c.driverLine ? (
+                        <div
+                          data-testid={`consider-add-driver-${c.symbol}`}
+                          style={{ fontSize: typography.scale.xs, color: colors.text }}
+                        >
+                          {c.driverLine}
+                        </div>
+                      ) : null}
                       {c.why ? (
                         <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
                           {c.why}
@@ -425,7 +489,13 @@ function WhyToggle({
       }}
     >
       <span
-        data-testid={h.sizingReason ? `sizing-reason-${h.symbol}` : undefined}
+        data-testid={
+          h.driverLine?.trim()
+            ? `review-why-${h.symbol}`
+            : h.sizingReason
+              ? `sizing-reason-${h.symbol}`
+              : `review-why-${h.symbol}`
+        }
         style={{ flex: 1 }}
       >
         {why}

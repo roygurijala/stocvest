@@ -11,7 +11,9 @@ vi.mock("next/link", () => ({
 }));
 
 import {
+  benchmarkEdge,
   considerAddSizeLine,
+  holdingWhyLine,
   PortfolioReviewPanel
 } from "@/components/portfolio/portfolio-review-panel";
 import { ThemeProvider } from "@/lib/theme-provider";
@@ -65,6 +67,7 @@ function sampleReview(): PortfolioReview {
         overweight: true,
         suggestedAddAmount: null,
         suggestedReduceAmount: 99,
+        driverLine: "F2 Growth: Revenue +32% latest-quarter YoY — strong",
         taxLotHint: null,
         longTermLots: 1,
         shortTermLots: 0,
@@ -120,7 +123,8 @@ function sampleReview(): PortfolioReview {
         sleeveLowPct: 10,
         sleeveHighPct: 15,
         targetPct: 10,
-        suggestedAddAmount: 220
+        suggestedAddAmount: 220,
+        driverLine: "F2 Growth: Revenue +18% latest-quarter YoY"
       }
     ],
     benchmark: {
@@ -128,7 +132,7 @@ function sampleReview(): PortfolioReview {
       investedCost: 2000,
       benchmarkValue: 2100,
       benchmarkReturnPct: 5,
-      note: "Money-weighted."
+      note: "Not year-to-date. Same dollars invested in SPY on each of your purchase dates."
     },
     fullyPriced: true,
     effectiveTargetPct: 50,
@@ -166,7 +170,17 @@ describe("PortfolioReviewPanel", () => {
       /add ~\$220.*core 10–15% sleeve/
     );
     expect(screen.getByTestId("consider-add-NVDA")).toHaveTextContent(/cheap \+ strong/);
-    expect(screen.getByText(/SPY \(money-weighted\)/)).toBeInTheDocument();
+    expect(screen.getByTestId("consider-add-driver-NVDA")).toHaveTextContent(
+      /F2 Growth: Revenue \+18% latest-quarter YoY/
+    );
+    expect(screen.getByTestId("review-why-AAPL")).toHaveTextContent(
+      /F2 Growth: Revenue \+32% latest-quarter YoY/
+    );
+    expect(screen.getByText(/SPY on your buy dates/)).toBeInTheDocument();
+    expect(screen.getByTestId("benchmark-edge")).toHaveTextContent("behind by 7.5 pts");
+    expect(screen.getByTestId("benchmark-note")).toHaveTextContent(
+      /Not year-to-date.*same dollars invested in SPY on each of your purchase dates/i
+    );
     expect(screen.getAllByText(/vs cost/).length).toBeGreaterThan(0);
     expect(screen.getByText(/add ~\$150/)).toBeInTheDocument();
     expect(screen.getByText(/reduce ~\$99/)).toBeInTheDocument();
@@ -178,6 +192,25 @@ describe("PortfolioReviewPanel", () => {
     expect(screen.queryByTestId("review-default-target")).not.toBeInTheDocument();
     expect(screen.getByTestId("review-sizing-rule")).toHaveTextContent(
       /Sell still reduces the full position/
+    );
+  });
+
+  test("keeps sizing copy in the expand when Why is the signal driver", async () => {
+    const review = sampleReview();
+    review.holdings[0].sizingReason = "Trim the excess above the core 15% sleeve high.";
+    fetchMock.mockResolvedValueOnce({ ok: true, review });
+    wrap(<PortfolioReviewPanel />);
+
+    fireEvent.click(screen.getByTestId("run-review"));
+
+    await waitFor(() => expect(screen.getByTestId("review-why-AAPL")).toBeInTheDocument());
+    expect(screen.getByTestId("review-why-AAPL")).toHaveTextContent(/F2 Growth/);
+    expect(screen.queryByText(/Trim the excess above the core/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("review-row-AAPL"));
+
+    expect(screen.getByTestId("review-row-detail-AAPL")).toHaveTextContent(
+      /Trim the excess above the core 15% sleeve high/
     );
   });
 
@@ -301,6 +334,67 @@ describe("PortfolioReviewPanel", () => {
   });
 });
 
+describe("holdingWhyLine", () => {
+  test("prefers the signal driver over sizing copy", () => {
+    expect(
+      holdingWhyLine({
+        symbol: "OVV",
+        quantity: 0,
+        averageCost: null,
+        currentPrice: null,
+        marketValue: null,
+        unrealizedPl: null,
+        unrealizedPlPct: null,
+        weightPct: null,
+        verdict: "bullish",
+        confidence: null,
+        action: "buy_more",
+        actionLabel: "Buy more",
+        rationale: ["Long-Term composite reads bullish."],
+        overweight: false,
+        suggestedAddAmount: 420,
+        suggestedReduceAmount: null,
+        sizingReason: "Starter at core 10–15% sleeve — add ~$420.00 to reach the 10.0% floor.",
+        driverLine: "F2 Growth: Revenue +18% latest-quarter YoY",
+        taxLotHint: null,
+        longTermLots: 0,
+        shortTermLots: 0,
+        holderRead: null,
+        aiRead: null
+      })
+    ).toBe("F2 Growth: Revenue +18% latest-quarter YoY");
+  });
+
+  test("falls back to sizing when the driver is missing", () => {
+    expect(
+      holdingWhyLine({
+        symbol: "ARKQ",
+        quantity: 1,
+        averageCost: 50,
+        currentPrice: 40,
+        marketValue: 40,
+        unrealizedPl: -10,
+        unrealizedPlPct: -20,
+        weightPct: 4.2,
+        verdict: "bearish",
+        confidence: null,
+        action: "sell",
+        actionLabel: "Sell",
+        rationale: ["Long-Term composite reads bearish."],
+        overweight: false,
+        suggestedAddAmount: null,
+        suggestedReduceAmount: 7100,
+        sizingReason: "Sell overrides the target: reducing the full position.",
+        taxLotHint: null,
+        longTermLots: 0,
+        shortTermLots: 1,
+        holderRead: null,
+        aiRead: null
+      })
+    ).toMatch(/Sell overrides the target/);
+  });
+});
+
 describe("considerAddSizeLine", () => {
   test("names the sleeve percent and the cash-capped dollars", () => {
     expect(
@@ -335,5 +429,24 @@ describe("considerAddSizeLine", () => {
         20_000
       )
     ).toMatch(/core 10–15% sleeve is ~\$2,000.*no cash left/i);
+  });
+});
+
+describe("benchmarkEdge", () => {
+  test("says how far ahead the book is", () => {
+    expect(benchmarkEdge(26.1, 23.4)).toEqual({ label: "ahead by 2.7 pts", ahead: true });
+  });
+
+  test("says how far behind the book is", () => {
+    expect(benchmarkEdge(-2.5, 5)).toEqual({ label: "behind by 7.5 pts", ahead: false });
+  });
+
+  test("calls a near-tie dead even with no direction", () => {
+    expect(benchmarkEdge(12.01, 12)).toEqual({ label: "dead even", ahead: null });
+  });
+
+  test("stays silent when either side is missing", () => {
+    expect(benchmarkEdge(12, null)).toBeNull();
+    expect(benchmarkEdge(null, 12)).toBeNull();
   });
 });

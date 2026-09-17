@@ -457,8 +457,8 @@ def compute_benchmark_comparison(
 
     benchmark_return_pct = round((benchmark_value - invested_cost) / invested_cost * 100.0, 2)
     note = (
-        f"Money-weighted: the same dollars invested in {benchmark_symbol} on each "
-        "purchase date."
+        f"Not year-to-date. Same dollars invested in {benchmark_symbol} "
+        "on each of your purchase dates."
     )
     if covered < len(lots):
         note += f" ({covered} of {len(lots)} lots matched a benchmark close.)"
@@ -574,6 +574,7 @@ class HoldingReview:
     suggested_add_amount: float | None = None
     suggested_reduce_amount: float | None = None
     sizing_reason: str | None = None
+    driver_line: str | None = None
     effective_target_pct: float | None = None
     sleeve: str | None = None
     sleeve_low_pct: float | None = None
@@ -604,6 +605,7 @@ class HoldingReview:
             "suggestedAddAmount": self.suggested_add_amount,
             "suggestedReduceAmount": self.suggested_reduce_amount,
             "sizingReason": self.sizing_reason,
+            "driverLine": self.driver_line,
             "effectiveTargetPct": self.effective_target_pct,
             "sleeve": self.sleeve,
             "sleeveLowPct": self.sleeve_low_pct,
@@ -645,6 +647,7 @@ class ConsiderAddCandidate:
     target_pct: float | None = None
     suggested_add_amount: float | None = None
     sizing_reason: str | None = None
+    driver_line: str | None = None
 
     def to_api(self) -> dict[str, Any]:
         return {
@@ -658,6 +661,7 @@ class ConsiderAddCandidate:
             "targetPct": self.target_pct,
             "suggestedAddAmount": self.suggested_add_amount,
             "sizingReason": self.sizing_reason,
+            "driverLine": self.driver_line,
         }
 
 
@@ -935,6 +939,11 @@ async def build_portfolio_review(
             stance=stance,
             sleeve=row_sleeve,
         )
+        row_driver = review_driver_line(
+            body,
+            action=action,
+            is_fund_vehicle=is_vehicle,
+        )
 
         if price is None:
             rationale.append(
@@ -978,6 +987,7 @@ async def build_portfolio_review(
                 suggested_add_amount=add_amt,
                 suggested_reduce_amount=reduce_amt,
                 sizing_reason=row_sizing_reason,
+                driver_line=row_driver,
                 effective_target_pct=row_target,
                 sleeve=row_sleeve.label if row_sleeve is not None else None,
                 sleeve_low_pct=row_sleeve.low_pct if row_sleeve is not None else None,
@@ -1050,6 +1060,9 @@ async def build_portfolio_review(
     )
 
 
+_DRIVER_MAX = 140
+
+
 def _rs_vs_spy_6m_from_body(body: dict[str, Any]) -> float | None:
     """6-month RS vs SPY from the Long-Term composite (technical indicator snapshot)."""
     raw = _num(body.get("rs_vs_spy_6m_pct"))
@@ -1063,6 +1076,123 @@ def _rs_vs_spy_6m_from_body(body: dict[str, Any]) -> float | None:
         snap = row.get("indicator_snapshot")
         snap = snap if isinstance(snap, dict) else {}
         return _num(snap.get("rs_vs_spy_6m_pct"))
+    return None
+
+
+def _clip_driver(text: str, max_chars: int = _DRIVER_MAX) -> str:
+    raw = " ".join((text or "").split())
+    if len(raw) <= max_chars:
+        return raw
+    return f"{raw[: max(0, max_chars - 1)].rstrip()}…"
+
+
+def _first_chip(pillar: dict[str, Any]) -> str:
+    for chip in pillar.get("chips") or []:
+        text = str(chip or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _active_pillars(body: dict[str, Any]) -> list[dict[str, Any]]:
+    fund = body.get("position_fundamentals")
+    fund = fund if isinstance(fund, dict) else {}
+    out: list[dict[str, Any]] = []
+    for pillar in fund.get("pillars") or []:
+        if not isinstance(pillar, dict):
+            continue
+        pid = str(pillar.get("pillar_id") or "").strip().upper()
+        status = str(pillar.get("status") or "").strip().lower()
+        if not pid or status == "unavailable":
+            continue
+        out.append(pillar)
+    return out
+
+
+def _format_pillar_driver(pillar: dict[str, Any]) -> str:
+    pid = str(pillar.get("pillar_id") or "").strip().upper()
+    label = str(pillar.get("label") or pid).strip()
+    chip = _first_chip(pillar)
+    if chip:
+        return f"{pid} {label}: {chip}"
+    reasoning = str(pillar.get("reasoning") or "").strip()
+    if reasoning:
+        return reasoning.replace(" Signal data only.", "").strip()
+    verdict = str(pillar.get("verdict") or "").strip()
+    score = _num(pillar.get("score"))
+    if score is not None and verdict:
+        return f"{pid} {label} reads {verdict} at {int(round(score))}/100"
+    return f"{pid} {label}".strip()
+
+
+def _pick_pillar(pillars: list[dict[str, Any]], *, prefer_weak: bool) -> dict[str, Any] | None:
+    scored = [p for p in pillars if _num(p.get("score")) is not None]
+    pool = scored or pillars
+    if not pool:
+        return None
+
+    def _key(pillar: dict[str, Any]) -> tuple[float, str]:
+        score = _num(pillar.get("score"))
+        return (score if score is not None else 50.0, str(pillar.get("pillar_id") or ""))
+
+    return min(pool, key=_key) if prefer_weak else max(pool, key=_key)
+
+
+def review_driver_line(
+    body: dict[str, Any] | None,
+    *,
+    action: ReviewAction,
+    is_fund_vehicle: bool = False,
+) -> str | None:
+    """First-screen Why: the already-computed metric that moved the call.
+
+    No new scores. Vehicles and a broken weekly structure beat pillar chips
+    because they *are* the call. Buy-more prefers a bullish F2 chip (growth-led);
+    sell/trim/hold cite the weakest scored pillar.
+    """
+    if is_fund_vehicle:
+        return "Fund/ETF vehicle — no corporate F1–F5 (no 10-K)."
+    if action == ReviewAction.REVIEW:
+        return "The Long-Term desk could not form a confident read."
+    if not isinstance(body, dict):
+        return None
+    if body.get("signal_structure_broken") is True:
+        return "Weekly structure is broken — thesis at risk."
+
+    pillars = _active_pillars(body)
+    if action == ReviewAction.BUY_MORE:
+        f2 = next((p for p in pillars if str(p.get("pillar_id") or "").upper() == "F2"), None)
+        if f2 is not None and str(f2.get("verdict") or "").strip().lower() == "bullish":
+            return _clip_driver(_format_pillar_driver(f2))
+        picked = _pick_pillar(pillars, prefer_weak=False)
+    else:
+        picked = _pick_pillar(pillars, prefer_weak=True)
+    if picked is not None:
+        return _clip_driver(_format_pillar_driver(picked))
+
+    verdict = str(body.get("verdict") or body.get("signal_summary") or "").strip()
+    if verdict:
+        return f"Long-Term composite reads {verdict}."
+    return None
+
+
+def consider_add_driver_line(candidate: Any) -> str | None:
+    """First-screen driver for an unheld gem/strong name — F2 chip, else weakest pillar."""
+    pillars = [p for p in (getattr(candidate, "pillars", None) or []) if isinstance(p, dict)]
+    f2 = next((p for p in pillars if str(p.get("pillar_id") or "").upper() == "F2"), None)
+    if f2 is not None:
+        chip = _first_chip(f2)
+        if chip:
+            return _clip_driver(f"F2 Growth: {chip}")
+        formatted = _format_pillar_driver(f2)
+        if formatted:
+            return _clip_driver(formatted)
+    weak_id = str(getattr(candidate, "weakest_pillar_id", None) or "").strip().upper()
+    weak_label = str(getattr(candidate, "weakest_pillar_label", None) or "").strip()
+    if weak_id and weak_label:
+        return f"Weakest {weak_id} · {weak_label}"
+    if weak_id:
+        return f"Weakest {weak_id}"
     return None
 
 
@@ -1216,6 +1346,7 @@ def _consider_adding(
                 target_pct=target,
                 suggested_add_amount=add,
                 sizing_reason=reason,
+                driver_line=consider_add_driver_line(c),
             )
         )
     return out[:5]

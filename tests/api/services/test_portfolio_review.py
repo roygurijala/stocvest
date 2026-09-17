@@ -16,10 +16,12 @@ from stocvest.api.services.portfolio_review import (
     build_owner_position_context,
     build_portfolio_review,
     compute_benchmark_comparison,
+    consider_add_driver_line,
     consider_add_sizing,
     derive_action,
     resolve_current_price,
     resolve_effective_target_pct,
+    review_driver_line,
     sizing_reason,
     suggested_add_amount,
     suggested_reduce_amount,
@@ -53,11 +55,23 @@ class _Bar:
 
 
 class _Cand:
-    def __init__(self, symbol, tier, verdict="bullish", why="cheap + strong"):
+    def __init__(
+        self,
+        symbol,
+        tier,
+        verdict="bullish",
+        why="cheap + strong",
+        weakest_pillar_id=None,
+        weakest_pillar_label=None,
+        pillars=None,
+    ):
         self.symbol = symbol
         self.tier = tier
         self.verdict = verdict
         self.why = why
+        self.weakest_pillar_id = weakest_pillar_id
+        self.weakest_pillar_label = weakest_pillar_label
+        self.pillars = pillars or []
 
 
 def _holding(symbol, lots):
@@ -98,6 +112,142 @@ def test_resolve_current_price_prefers_last_trade_then_falls_back():
 )
 def test_derive_action(verdict, stance, status, expected):
     assert derive_action(verdict=verdict, holder_stance=stance, status=status) == expected
+
+
+# ── first-screen driver (already-computed composite fields only) ──────────────
+
+def test_review_driver_line_prefers_broken_structure_over_pillars() -> None:
+    body = {
+        "signal_summary": "bearish",
+        "signal_structure_broken": True,
+        "position_fundamentals": {
+            "pillars": [
+                {
+                    "pillar_id": "F1",
+                    "label": "Profitability",
+                    "status": "active",
+                    "score": 38,
+                    "verdict": "bearish",
+                    "chips": ["Negative free cash flow"],
+                }
+            ]
+        },
+    }
+    assert (
+        review_driver_line(body, action=ReviewAction.SELL)
+        == "Weekly structure is broken — thesis at risk."
+    )
+
+
+def test_review_driver_line_buy_more_cites_bullish_f2_chip() -> None:
+    body = {
+        "signal_summary": "bullish",
+        "position_fundamentals": {
+            "pillars": [
+                {
+                    "pillar_id": "F4",
+                    "label": "Valuation",
+                    "status": "active",
+                    "score": 88,
+                    "verdict": "bullish",
+                    "chips": ["PEG 0.8 — cheap for its growth"],
+                },
+                {
+                    "pillar_id": "F2",
+                    "label": "Growth",
+                    "status": "active",
+                    "score": 86,
+                    "verdict": "bullish",
+                    "chips": ["Revenue +32% latest-quarter YoY — strong"],
+                },
+            ]
+        },
+    }
+    assert (
+        review_driver_line(body, action=ReviewAction.BUY_MORE)
+        == "F2 Growth: Revenue +32% latest-quarter YoY — strong"
+    )
+
+
+def test_review_driver_line_hold_cites_weakest_pillar() -> None:
+    body = {
+        "signal_summary": "bullish",
+        "position_fundamentals": {
+            "pillars": [
+                {
+                    "pillar_id": "F2",
+                    "label": "Growth",
+                    "status": "active",
+                    "score": 86,
+                    "verdict": "bullish",
+                    "chips": ["Revenue +32% latest-quarter YoY — strong"],
+                },
+                {
+                    "pillar_id": "F4",
+                    "label": "Valuation",
+                    "status": "active",
+                    "score": 44,
+                    "verdict": "neutral",
+                    "chips": ["PEG 2.1 — expensive vs growth"],
+                },
+            ]
+        },
+    }
+    assert (
+        review_driver_line(body, action=ReviewAction.HOLD)
+        == "F4 Valuation: PEG 2.1 — expensive vs growth"
+    )
+
+
+def test_review_driver_line_vehicle_skips_pillars() -> None:
+    body = {
+        "signal_summary": "neutral",
+        "is_fund_vehicle": True,
+        "position_fundamentals": {
+            "pillars": [
+                {
+                    "pillar_id": "F1",
+                    "label": "Profitability",
+                    "status": "active",
+                    "score": 20,
+                    "chips": ["Negative free cash flow"],
+                }
+            ]
+        },
+    }
+    assert (
+        review_driver_line(body, action=ReviewAction.HOLD, is_fund_vehicle=True)
+        == "Fund/ETF vehicle — no corporate F1–F5 (no 10-K)."
+    )
+
+
+def test_consider_add_driver_line_prefers_f2_chip() -> None:
+    cand = _Cand(
+        "OVV",
+        "gem",
+        why="growth-led",
+        weakest_pillar_id="F4",
+        weakest_pillar_label="Valuation",
+        pillars=[
+            {
+                "pillar_id": "F2",
+                "label": "Growth",
+                "chips": ["Revenue +18% latest-quarter YoY"],
+            }
+        ],
+    )
+    assert consider_add_driver_line(cand) == "F2 Growth: Revenue +18% latest-quarter YoY"
+
+
+def test_consider_add_driver_line_falls_back_to_weakest_pillar() -> None:
+    cand = _Cand(
+        "OVV",
+        "gem",
+        why="growth-led",
+        weakest_pillar_id="F4",
+        weakest_pillar_label="Valuation",
+    )
+    assert consider_add_driver_line(cand) == "Weakest F4 · Valuation"
 
 
 # ── sizing helpers ───────────────────────────────────────────────────────────
@@ -363,6 +513,8 @@ def test_compute_benchmark_comparison_money_weighted():
     assert isinstance(result, BenchmarkComparison)
     assert result.benchmark_value == 1250.0
     assert result.benchmark_return_pct == 25.0
+    assert "Not year-to-date" in result.note
+    assert "purchase dates" in result.note
 
 
 def test_compute_benchmark_comparison_unavailable_without_price():
@@ -435,6 +587,7 @@ def test_build_portfolio_review_end_to_end():
     assert aapl.unrealized_pl == 200.0  # (120-100)*10
     assert aapl.suggested_add_amount is None
     assert aapl.suggested_reduce_amount == 100.0  # 1200 − 50% of 2200
+    assert aapl.driver_line == "Long-Term composite reads bullish."
 
     # XOM: bearish + defensive → SELL; full market value, not excess-to-target.
     xom = by_sym["XOM"]
@@ -442,6 +595,7 @@ def test_build_portfolio_review_end_to_end():
     assert xom.short_term_lots == 1 and xom.long_term_lots == 0
     assert xom.tax_lot_hint is not None
     assert xom.suggested_reduce_amount == 750.0
+    assert xom.driver_line == "Weekly structure is broken — thesis at risk."
 
     # Concentration flags AAPL only.
     assert [c.symbol for c in review.concentration] == ["AAPL"]
@@ -466,6 +620,8 @@ def test_build_portfolio_review_end_to_end():
     assert payload["disclaimer"]
     assert payload["sizingRule"] == _SIZING_RULE
     assert "sizingReason" in payload["holdings"][0]
+    assert "driverLine" in payload["holdings"][0]
+    assert by_sym["XOM"].to_api()["driverLine"] == "Weekly structure is broken — thesis at risk."
 
 
 def test_owner_context_priced_bullish():
@@ -1222,7 +1378,23 @@ def test_build_portfolio_review_sizes_unheld_gem_to_core_floor() -> None:
             compose_fn=compose_fn,
             snapshot_fn=snap_fn,
             spy_bars_fn=spy_bars_fn,
-            scan_fn=lambda: [_Cand("OVV", "gem", verdict="bullish", why="growth-led")],
+            scan_fn=lambda: [
+                _Cand(
+                    "OVV",
+                    "gem",
+                    verdict="bullish",
+                    why="growth-led",
+                    weakest_pillar_id="F4",
+                    weakest_pillar_label="Valuation",
+                    pillars=[
+                        {
+                            "pillar_id": "F2",
+                            "label": "Growth",
+                            "chips": ["Revenue +18% latest-quarter YoY"],
+                        }
+                    ],
+                )
+            ],
             as_of=date(2026, 9, 15),
             advice_enabled=True,
         )
@@ -1240,3 +1412,5 @@ def test_build_portfolio_review_sizes_unheld_gem_to_core_floor() -> None:
     payload = ovv.to_api()
     assert payload["suggestedAddAmount"] == 420.0
     assert payload["sleeve"] == "core"
+    assert ovv.driver_line == "F2 Growth: Revenue +18% latest-quarter YoY"
+    assert payload["driverLine"] == "F2 Growth: Revenue +18% latest-quarter YoY"

@@ -221,8 +221,9 @@ class EmailService:
                 continue
             tier = f" ({c.get('tier')})" if c.get("tier") else ""
             size = c.get("sizingReason") or ""
+            driver = c.get("driverLine") or ""
             why = c.get("why") or ""
-            extras_bits = [p for p in (size, why) if p]
+            extras_bits = [p for p in (size, driver, why) if p]
             adds.append(
                 f"{c.get('symbol')}{tier}" + (f" — {' · '.join(extras_bits)}" if extras_bits else "")
             )
