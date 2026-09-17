@@ -157,9 +157,10 @@ export function MyPortfolioClient() {
     if (draft?.existing && !symbols.has(draft.symbol)) setDraft(null);
   }, [holdings, splitFor, saleFor, draft]);
 
-  // Fetch live quotes for held symbols + the benchmark.
+  // Fetch live quotes for held symbols. The benchmark comparison is money-weighted
+  // and priced server-side in the review, so no spot benchmark quote is needed here.
   useEffect(() => {
-    const symbols = [...holdings.map((h) => h.symbol), settings.benchmarkSymbol].filter(Boolean);
+    const symbols = holdings.map((h) => h.symbol).filter(Boolean);
     if (symbols.length === 0) {
       setPrices(new Map());
       return;
@@ -179,7 +180,7 @@ export function MyPortfolioClient() {
     return () => {
       cancelled = true;
     };
-  }, [holdings, settings.benchmarkSymbol]);
+  }, [holdings]);
 
   const view: PortfolioView = useMemo(
     () => buildPortfolioView(holdings, settings, (sym) => prices.get(sym.toUpperCase()) ?? null),
@@ -324,7 +325,6 @@ export function MyPortfolioClient() {
     await reload();
   }
 
-  const benchPrice = prices.get(settings.benchmarkSymbol.toUpperCase());
   const sales = ledger?.events.filter((e) => e.kind === "sale") ?? [];
   const adviceEpisodes = useMemo(
     () => selectAdviceTrackRows(buildAdviceEpisodeRows(ledger?.events ?? [])),
@@ -448,17 +448,6 @@ export function MyPortfolioClient() {
           </div>
           <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
             {view.holdingsCount} holding{view.holdingsCount === 1 ? "" : "s"}
-          </div>
-        </div>
-        <div style={card}>
-          <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
-            Benchmark ({view.benchmarkSymbol})
-          </div>
-          <div style={{ fontSize: typography.scale.lg, color: colors.text, fontWeight: 700 }}>
-            {typeof benchPrice === "number" ? fmtUsd(benchPrice) : "—"}
-          </div>
-          <div style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
-            {view.targetPositionPct != null ? `Target ${view.targetPositionPct}% / position` : "No target set"}
           </div>
         </div>
       </div>

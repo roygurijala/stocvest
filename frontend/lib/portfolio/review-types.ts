@@ -27,6 +27,7 @@ export interface HoldingReview {
   suggestedAddAmount: number | null;
   suggestedReduceAmount: number | null;
   sizingReason?: string | null;
+  driverLine?: string | null;
   effectiveTargetPct?: number | null;
   sleeve?: string | null;
   sleeveLowPct?: number | null;
@@ -63,6 +64,7 @@ export interface ConsiderAddCandidate {
   targetPct?: number | null;
   suggestedAddAmount?: number | null;
   sizingReason?: string | null;
+  driverLine?: string | null;
 }
 
 export interface BenchmarkComparison {
