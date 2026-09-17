@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -30,6 +31,11 @@ from stocvest.api.services.position_scan_store import (
 from stocvest.signals.position_gem_gates import TIER_GEM, TIER_MONITOR
 
 pytestmark = pytest.mark.unit
+
+
+def _fresh_pond_at() -> datetime:
+    """Inside the 7-day hunt-pond TTL. Do not pin a calendar date — CI crossed it."""
+    return datetime.now(timezone.utc) - timedelta(hours=1)
 
 
 _PILLAR_LABELS = {
@@ -214,7 +220,7 @@ def test_live_scan_reuses_persisted_universe(monkeypatch: pytest.MonkeyPatch) ->
     store.put_universe(
         PositionScanUniverse(
             symbols=["AAPL", "RKLB"],
-            generated_at=__import__("datetime").datetime(2026, 9, 10, tzinfo=__import__("datetime").timezone.utc),
+            generated_at=_fresh_pond_at(),
             source="live",
         )
     )
@@ -271,7 +277,7 @@ def test_live_scan_caps_oversized_pond_keeps_held_scores(monkeypatch: pytest.Mon
     store.put_universe(
         PositionScanUniverse(
             symbols=["AAPL", "RKLB", "HELD"],
-            generated_at=__import__("datetime").datetime(2026, 9, 10, tzinfo=__import__("datetime").timezone.utc),
+            generated_at=_fresh_pond_at(),
             source="batch",
         )
     )
