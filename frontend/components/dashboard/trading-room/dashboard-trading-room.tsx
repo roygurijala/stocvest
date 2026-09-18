@@ -39,11 +39,11 @@ import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import { resolveSnapshotDisplayPrice } from "@/lib/api/snapshot-price";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
-import {
-  SECTOR_ROTATION_META,
-  type DashboardDeskInitial,
-  type DashboardSectorRotationRow
+import type {
+  DashboardDeskInitial,
+  DashboardSectorRotationRow
 } from "@/lib/dashboard/dashboard-page-data";
+import { SECTOR_ROTATION_META } from "@/lib/dashboard/sector-rotation-meta";
 import {
   MarketBrief,
   type BriefHeadline,
