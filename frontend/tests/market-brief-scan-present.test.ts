@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import {
   countMarketBriefExpandedSections,
   marketBriefExpandButtonLabel,
-  marketBriefExpandedHeadlines
+  marketBriefExpandedHeadlines,
+  marketBriefScanHeadline,
+  marketBriefScanMovers
 } from "@/lib/dashboard/trading-room/market-brief-scan-present";
 
 describe("market-brief-scan-present", () => {
@@ -28,13 +30,24 @@ describe("market-brief-scan-present", () => {
     expect(marketBriefExpandButtonLabel(0, false)).toBeNull();
   });
 
-  test("expanded headlines include full feed", () => {
+  test("expanded headlines skip the scan-surface lead", () => {
     const headlines = [{ id: "a" }, { id: "b" }, { id: "c" }];
-    expect(marketBriefExpandedHeadlines(headlines).map((h) => h.id)).toEqual(["a", "b", "c"]);
+    expect(marketBriefExpandedHeadlines(headlines).map((h) => h.id)).toEqual(["b", "c"]);
     expect(marketBriefExpandedHeadlines([])).toEqual([]);
   });
 
-  test("single headline counts as expandable section", () => {
+  test("scan surface keeps the lead headline and one mover each side", () => {
+    expect(marketBriefScanHeadline([{ id: "a" }, { id: "b" }])?.id).toBe("a");
+    expect(marketBriefScanHeadline([])).toBeNull();
+    expect(
+      marketBriefScanMovers({
+        up: [{ id: "u1" }, { id: "u2" }],
+        down: [{ id: "d1" }]
+      })
+    ).toEqual({ up: [{ id: "u1" }], down: [{ id: "d1" }] });
+  });
+
+  test("single headline stays on scan and is not expandable", () => {
     expect(
       countMarketBriefExpandedSections(
         {
@@ -47,6 +60,6 @@ describe("market-brief-scan-present", () => {
         },
         false
       )
-    ).toBe(1);
+    ).toBe(0);
   });
 });

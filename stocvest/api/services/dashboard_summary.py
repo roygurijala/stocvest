@@ -15,18 +15,24 @@ from stocvest.utils.logging import get_logger
 
 _LOG = get_logger(__name__)
 
-# Keep in lockstep with `frontend/lib/dashboard/dashboard-page-data.ts` symbol lists.
+# Keep in lockstep with `frontend/lib/dashboard/dashboard-page-data.ts` `SECTOR_ROTATION_META`.
 DASHBOARD_TAPE_SYMBOLS: tuple[str, ...] = ("SPY", "QQQ", "IWM", "I:VIX", "^VIX")
-DASHBOARD_DAILY_SYMBOLS: tuple[str, ...] = (
-    "SPY",
-    "QQQ",
-    "IWM",
-    "XLK",
-    "XLC",
-    "XLE",
-    "XLF",
-    "XLY",
+# 11 GICS sector SPDRs (XLK…XLRE). Earlier this list only had five names, so the
+# Market Brief dropped Health care / Industrials / Staples / Materials / Utilities / RE.
+DASHBOARD_SECTOR_ETFS: tuple[tuple[str, str], ...] = (
+    ("XLK", "Tech"),
+    ("XLC", "Comm"),
+    ("XLE", "Energy"),
+    ("XLF", "Financials"),
+    ("XLY", "Cons. disc."),
+    ("XLP", "Cons. staples"),
+    ("XLV", "Health care"),
+    ("XLI", "Industrials"),
+    ("XLB", "Materials"),
+    ("XLU", "Utilities"),
+    ("XLRE", "Real estate"),
 )
+DASHBOARD_DAILY_SYMBOLS: tuple[str, ...] = ("SPY", "QQQ", "IWM") + tuple(sym for sym, _ in DASHBOARD_SECTOR_ETFS)
 
 
 def _bar_close(bar: Bar | dict[str, Any]) -> float | None:

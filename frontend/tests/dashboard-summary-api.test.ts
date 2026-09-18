@@ -94,6 +94,8 @@ describe("dashboard summary API", () => {
     expect(segment.earnings.upcoming).toHaveLength(1);
     expect(segment.earnings.upcoming[0]?.symbol).toBe("ZZZ");
     expect(segment.weeklyIndexRows.find((r) => r.symbol === "SPY")?.lastPrice).toBe(500);
+    expect(segment.sectorRotation).toHaveLength(11);
     expect(segment.sectorRotation.some((r) => r.symbol === "XLK")).toBe(true);
+    expect(segment.sectorRotation.some((r) => r.symbol === "XLV")).toBe(true);
   });
 });

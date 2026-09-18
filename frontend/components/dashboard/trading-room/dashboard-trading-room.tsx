@@ -39,9 +39,10 @@ import type { MarketOverview, SnapshotPayload } from "@/lib/api/market";
 import { resolveSnapshotDisplayPrice } from "@/lib/api/snapshot-price";
 import type { ScannerOverview } from "@/lib/api/scanner";
 import type { EarningsEvent } from "@/lib/api/earnings";
-import type {
-  DashboardDeskInitial,
-  DashboardSectorRotationRow
+import {
+  SECTOR_ROTATION_META,
+  type DashboardDeskInitial,
+  type DashboardSectorRotationRow
 } from "@/lib/dashboard/dashboard-page-data";
 import {
   MarketBrief,
@@ -885,23 +886,30 @@ function TradingRoomBody({
     }
   }, [marketOpen, dayTradingSurfaces]);
 
-  // Sectors: prefer the latest-session move when the tape is shut (that's "today"),
-  // otherwise lean on the 5-day rotation for a steadier leadership read.
+  // Sectors: always render the 11 GICS SPDRs. Prefer the latest-session move when
+  // the tape is shut; otherwise lean on the 5-day rotation. Missing quotes stay visible.
   const sectors = useMemo<BriefSector[]>(() => {
     const useDaily = marketOpen === false;
-    const result: BriefSector[] = [];
-    for (const row of sectorRotation) {
-      const pct = useDaily ? (row.pct1d ?? row.pct5d) : (row.pct5d ?? row.pct1d);
-      if (pct == null) continue;
-      result.push({
-        symbol: row.symbol,
-        label: row.label,
-        pct,
-        pct1d: row.pct1d ?? null,
-        pct5d: row.pct5d ?? null
-      });
-    }
-    return result.sort((a, b) => b.pct - a.pct);
+    const bySymbol = new Map(sectorRotation.map((row) => [row.symbol, row] as const));
+    const result: BriefSector[] = SECTOR_ROTATION_META.map((meta) => {
+      const row = bySymbol.get(meta.symbol);
+      const pct1d = row?.pct1d ?? null;
+      const pct5d = row?.pct5d ?? null;
+      const pct = useDaily ? (pct1d ?? pct5d) : (pct5d ?? pct1d);
+      return {
+        symbol: meta.symbol,
+        label: meta.label,
+        pct: pct ?? null,
+        pct1d,
+        pct5d
+      };
+    });
+    return result.sort((a, b) => {
+      if (a.pct == null && b.pct == null) return a.label.localeCompare(b.label);
+      if (a.pct == null) return 1;
+      if (b.pct == null) return -1;
+      return b.pct - a.pct;
+    });
   }, [sectorRotation, marketOpen]);
   const sectorWindowLabel = marketOpen === false ? "today" : "past week";
 
@@ -928,7 +936,18 @@ function TradingRoomBody({
   }, [allCards]);
 
   const sessionNarrative = useMemo(
-    () => buildSessionNarrative({ marketOpen, spyPct, qqqPct, iwmPct, vixLevel, vixPct, sectors }),
+    () =>
+      buildSessionNarrative({
+        marketOpen,
+        spyPct,
+        qqqPct,
+        iwmPct,
+        vixLevel,
+        vixPct,
+        sectors: sectors
+          .filter((s): s is BriefSector & { pct: number } => typeof s.pct === "number" && Number.isFinite(s.pct))
+          .map((s) => ({ label: s.label, pct: s.pct }))
+      }),
     [marketOpen, spyPct, qqqPct, iwmPct, vixLevel, vixPct, sectors]
   );
 

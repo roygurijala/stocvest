@@ -65,7 +65,7 @@ describe("MarketBrief density (ADR-003 UX-D1)", () => {
 });
 
 describe("MarketBrief scan mode (ADR-003 UX-D3)", () => {
-  it("hides headlines and movers until expanded", () => {
+  it("shows the lead headline and one mover on scan, then the remaining feed when expanded", () => {
     render(
       <MarketBrief
         data={minimalBrief({
@@ -99,21 +99,23 @@ describe("MarketBrief scan mode (ADR-003 UX-D3)", () => {
       />
     );
 
+    expect(screen.getByTestId("market-brief-scan-headline")).toHaveTextContent("Fed signals patience");
+    expect(screen.getByTestId("market-brief-scan-movers")).toHaveTextContent("NVDA");
     expect(screen.queryByTestId("market-brief-headlines")).toBeNull();
-    expect(screen.queryByText("Fed signals patience")).toBeNull();
+    expect(screen.queryByText("Tech leads tape")).toBeNull();
     expect(screen.queryByText("Notable movers on the desk")).toBeNull();
     expect(screen.getByTestId("market-brief-expand-toggle")).toHaveTextContent("Expand brief · 2 sections");
 
     fireEvent.click(screen.getByTestId("market-brief-expand-toggle"));
     expect(screen.getByTestId("market-brief-expanded")).toBeInTheDocument();
-    expect(screen.getByTestId("market-brief-headlines")).toHaveTextContent("Fed signals patience");
+    expect(screen.getByTestId("market-brief-headlines")).toHaveTextContent("Tech leads tape");
     expect(screen.getByText("Notable movers on the desk")).toBeInTheDocument();
     expect(screen.getByText("Market headlines")).toBeInTheDocument();
   });
 });
 
 describe("MarketBrief sector heat (ADR-003 UX-D6)", () => {
-  it("renders sector heat grid instead of legacy chips", () => {
+  it("renders ranked sector rows instead of legacy chips", () => {
     render(
       <MarketBrief
         data={minimalBrief({
