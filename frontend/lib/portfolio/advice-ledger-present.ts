@@ -357,3 +357,54 @@ export function adviceTrackSinceLine(startedAt: string, priceLabel?: string | nu
   if (price && price !== "—") return `since ${day} at ${price}`;
   return day ? `since ${day}` : "";
 }
+
+function formatUsdEn(n: number): string {
+  return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+/** Already-computed do-this dollars. Hold / Review stay badge-only. */
+export function episodeCallSizeAmount(
+  row: Pick<AdviceEpisodeRow, "action" | "suggestedAddAmount" | "suggestedReduceAmount">
+): number | null {
+  const call = episodeCallLabel(row);
+  if (call === "Trim" || call === "Sell") {
+    const n = row.suggestedReduceAmount;
+    return n != null && Number.isFinite(n) && n > 0 ? n : null;
+  }
+  if (call === "Add" || call === "Buy more") {
+    const n = row.suggestedAddAmount;
+    return n != null && Number.isFinite(n) && n > 0 ? n : null;
+  }
+  return null;
+}
+
+export function episodeCallSizeLabel(
+  row: Pick<AdviceEpisodeRow, "action" | "suggestedAddAmount" | "suggestedReduceAmount">
+): string {
+  const n = episodeCallSizeAmount(row);
+  return n == null ? "" : formatUsdEn(n);
+}
+
+export type AdviceTrackNowMove = {
+  label: string;
+  tone: "up" | "down" | "flat";
+};
+
+/**
+ * Live last vs frozen advice price. A move, not a 30/90d score —
+ * do not map this onto favorable/unfavorable.
+ */
+export function adviceTrackNowMove(
+  priceAtAdvice: number | null | undefined,
+  priceNow: number | null | undefined
+): AdviceTrackNowMove | null {
+  if (priceNow == null || !Number.isFinite(priceNow) || priceNow <= 0) return null;
+  const nowLabel = formatUsdEn(priceNow);
+  if (priceAtAdvice == null || !Number.isFinite(priceAtAdvice) || priceAtAdvice <= 0) {
+    return { label: `now ${nowLabel}`, tone: "flat" };
+  }
+  const pct = ((priceNow - priceAtAdvice) / priceAtAdvice) * 100;
+  const sign = pct > 0 ? "+" : "";
+  const tone: AdviceTrackNowMove["tone"] = pct > 0 ? "up" : pct < 0 ? "down" : "flat";
+  return { label: `now ${nowLabel} · ${sign}${pct.toFixed(1)}%`, tone };
+}
