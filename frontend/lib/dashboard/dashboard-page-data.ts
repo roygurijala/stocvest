@@ -38,7 +38,8 @@ const INDEX_WEEKLY_META: readonly Omit<WeeklyIndexRow, "pct5d" | "lastPrice">[] 
   { symbol: "IWM", label: "Small cap" }
 ];
 
-const SECTOR_ROTATION_META: readonly { symbol: string; label: string }[] = [
+/** 11 GICS sector SPDRs — keep in lockstep with `DASHBOARD_SECTOR_ETFS` in dashboard_summary.py. */
+export const SECTOR_ROTATION_META: readonly { symbol: string; label: string }[] = [
   { symbol: "XLK", label: "Tech" },
   { symbol: "XLC", label: "Comm" },
   { symbol: "XLE", label: "Energy" },

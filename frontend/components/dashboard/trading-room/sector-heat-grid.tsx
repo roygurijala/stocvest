@@ -6,8 +6,12 @@ import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import {
   formatHeatMissingQuote,
   formatSectorHeatPct,
+  sectorBreadthCaption,
   sectorHeatCellStyle,
   sectorHeatPrimaryPct,
+  sectorRankBarTrackPct,
+  sectorRankMaxAbs,
+  sortSectorsForRank,
   SECTOR_HEAT_MAX_HOLDINGS,
   type SectorHeatInput
 } from "@/lib/dashboard/trading-room/sector-heat-present";
@@ -15,10 +19,6 @@ import {
   formatHeatVsGroup,
   heatCellPctForColor,
   heatGroupMedian,
-  HEAT_RELATIVE_SIZE_MIN,
-  heatRelativeTileLayout,
-  heatRelativeSizeWeights,
-  heatRelativeGridStyle,
   heatVsGroupDelta
 } from "@/lib/dashboard/trading-room/heat-group-present";
 import { HeatRelativeTileGrid } from "@/components/dashboard/trading-room/heat-relative-tile-grid";
@@ -46,99 +46,138 @@ export function SectorHeatGrid({
 }: SectorHeatGridProps) {
   if (sectors.length === 0) return null;
 
-  const sectorPcts = sectors.map((sector) => sectorHeatPrimaryPct(sector, sectorWindowLabel));
-  const groupMedian = heatGroupMedian(sectorPcts);
-  const weights = heatRelativeSizeWeights(sectorPcts, groupMedian);
-
-  const gridStyle: CSSProperties = {
-    ...heatRelativeGridStyle,
-    gap: spacing[2]
-  };
+  const ranked = sortSectorsForRank(sectors, sectorWindowLabel);
+  const sectorPcts = ranked.map((sector) => sectorHeatPrimaryPct(sector, sectorWindowLabel));
+  const maxAbs = sectorRankMaxAbs(sectorPcts);
+  const breadth = sectorBreadthCaption(ranked, sectorWindowLabel);
 
   return (
-    <div data-testid="market-brief-sector-heat-grid" style={gridStyle}>
-      {sectors.map((sector, index) => {
-        const pct = sectorPcts[index]!;
-        const layout = heatRelativeTileLayout(weights[index] ?? HEAT_RELATIVE_SIZE_MIN);
-        const selected = selectedSymbol === sector.symbol;
-        const tone = pct >= 0 ? colors.bullish : colors.bearish;
-        const cellStyle: CSSProperties = {
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "flex-start",
-          justifyContent: "center",
-          gap: 2,
-          flex: layout.flex,
-          height: layout.height,
-          minHeight: layout.height,
-          maxWidth: "100%",
-          boxSizing: "border-box",
-          padding: `${spacing[2]} ${spacing[2]}`,
-          borderRadius: borderRadius.md,
-          border: "none",
-          textAlign: "left",
-          cursor: interactive ? "pointer" : undefined,
-          transition: tradingRoomMotionTransition("background", "box-shadow", "height", "flex"),
-          ...sectorHeatCellStyle(pct, colors, { selected })
-        };
+    <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
+      {breadth ? (
+        <span data-testid="market-brief-sector-breadth" style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+          {breadth}
+        </span>
+      ) : null}
+      <div data-testid="market-brief-sector-heat-grid" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        {ranked.map((sector, index) => {
+          const pct = sectorPcts[index]!;
+          const selected = selectedSymbol === sector.symbol;
+          const tone = pct == null ? colors.textMuted : pct >= 0 ? colors.bullish : colors.bearish;
+          const barWidth = sectorRankBarTrackPct(pct, maxAbs);
+          const rowStyle: CSSProperties = {
+            display: "grid",
+            gridTemplateColumns: "minmax(72px, 118px) 36px minmax(0, 1fr) 52px",
+            alignItems: "center",
+            gap: spacing[2],
+            width: "100%",
+            boxSizing: "border-box",
+            padding: `${spacing[1]} ${spacing[2]}`,
+            borderRadius: borderRadius.sm,
+            border: "none",
+            textAlign: "left",
+            background: selected ? `${colors.accent}18` : "transparent",
+            boxShadow: selected ? `inset 0 0 0 1px ${colors.accent}` : "none",
+            cursor: interactive ? "pointer" : undefined,
+            transition: tradingRoomMotionTransition("background", "box-shadow")
+          };
 
-        const body = (
-          <>
-            <span
-              style={{
-                fontSize: typography.scale.xs,
-                fontWeight: 600,
-                color: colors.textMuted,
-                lineHeight: 1.2,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                maxWidth: "100%"
-              }}
-            >
-              {sector.label}
-            </span>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                fontFamily: typography.fontFamilyMono,
-                color: colors.textMuted,
-                letterSpacing: "0.04em"
-              }}
-            >
-              {sector.symbol}
-            </span>
-            <span style={{ fontSize: typography.scale.sm, fontWeight: 700, color: tone }}>{formatSectorHeatPct(pct)}</span>
-          </>
-        );
+          const body = (
+            <>
+              <span
+                style={{
+                  fontSize: typography.scale.xs,
+                  fontWeight: 600,
+                  color: colors.text,
+                  lineHeight: 1.2,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
+                }}
+              >
+                {sector.label}
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  fontFamily: typography.fontFamilyMono,
+                  color: colors.textMuted,
+                  letterSpacing: "0.04em"
+                }}
+              >
+                {sector.symbol}
+              </span>
+              <div
+                aria-hidden
+                style={{
+                  position: "relative",
+                  height: 8,
+                  borderRadius: 999,
+                  background: `${colors.border}40`,
+                  overflow: "hidden"
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    bottom: 0,
+                    left: "50%",
+                    width: 1,
+                    background: `${colors.textMuted}55`
+                  }}
+                />
+                {barWidth > 0 && pct != null ? (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 1,
+                      bottom: 1,
+                      left: pct >= 0 ? "50%" : `${50 - barWidth}%`,
+                      width: `${barWidth}%`,
+                      borderRadius: 999,
+                      background: tone
+                    }}
+                  />
+                ) : null}
+              </div>
+              <span
+                style={{
+                  fontSize: typography.scale.xs,
+                  fontWeight: 700,
+                  fontFamily: typography.fontFamilyMono,
+                  color: tone,
+                  textAlign: "right"
+                }}
+              >
+                {pct == null ? formatHeatMissingQuote() : formatSectorHeatPct(pct)}
+              </span>
+            </>
+          );
 
-        if (!interactive) {
+          if (!interactive) {
+            return (
+              <div key={sector.symbol} data-testid={`market-brief-sector-heat-${sector.symbol}`} style={rowStyle}>
+                {body}
+              </div>
+            );
+          }
+
           return (
-            <span
+            <button
               key={sector.symbol}
+              type="button"
               data-testid={`market-brief-sector-heat-${sector.symbol}`}
-              style={cellStyle}
+              aria-pressed={selected}
+              {...interactionLevelProps("medium")}
+              onClick={() => onSelectSector(sector.symbol)}
+              style={{ ...rowStyle, color: "inherit" }}
             >
               {body}
-            </span>
+            </button>
           );
-        }
-
-        return (
-          <button
-            key={sector.symbol}
-            type="button"
-            data-testid={`market-brief-sector-heat-${sector.symbol}`}
-            aria-pressed={selected}
-            {...interactionLevelProps("medium")}
-            onClick={() => onSelectSector(sector.symbol)}
-            style={{ ...cellStyle, color: "inherit" }}
-          >
-            {body}
-          </button>
-        );
-      })}
+        })}
+      </div>
     </div>
   );
 }

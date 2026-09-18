@@ -45,7 +45,9 @@ import { SectorHeatGrid, SectorHoldingsHeatGrid } from "@/components/dashboard/t
 import {
   countMarketBriefExpandedSections,
   marketBriefExpandButtonLabel,
-  marketBriefExpandedHeadlines
+  marketBriefExpandedHeadlines,
+  marketBriefScanHeadline,
+  marketBriefScanMovers
 } from "@/lib/dashboard/trading-room/market-brief-scan-present";
 
 const BRIEF_NAME_STORAGE_KEY = "stocvest:brief-name";
@@ -66,7 +68,7 @@ export interface BriefSector {
   symbol: string;
   label: string;
   /** Primary value shown (1-day when the tape is shut, 5-day average while open). */
-  pct: number;
+  pct: number | null;
   /** 1-day move, when available. */
   pct1d?: number | null;
   /** 5-day average move, when available. */
@@ -272,6 +274,8 @@ export function MarketBrief({
     [data.headlines, data.movers, data.weekAhead, data.outcomesRecap, data.watchlistAtClose, data.weekInReview, showPrep]
   );
   const expandLabel = marketBriefExpandButtonLabel(expandedSectionCount, briefExpanded);
+  const scanHeadline = marketBriefScanHeadline(data.headlines);
+  const scanMovers = marketBriefScanMovers(data.movers);
   const expandedHeadlines = marketBriefExpandedHeadlines(data.headlines);
   const regimeWhyInput = {
     regimeLabel: data.regimeLabel,
@@ -394,6 +398,24 @@ export function MarketBrief({
         {data.breadthLine ? (
           <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>{data.breadthLine}</span>
         ) : null}
+        {scanHeadline ? (
+          <div data-testid="market-brief-scan-headline" style={{ marginTop: spacing[1] }}>
+            <Headline item={scanHeadline} dot={dotFor(scanHeadline.sentiment)} colors={colors} />
+          </div>
+        ) : null}
+        {scanMovers.up.length > 0 || scanMovers.down.length > 0 ? (
+          <div
+            data-testid="market-brief-scan-movers"
+            style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], marginTop: spacing[1] }}
+          >
+            {scanMovers.up[0] ? (
+              <ScanMoverChip mover={scanMovers.up[0]} positive colors={colors} onSelectSymbol={onSelectSymbol} />
+            ) : null}
+            {scanMovers.down[0] ? (
+              <ScanMoverChip mover={scanMovers.down[0]} positive={false} colors={colors} onSelectSymbol={onSelectSymbol} />
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="brief-bento brief-bento--scan" style={{ gap: spacing[3], alignItems: "start" }}>
@@ -481,7 +503,7 @@ export function MarketBrief({
               colors.accent,
               <>
                 <span style={{ fontSize: typography.scale.xs, color: colors.textMuted, opacity: 0.85, marginTop: -2 }}>
-                  Sector heat by {data.sectorWindowLabel === "today" ? "1-day" : "5-day"} move — tap a tile for holdings and desk setups.
+                  All 11 GICS sectors by {data.sectorWindowLabel === "today" ? "1-day" : "5-day"} move — tap a row for holdings and desk setups.
                 </span>
                 <SectorHeatGrid
                   sectors={data.sectors}
@@ -1297,6 +1319,50 @@ function BriefSymbolButton({
       {symbol}
     </button>
   );
+}
+
+function ScanMoverChip({
+  mover,
+  positive,
+  colors,
+  onSelectSymbol
+}: {
+  mover: BriefMover;
+  positive: boolean;
+  colors: ReturnType<typeof useTheme>["colors"];
+  onSelectSymbol?: (symbol: string, company?: string | null, lane?: FeedLane) => void;
+}) {
+  const tone = positive ? colors.bullish : colors.bearish;
+  const body = (
+    <>
+      <span style={{ color: colors.textMuted, fontWeight: 600 }}>{positive ? "Lead" : "Lag"}</span>
+      <span style={{ color: colors.text, fontWeight: 700, fontFamily: typography.fontFamilyMono }}>{mover.symbol}</span>
+      <span style={{ color: tone, fontWeight: 700 }}>{fmtPct(mover.changePct)}</span>
+    </>
+  );
+  const style = {
+    display: "inline-flex",
+    alignItems: "baseline",
+    gap: spacing[1],
+    fontSize: typography.scale.sm,
+    padding: `${spacing[1]} ${spacing[2]}`,
+    borderRadius: borderRadius.md,
+    border: `1px solid ${colors.border}`,
+    background: colors.surfaceMuted
+  } as const;
+  if (onSelectSymbol) {
+    return (
+      <button
+        type="button"
+        data-testid={`market-brief-scan-mover-${mover.symbol}`}
+        onClick={() => onSelectSymbol(mover.symbol, mover.company, mover.lane)}
+        style={{ ...style, cursor: "pointer", color: "inherit" }}
+      >
+        {body}
+      </button>
+    );
+  }
+  return <span style={style}>{body}</span>;
 }
 
 function MoverColumn({

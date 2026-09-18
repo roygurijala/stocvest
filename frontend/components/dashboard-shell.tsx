@@ -35,7 +35,13 @@ export function DashboardShell({
     { symbol: "XLC", label: "Comm", pct5d: null },
     { symbol: "XLE", label: "Energy", pct5d: null },
     { symbol: "XLF", label: "Financials", pct5d: null },
-    { symbol: "XLY", label: "Cons. disc.", pct5d: null }
+    { symbol: "XLY", label: "Cons. disc.", pct5d: null },
+    { symbol: "XLP", label: "Cons. staples", pct5d: null },
+    { symbol: "XLV", label: "Health care", pct5d: null },
+    { symbol: "XLI", label: "Industrials", pct5d: null },
+    { symbol: "XLB", label: "Materials", pct5d: null },
+    { symbol: "XLU", label: "Utilities", pct5d: null },
+    { symbol: "XLRE", label: "Real estate", pct5d: null }
   ];
   return (
     <AppShell session={session}>

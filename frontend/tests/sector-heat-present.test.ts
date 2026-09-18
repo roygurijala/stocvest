@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   formatSectorHeatPct,
+  sectorBreadthCaption,
   sectorHeatCellBackground,
   sectorHeatGridColumns,
   sectorHeatIntensity,
   sectorHeatPrimaryPct,
+  sectorRankBarTrackPct,
+  sectorRankMaxAbs,
+  sortSectorsForRank,
   SECTOR_HEAT_MAX_HOLDINGS
 } from "@/lib/dashboard/trading-room/sector-heat-present";
 
@@ -60,5 +64,41 @@ describe("sector-heat-present (ADR-003 UX-D6)", () => {
 
   it("caps holdings at eight names", () => {
     expect(SECTOR_HEAT_MAX_HOLDINGS).toBe(8);
+  });
+
+  it("returns null primary pct when no quote is available", () => {
+    expect(sectorHeatPrimaryPct({ symbol: "XLU", label: "Utilities", pct: null }, "today")).toBeNull();
+  });
+
+  it("ranks sectors by move and parks missing quotes last", () => {
+    const ranked = sortSectorsForRank(
+      [
+        { symbol: "XLU", label: "Utilities", pct: null },
+        { symbol: "XLK", label: "Tech", pct: 0.8, pct1d: 0.8 },
+        { symbol: "XLC", label: "Comm", pct: -1.4, pct1d: -1.4 }
+      ],
+      "today"
+    );
+    expect(ranked.map((s) => s.symbol)).toEqual(["XLK", "XLC", "XLU"]);
+  });
+
+  it("scales diverging bars against the largest move", () => {
+    expect(sectorRankMaxAbs([0.8, -1.4, 0])).toBe(1.4);
+    expect(sectorRankBarTrackPct(1.4, 1.4)).toBe(50);
+    expect(sectorRankBarTrackPct(-0.7, 1.4)).toBe(25);
+    expect(sectorRankBarTrackPct(null, 1.4)).toBe(0);
+  });
+
+  it("writes a breadth caption from the 11-sector tape", () => {
+    expect(
+      sectorBreadthCaption(
+        [
+          { symbol: "XLK", label: "Tech", pct: 0.8, pct1d: 0.8 },
+          { symbol: "XLF", label: "Financials", pct: 0, pct1d: 0 },
+          { symbol: "XLC", label: "Comm", pct: -1.4, pct1d: -1.4 }
+        ],
+        "today"
+      )
+    ).toBe("1 of 3 sectors up · Tech leads, Comm lags");
   });
 });

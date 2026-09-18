@@ -15,7 +15,8 @@ export const SECTOR_HEAT_PCT_SATURATION = 2.5;
 export interface SectorHeatInput {
   symbol: string;
   label: string;
-  pct: number;
+  /** Primary window move; null when Polygon has no usable daily close. */
+  pct: number | null;
   pct1d?: number | null;
   pct5d?: number | null;
 }
@@ -30,12 +31,62 @@ export interface SectorHeatColors {
   surfaceMuted: string;
 }
 
-export function sectorHeatPrimaryPct(sector: SectorHeatInput, windowLabel: string): number {
+export function sectorHeatPrimaryPct(sector: SectorHeatInput, windowLabel: string): number | null {
   const useDaily = windowLabel === "today";
-  if (useDaily) {
-    return sector.pct1d ?? sector.pct5d ?? sector.pct;
+  const raw = useDaily
+    ? (sector.pct1d ?? sector.pct5d ?? sector.pct)
+    : (sector.pct5d ?? sector.pct1d ?? sector.pct);
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+}
+
+/** Floor so a quiet tape still draws readable bars. */
+export const SECTOR_RANK_BAR_MAX_ABS_FLOOR = 0.5;
+
+export function sectorRankMaxAbs(pcts: readonly (number | null | undefined)[]): number {
+  const nums = pcts.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  if (nums.length === 0) return SECTOR_RANK_BAR_MAX_ABS_FLOOR;
+  return Math.max(SECTOR_RANK_BAR_MAX_ABS_FLOOR, ...nums.map((n) => Math.abs(n)));
+}
+
+/** Width of the colored bar as a percent of the full track (0–50, diverging from center). */
+export function sectorRankBarTrackPct(pct: number | null | undefined, maxAbs: number): number {
+  if (pct == null || !Number.isFinite(pct) || maxAbs <= 0) return 0;
+  return Math.min(50, (Math.abs(pct) / maxAbs) * 50);
+}
+
+export function sortSectorsForRank<T extends SectorHeatInput>(
+  sectors: readonly T[],
+  windowLabel: string
+): T[] {
+  return [...sectors].sort((a, b) => {
+    const ap = sectorHeatPrimaryPct(a, windowLabel);
+    const bp = sectorHeatPrimaryPct(b, windowLabel);
+    if (ap == null && bp == null) return a.label.localeCompare(b.label);
+    if (ap == null) return 1;
+    if (bp == null) return -1;
+    if (bp !== ap) return bp - ap;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+/** e.g. "7 of 11 sectors up · Tech leads, Communications lags" */
+export function sectorBreadthCaption(
+  sectors: readonly SectorHeatInput[],
+  windowLabel: string
+): string | null {
+  const rows = sectors
+    .map((sector) => ({ label: sector.label, pct: sectorHeatPrimaryPct(sector, windowLabel) }))
+    .filter((row): row is { label: string; pct: number } => row.pct != null);
+  if (rows.length === 0) return null;
+  const up = rows.filter((row) => row.pct > 0.05).length;
+  const sorted = [...rows].sort((a, b) => b.pct - a.pct);
+  const lead = sorted[0];
+  const lag = sorted[sorted.length - 1];
+  const parts = [`${up} of ${rows.length} sectors up`];
+  if (lead && lag && lead.label !== lag.label && (lead.pct > 0.05 || lag.pct < -0.05)) {
+    parts.push(`${lead.label} leads, ${lag.label} lags`);
   }
-  return sector.pct5d ?? sector.pct1d ?? sector.pct;
+  return parts.join(" · ");
 }
 
 export function sectorHeatIntensity(pct: number, saturation = SECTOR_HEAT_PCT_SATURATION): number {

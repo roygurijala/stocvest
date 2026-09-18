@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from stocvest.api.services.dashboard_summary import build_dashboard_summary
+from stocvest.api.services.dashboard_summary import DASHBOARD_SECTOR_ETFS, build_dashboard_summary
 from stocvest.data import PolygonClient
 from stocvest.data.polygon_client import LIQUID_NEWS_TICKERS
 from stocvest.signals.geopolitical_scanner import ANTHROPIC_API_URL, ANTHROPIC_VERSION
@@ -38,13 +38,7 @@ _LOG = get_logger(__name__)
 # the 10-minute window keeps warm invocations instant and avoids a Claude call per request.
 _INPROC_CACHE: dict[str, dict[str, Any]] = {}
 
-_SECTOR_LABELS: dict[str, str] = {
-    "XLK": "Tech",
-    "XLC": "Comm",
-    "XLE": "Energy",
-    "XLF": "Financials",
-    "XLY": "Cons. disc.",
-}
+_SECTOR_LABELS: dict[str, str] = {sym: label for sym, label in DASHBOARD_SECTOR_ETFS}
 _INDEX_LABELS: dict[str, str] = {"SPY": "S&P 500", "QQQ": "Nasdaq 100", "IWM": "Small caps"}
 
 
