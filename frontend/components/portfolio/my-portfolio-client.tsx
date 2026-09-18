@@ -17,11 +17,13 @@ import {
 } from "@/lib/api/fetch-holdings-client";
 import {
   adviceActionLabel,
+  adviceTrackNowMove,
   adviceTrackSinceLine,
   buildAdviceEpisodeRows,
   episodeAfterLabel,
   episodeAfterTone,
   episodeCallLabel,
+  episodeCallSizeLabel,
   selectAdviceTrackRows
 } from "@/lib/portfolio/advice-ledger-present";
 import {
@@ -157,10 +159,24 @@ export function MyPortfolioClient() {
     if (draft?.existing && !symbols.has(draft.symbol)) setDraft(null);
   }, [holdings, splitFor, saleFor, draft]);
 
-  // Fetch live quotes for held symbols. The benchmark comparison is money-weighted
-  // and priced server-side in the review, so no spot benchmark quote is needed here.
+  const adviceEpisodes = useMemo(
+    () => selectAdviceTrackRows(buildAdviceEpisodeRows(ledger?.events ?? [])),
+    [ledger?.events]
+  );
+
+  // Live quotes for holdings plus advice-track names (sold calls still need now-vs-then).
+  // Benchmark comparison is money-weighted server-side — no spot SPY quote here.
   useEffect(() => {
-    const symbols = holdings.map((h) => h.symbol).filter(Boolean);
+    const symbols = [
+      ...new Set(
+        [
+          ...holdings.map((h) => h.symbol),
+          ...adviceEpisodes.map((r) => r.symbol)
+        ]
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean)
+      )
+    ];
     if (symbols.length === 0) {
       setPrices(new Map());
       return;
@@ -173,14 +189,14 @@ export function MyPortfolioClient() {
       for (const sym of symbols) {
         const snap = lookupSnapshot(snaps, sym);
         const price = snap?.last_trade_price ?? snap?.day_close ?? snap?.prev_close ?? null;
-        next.set(sym.toUpperCase(), typeof price === "number" ? price : null);
+        next.set(sym, typeof price === "number" ? price : null);
       }
       setPrices(next);
     })();
     return () => {
       cancelled = true;
     };
-  }, [holdings]);
+  }, [holdings, adviceEpisodes]);
 
   const view: PortfolioView = useMemo(
     () => buildPortfolioView(holdings, settings, (sym) => prices.get(sym.toUpperCase()) ?? null),
@@ -326,10 +342,6 @@ export function MyPortfolioClient() {
   }
 
   const sales = ledger?.events.filter((e) => e.kind === "sale") ?? [];
-  const adviceEpisodes = useMemo(
-    () => selectAdviceTrackRows(buildAdviceEpisodeRows(ledger?.events ?? [])),
-    [ledger?.events]
-  );
 
   // ── styles ──────────────────────────────────────────────────────────────
   const card: React.CSSProperties = {
@@ -972,7 +984,8 @@ export function MyPortfolioClient() {
           Advice track
         </div>
         <p style={{ fontSize: typography.scale.xs, color: colors.textMuted, margin: `0 0 ${spacing[3]}` }}>
-          The current call per name. A result appears only after 30 or 90 days.
+          The current call per name. Now vs then is the live move since that call — not
+          a 30- or 90-day score.
         </p>
         {adviceEpisodes.length === 0 ? (
           <div style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
@@ -993,6 +1006,17 @@ export function MyPortfolioClient() {
               const tone = episodeAfterTone(row);
               const afterColor =
                 tone === "good" ? colors.bullish : tone === "bad" ? colors.bearish : colors.textMuted;
+              const size = episodeCallSizeLabel(row);
+              const now = adviceTrackNowMove(
+                row.priceAtAdvice,
+                prices.get(row.symbol.toUpperCase()) ?? null
+              );
+              const nowColor =
+                now?.tone === "up"
+                  ? colors.bullish
+                  : now?.tone === "down"
+                    ? colors.bearish
+                    : colors.textMuted;
               return (
                 <li
                   key={row.eventId || `${row.symbol}-${row.startedAt}`}
@@ -1015,9 +1039,19 @@ export function MyPortfolioClient() {
                     {row.symbol}
                   </Link>
                   <AdviceActionBadge label={episodeCallLabel(row)} />
+                  {size ? (
+                    <span data-testid={`advice-track-size-${row.symbol}`} style={{ fontWeight: 600 }}>
+                      {size}
+                    </span>
+                  ) : null}
                   <span style={{ color: colors.textMuted }}>
                     {adviceTrackSinceLine(row.startedAt, fmtUsd(row.priceAtAdvice))}
                   </span>
+                  {now ? (
+                    <span data-testid={`advice-track-now-${row.symbol}`} style={{ color: nowColor }}>
+                      {now.label}
+                    </span>
+                  ) : null}
                   {after ? <span style={{ color: afterColor, marginLeft: "auto" }}>{after}</span> : null}
                 </li>
               );

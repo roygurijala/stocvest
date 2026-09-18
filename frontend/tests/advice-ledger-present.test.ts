@@ -2,11 +2,13 @@ import { describe, expect, test } from "vitest";
 
 import {
   adviceActionLabel,
+  adviceTrackNowMove,
   adviceTrackSinceLine,
   adviceTrackSummaryLine,
   buildAdviceEpisodeRows,
   episodeAfterLabel,
   episodeCallLabel,
+  episodeCallSizeLabel,
   episodeResultLabel,
   episodeStanceLabel,
   followThroughForReview,
@@ -361,5 +363,70 @@ describe("advice episodes", () => {
     ]);
     expect(adviceTrackSinceLine("2026-09-14", "$212.39")).toBe("since Sep 14 at $212.39");
     expect(adviceTrackSinceLine("2026-09-14", "—")).toBe("since Sep 14");
+  });
+});
+
+describe("advice track size and now-vs-then", () => {
+  test("hold stays badge-only; trim/add/sell show already-computed dollars", () => {
+    const hold = buildAdviceEpisodeRows([review({ adviceAction: "hold" })])[0];
+    expect(episodeCallSizeLabel(hold)).toBe("");
+    const trim = buildAdviceEpisodeRows([
+      review({
+        eventId: "t",
+        adviceAction: "trim",
+        adviceSuggestedReduceAmount: 2100
+      })
+    ])[0];
+    expect(episodeCallSizeLabel(trim)).toBe("$2,100.00");
+    const add = buildAdviceEpisodeRows([
+      review({
+        eventId: "a",
+        adviceAction: "hold",
+        adviceSuggestedAddAmount: 800
+      })
+    ])[0];
+    expect(episodeCallLabel(add)).toBe("Add");
+    expect(episodeCallSizeLabel(add)).toBe("$800.00");
+    const buyMore = buildAdviceEpisodeRows([
+      review({
+        eventId: "b",
+        adviceAction: "buy_more",
+        adviceSuggestedAddAmount: 1500
+      })
+    ])[0];
+    expect(episodeCallSizeLabel(buyMore)).toBe("$1,500.00");
+    const sell = buildAdviceEpisodeRows([
+      review({
+        eventId: "s",
+        adviceAction: "sell",
+        adviceSuggestedReduceAmount: 5400
+      })
+    ])[0];
+    expect(episodeCallSizeLabel(sell)).toBe("$5,400.00");
+    const emptyTrim = buildAdviceEpisodeRows([
+      review({ eventId: "e", adviceAction: "trim", adviceSuggestedReduceAmount: null })
+    ])[0];
+    expect(episodeCallSizeLabel(emptyTrim)).toBe("");
+  });
+
+  test("now-vs-then is a live move, not a 30/90d score", () => {
+    expect(adviceTrackNowMove(100, null)).toBeNull();
+    expect(adviceTrackNowMove(100, 0)).toBeNull();
+    expect(adviceTrackNowMove(null, 122.92)).toEqual({
+      label: "now $122.92",
+      tone: "flat"
+    });
+    expect(adviceTrackNowMove(100, 102)).toEqual({
+      label: "now $102.00 · +2.0%",
+      tone: "up"
+    });
+    expect(adviceTrackNowMove(21.02, 20.18)).toEqual({
+      label: "now $20.18 · -4.0%",
+      tone: "down"
+    });
+    expect(adviceTrackNowMove(50, 50)).toEqual({
+      label: "now $50.00 · 0.0%",
+      tone: "flat"
+    });
   });
 });
