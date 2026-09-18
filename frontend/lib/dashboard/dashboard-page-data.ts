@@ -18,6 +18,9 @@ import { pctChangeOverDailySessions } from "@/lib/session-return-math";
 import type { WeeklyIndexRow } from "@/components/weekly-market-context-widget";
 import { timeoutFallback } from "@/lib/dashboard/dashboard-fetch-resilience";
 import { timeDashboardPhase } from "@/lib/dashboard/load-timing";
+import { SECTOR_ROTATION_META } from "@/lib/dashboard/sector-rotation-meta";
+
+export { SECTOR_ROTATION_META };
 
 export type DashboardSectorRotationRow = {
   symbol: string;
@@ -36,21 +39,6 @@ const INDEX_WEEKLY_META: readonly Omit<WeeklyIndexRow, "pct5d" | "lastPrice">[] 
   { symbol: "SPY", label: "Large cap" },
   { symbol: "QQQ", label: "Tech / growth" },
   { symbol: "IWM", label: "Small cap" }
-];
-
-/** 11 GICS sector SPDRs — keep in lockstep with `DASHBOARD_SECTOR_ETFS` in dashboard_summary.py. */
-export const SECTOR_ROTATION_META: readonly { symbol: string; label: string }[] = [
-  { symbol: "XLK", label: "Tech" },
-  { symbol: "XLC", label: "Comm" },
-  { symbol: "XLE", label: "Energy" },
-  { symbol: "XLF", label: "Financials" },
-  { symbol: "XLY", label: "Cons. disc." },
-  { symbol: "XLP", label: "Cons. staples" },
-  { symbol: "XLV", label: "Health care" },
-  { symbol: "XLI", label: "Industrials" },
-  { symbol: "XLB", label: "Materials" },
-  { symbol: "XLU", label: "Utilities" },
-  { symbol: "XLRE", label: "Real estate" }
 ];
 
 function buildWeeklyRows(dailyCloses: Record<string, number[]>, snapshots: SnapshotPayload[]): WeeklyIndexRow[] {
