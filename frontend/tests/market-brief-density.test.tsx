@@ -114,6 +114,40 @@ describe("MarketBrief scan mode (ADR-003 UX-D3)", () => {
   });
 });
 
+describe("MarketBrief prep tile links", () => {
+  it("opens week-in-review sectors, setup outcomes, and earnings watch", () => {
+    render(
+      <MarketBrief
+        data={minimalBrief({
+          sessionPhase: "weekend",
+          weekInReview: {
+            bestSector: { symbol: "XLV", label: "Health care", pct5d: 1.8 },
+            worstSector: { symbol: "XLU", label: "Utilities", pct5d: -3.0 }
+          },
+          outcomesRecap: {
+            windowDays: 30,
+            totalEvents: 200,
+            buildingDataset: false,
+            alignmentHeldRate: 43,
+            continuationRate: 17,
+            disclaimer: "Observational only."
+          },
+          watchLine: "SOFI earnings 2026-09-18",
+          watchDetail: "SoFi Technologies, Inc.",
+          watchSymbol: "SOFI"
+        })}
+        onViewTopSetup={() => {}}
+        onSelectSymbol={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("market-brief-expand-toggle"));
+    expect(screen.getByTestId("market-brief-week-review-XLV")).toHaveTextContent("Health care");
+    expect(screen.getByTestId("market-brief-outcomes-link")).toHaveAttribute("href", "/dashboard/setup-outcomes");
+    expect(screen.getByTestId("market-brief-watch-SOFI")).toHaveTextContent("SOFI earnings 2026-09-18");
+  });
+});
+
 describe("MarketBrief sector heat (ADR-003 UX-D6)", () => {
   it("renders ranked sector rows instead of legacy chips", () => {
     render(

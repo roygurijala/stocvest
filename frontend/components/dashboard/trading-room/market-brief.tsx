@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import Link from "next/link";
 import { BarChart3, CalendarClock, ChevronDown, Compass, Eye, LineChart, Newspaper, Target } from "lucide-react";
+import { interactionLevelProps } from "@/lib/dashboard/click-hierarchy";
 import { borderRadius, spacing, typography, animationDurations } from "@/lib/design-system";
 import { useTheme } from "@/lib/theme-provider";
 import {
@@ -102,8 +104,8 @@ export interface BriefOutcomesRecap {
 }
 
 export interface BriefWeekInReview {
-  bestSector: { label: string; pct5d: number } | null;
-  worstSector: { label: string; pct5d: number } | null;
+  bestSector: { symbol: string; label: string; pct5d: number } | null;
+  worstSector: { symbol: string; label: string; pct5d: number } | null;
 }
 
 export interface MarketBriefData {
@@ -142,6 +144,8 @@ export interface MarketBriefData {
   /** Single "what to watch" line (macro event or next earnings). */
   watchLine: string | null;
   watchDetail: string | null;
+  /** Earnings ticker for the watch line; null for macro-only events. */
+  watchSymbol?: string | null;
   /** ISO timestamp of the freshest source feeding the brief. */
   updatedAtIso: string | null;
   /** Resolved session phase — drives lead line, CTA copy, and preparation blocks. */
@@ -620,21 +624,36 @@ export function MarketBrief({
                 <BarChart3 size={15} />,
                 "Week in review",
                 colors.bullish,
-                <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
-                  {data.weekInReview.bestSector ? (
-                    <>
-                      Leading: <span style={{ color: colors.text, fontWeight: 600 }}>{data.weekInReview.bestSector.label}</span>{" "}
-                      <span style={{ color: colors.bullish, fontWeight: 600 }}>{fmtPct(data.weekInReview.bestSector.pct5d)}</span>
-                    </>
-                  ) : null}
-                  {data.weekInReview.bestSector && data.weekInReview.worstSector ? " · " : null}
-                  {data.weekInReview.worstSector ? (
-                    <>
-                      Lagging: <span style={{ color: colors.text, fontWeight: 600 }}>{data.weekInReview.worstSector.label}</span>{" "}
-                      <span style={{ color: colors.bearish, fontWeight: 600 }}>{fmtPct(data.weekInReview.worstSector.pct5d)}</span>
-                    </>
-                  ) : null}
-                </span>
+                <div style={{ display: "flex", flexDirection: "column", gap: spacing[2] }}>
+                  <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>
+                    {data.weekInReview.bestSector ? (
+                      <>
+                        Leading:{" "}
+                        <ReviewSectorButton
+                          sector={data.weekInReview.bestSector}
+                          tone={colors.bullish}
+                          colors={colors}
+                          onSelect={() => setSelectedSectorEtf(data.weekInReview!.bestSector!.symbol)}
+                        />
+                      </>
+                    ) : null}
+                    {data.weekInReview.bestSector && data.weekInReview.worstSector ? " · " : null}
+                    {data.weekInReview.worstSector ? (
+                      <>
+                        Lagging:{" "}
+                        <ReviewSectorButton
+                          sector={data.weekInReview.worstSector}
+                          tone={colors.bearish}
+                          colors={colors}
+                          onSelect={() => setSelectedSectorEtf(data.weekInReview!.worstSector!.symbol)}
+                        />
+                      </>
+                    ) : null}
+                  </span>
+                  <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+                    Tap a sector for holdings and desk setups.
+                  </span>
+                </div>
               )
             : null}
 
@@ -708,7 +727,24 @@ export function MarketBrief({
                 <Target size={15} />,
                 `Setup follow-through · your watchlist · last ${data.outcomesRecap.windowDays} sessions`,
                 colors.textMuted,
-                <OutcomesRecap recap={data.outcomesRecap} colors={colors} />
+                <>
+                  <OutcomesRecap recap={data.outcomesRecap} colors={colors} />
+                  <Link
+                    href="/dashboard/setup-outcomes"
+                    data-testid="market-brief-outcomes-link"
+                    {...interactionLevelProps("deep")}
+                    style={{
+                      alignSelf: "flex-start",
+                      marginTop: spacing[1],
+                      fontSize: typography.scale.sm,
+                      fontWeight: 600,
+                      color: colors.accent,
+                      textDecoration: "none"
+                    }}
+                  >
+                    Open setup outcomes →
+                  </Link>
+                </>
               )
             : null}
 
@@ -748,10 +784,43 @@ export function MarketBrief({
             "What to watch",
             colors.caution,
             <>
-              <span style={{ fontSize: typography.scale.base, fontWeight: 600 }}>{data.watchLine}</span>
-              {data.watchDetail ? (
-                <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>→ {data.watchDetail}</span>
-              ) : null}
+              {data.watchSymbol && onSelectSymbol ? (
+                <button
+                  type="button"
+                  data-testid={`market-brief-watch-${data.watchSymbol}`}
+                  {...interactionLevelProps("deep")}
+                  onClick={() => onSelectSymbol(data.watchSymbol!, data.watchDetail, "swing")}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    gap: spacing[1],
+                    border: "none",
+                    background: "transparent",
+                    padding: 0,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    color: "inherit"
+                  }}
+                >
+                  <span style={{ fontSize: typography.scale.base, fontWeight: 600, color: colors.accent }}>
+                    {data.watchLine}
+                  </span>
+                  {data.watchDetail ? (
+                    <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>→ {data.watchDetail}</span>
+                  ) : null}
+                  <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+                    Open {data.watchSymbol} Deep Dive →
+                  </span>
+                </button>
+              ) : (
+                <>
+                  <span style={{ fontSize: typography.scale.base, fontWeight: 600 }}>{data.watchLine}</span>
+                  {data.watchDetail ? (
+                    <span style={{ fontSize: typography.scale.sm, color: colors.textMuted }}>→ {data.watchDetail}</span>
+                  ) : null}
+                </>
+              )}
             </>
           )
         : null}
@@ -1317,6 +1386,40 @@ function BriefSymbolButton({
       }}
     >
       {symbol}
+    </button>
+  );
+}
+
+function ReviewSectorButton({
+  sector,
+  tone,
+  colors,
+  onSelect
+}: {
+  sector: { symbol: string; label: string; pct5d: number };
+  tone: string;
+  colors: ReturnType<typeof useTheme>["colors"];
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={`market-brief-week-review-${sector.symbol}`}
+      {...interactionLevelProps("medium")}
+      onClick={onSelect}
+      style={{
+        border: "none",
+        background: "transparent",
+        padding: 0,
+        cursor: "pointer",
+        color: "inherit",
+        font: "inherit"
+      }}
+    >
+      <span style={{ color: colors.text, fontWeight: 600, textDecoration: "underline", textDecorationColor: `${colors.accent}66` }}>
+        {sector.label}
+      </span>{" "}
+      <span style={{ color: tone, fontWeight: 600 }}>{fmtPct(sector.pct5d)}</span>
     </button>
   );
 }
