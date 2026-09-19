@@ -842,16 +842,21 @@ function TradingRoomBody({
     if (top) {
       return {
         line: top.name,
-        detail: top.warning ?? (macro?.macro_risk ? `${macro.macro_risk}` : null)
+        detail: top.warning ?? (macro?.macro_risk ? `${macro.macro_risk}` : null),
+        symbol: null as string | null
       };
     }
     const next = [...earnings.upcoming]
       .filter((e) => e.report_date?.trim())
       .sort((a, b) => a.report_date.localeCompare(b.report_date))[0];
     if (next) {
-      return { line: `${next.symbol} earnings ${next.report_date}`, detail: next.company_name || null };
+      return {
+        line: `${next.symbol} earnings ${next.report_date}`,
+        detail: next.company_name || null,
+        symbol: next.symbol
+      };
     }
-    return { line: null as string | null, detail: null as string | null };
+    return { line: null as string | null, detail: null as string | null, symbol: null as string | null };
   }, [macro?.upcoming_events, macro?.macro_risk, earnings.upcoming]);
 
   // Client-tracked last-refresh time: stamped whenever any live data source
@@ -995,8 +1000,8 @@ function TradingRoomBody({
     const best = sorted[0];
     const worst = sorted[sorted.length - 1];
     return {
-      bestSector: best ? { label: best.label, pct5d: best.pct5d } : null,
-      worstSector: worst && worst.label !== best?.label ? { label: worst.label, pct5d: worst.pct5d } : null
+      bestSector: best ? { symbol: best.symbol, label: best.label, pct5d: best.pct5d } : null,
+      worstSector: worst && worst.label !== best?.label ? { symbol: worst.symbol, label: worst.label, pct5d: worst.pct5d } : null
     };
   }, [sectors]);
 
@@ -1047,6 +1052,7 @@ function TradingRoomBody({
     topCard,
     watchLine: watch.line,
     watchDetail: watch.detail,
+    watchSymbol: watch.symbol,
     updatedAtIso,
     sessionPhase,
     weekAhead,
