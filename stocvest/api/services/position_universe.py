@@ -35,8 +35,9 @@ LARGE_CAP_USD = 20_000_000_000.0
 # Live async refresh budget (signals Lambda 180s, concurrency 6) + curated mega slice.
 # Scan-lite skips news pagination, so the pond can be 40 mid-caps again.
 LIVE_DISCOVERY_MAX = 40
-# Weekly batch can walk more mid-caps; still excludes mega from the hunt.
-BATCH_DISCOVERY_MAX = 200
+# Weekly batch walks the ADR-004 investable cap (not the 15-name gem board).
+# Mega names merge on after discovery. Live refresh still re-scores a smaller slice.
+BATCH_DISCOVERY_MAX = DEFAULT_MAX_UNIVERSE
 # FMP sorts by market cap desc. A small limit is the 120 largest names — no mid-caps.
 # Discovery fetches a deep non-mega pool, then assemble() picks mid-caps first.
 DISCOVERY_FETCH_LIMIT = 1500

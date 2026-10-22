@@ -151,6 +151,7 @@ class CandidateFeatures:
     avg_dollar_volume: float | None = None
     news_verdict: str = "neutral"
     geo_verdict: str = "neutral"
+    structure_broken: bool = False
 
 
 def _layer_row(body: dict[str, Any], layer: str) -> dict[str, Any]:
@@ -261,6 +262,7 @@ def extract_candidate_features(body: dict[str, Any]) -> CandidateFeatures:
         ),
         news_verdict=str(news_row.get("verdict") or "neutral").strip().lower(),
         geo_verdict=str(geo_row.get("verdict") or "neutral").strip().lower(),
+        structure_broken=body.get("signal_structure_broken") is True,
     )
 
 

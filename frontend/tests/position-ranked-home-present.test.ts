@@ -19,6 +19,10 @@ import {
   formatGemListDelta,
   parsePositionCandidates,
   parsePositionGemFilterFromParams,
+  shouldShowTapeSoldStrip,
+  TAPE_SOLD_EMPTY,
+  TAPE_SOLD_WHY,
+  tapeSoldStripCountLabel,
   positionScanEngineIsStale,
   POSITION_SCAN_LIVE_ENGINE_VERSION,
   positionActionColor,
@@ -82,6 +86,44 @@ describe("position-ranked-home-present", () => {
       { symbol: "RKLB", change: "entered", reason: "added to hunt pond" },
       { symbol: "XYZ", change: "exited", reason: "F2 no longer bullish" }
     ]);
+    expect(parsed?.tapeHostile).toBe(false);
+    expect(parsed?.tapeSoldCount).toBe(0);
+    expect(parsed?.tapeSold).toEqual([]);
+  });
+
+  it("parses snapshot-level tape-sold from the full universe, not the gem slice", () => {
+    const parsed = parsePositionCandidates({
+      candidates: [apiRow({ symbol: "HIGH", tier: "gem" })],
+      tape_hostile: true,
+      tape_sold_count: 16,
+      tape_sold: [
+        apiRow({ symbol: "aapl", tier: "strong", tape_sold: true, regime: "risk_off" }),
+        apiRow({ symbol: "rklb", tier: "gem", tape_sold: true, regime: "risk_off" })
+      ]
+    });
+    expect(parsed?.tapeHostile).toBe(true);
+    expect(parsed?.tapeSoldCount).toBe(16);
+    expect(parsed?.tapeSold.map((c) => c.symbol)).toEqual(["AAPL", "RKLB"]);
+    expect(parsed?.tapeSold[0].tapeSold).toBe(true);
+    expect(parsed?.tapeSold[0].regime).toBe("risk_off");
+    expect(shouldShowTapeSoldStrip(parsed)).toBe(true);
+    expect(tapeSoldStripCountLabel(16, 2)).toBe("2 of 16 names");
+    expect(TAPE_SOLD_WHY.toLowerCase()).toContain("not a bounce forecast");
+    expect(TAPE_SOLD_EMPTY.toLowerCase()).toContain("as of last scan");
+  });
+
+  it("hides the tape-sold strip when the tape is calm or the scan is degraded", () => {
+    const calm = parsePositionCandidates({ candidates: [apiRow()], tape_hostile: false, tape_sold: [] });
+    expect(shouldShowTapeSoldStrip(calm)).toBe(false);
+    const degraded = parsePositionCandidates({
+      candidates: [],
+      degraded: true,
+      tape_hostile: true,
+      tape_sold: [apiRow({ tape_sold: true })]
+    });
+    expect(shouldShowTapeSoldStrip(degraded)).toBe(false);
+    const pending = parsePositionCandidates({ pending: true, tape_hostile: true, candidates: [] });
+    expect(shouldShowTapeSoldStrip(pending)).toBe(false);
   });
 
   it("formats entered/exited gems into a since-last-scan line", () => {

@@ -193,11 +193,15 @@ describe("PortfolioReviewPanel", () => {
     expect(screen.getByTestId("review-sizing-rule")).toHaveTextContent(
       /Sell still reduces the full position/
     );
+    expect(screen.getByTestId("review-sizing-rule")).toHaveTextContent(
+      /Core winners above the band stay Hold/
+    );
   });
 
   test("keeps sizing copy in the expand when Why is the signal driver", async () => {
     const review = sampleReview();
-    review.holdings[0].sizingReason = "Trim the excess above the core 15% sleeve high.";
+    review.holdings[0].sizingReason =
+      "Over the core ~15.0% sleeve — letting the winner run; concentration flagged, not a trim.";
     fetchMock.mockResolvedValueOnce({ ok: true, review });
     wrap(<PortfolioReviewPanel />);
 
@@ -205,12 +209,12 @@ describe("PortfolioReviewPanel", () => {
 
     await waitFor(() => expect(screen.getByTestId("review-why-AAPL")).toBeInTheDocument());
     expect(screen.getByTestId("review-why-AAPL")).toHaveTextContent(/F2 Growth/);
-    expect(screen.queryByText(/Trim the excess above the core/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/letting the winner run/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("review-row-AAPL"));
 
     expect(screen.getByTestId("review-row-detail-AAPL")).toHaveTextContent(
-      /Trim the excess above the core 15% sleeve high/
+      /letting the winner run; concentration flagged, not a trim/
     );
   });
 
@@ -331,6 +335,49 @@ describe("PortfolioReviewPanel", () => {
     await waitFor(() =>
       expect(screen.getByText(/No holdings to review yet/i)).toBeInTheDocument()
     );
+  });
+
+  test("core overweight hold shows concentration, not a reduce ticket", async () => {
+    const review = sampleReview();
+    review.holdings = [
+      {
+        ...review.holdings[0],
+        action: "hold",
+        actionLabel: "Hold",
+        sleeve: "core",
+        sleeveLowPct: 10,
+        sleeveHighPct: 15,
+        weightPct: 22,
+        overweight: true,
+        suggestedAddAmount: null,
+        suggestedReduceAmount: null,
+        sizingReason:
+          "Over the core ~15.0% sleeve — letting the winner run; concentration flagged, not a trim.",
+        driverLine: null
+      }
+    ];
+    review.concentration = [
+      {
+        symbol: "AAPL",
+        weightPct: 22,
+        targetPct: 15,
+        message:
+          "AAPL is 22.0% of the portfolio, above the core 10–15% sleeve — single-name concentration, not a trim while the thesis holds."
+      }
+    ];
+    review.effectiveTargetPct = null;
+    review.targetIsDefault = true;
+    review.sizingPolicy = "sleeve";
+    fetchMock.mockResolvedValueOnce({ ok: true, review });
+    wrap(<PortfolioReviewPanel />);
+
+    fireEvent.click(screen.getByTestId("run-review"));
+
+    await waitFor(() => expect(screen.getByTestId("review-row-AAPL")).toBeInTheDocument());
+    expect(screen.getByTestId("review-action-AAPL")).toHaveTextContent("Hold");
+    expect(screen.getByTestId("review-do-this-AAPL")).not.toHaveTextContent(/reduce/i);
+    expect(screen.getByTestId("sizing-reason-AAPL")).toHaveTextContent(/letting the winner run/);
+    expect(screen.getByText(/not a trim while the thesis holds/)).toBeInTheDocument();
   });
 });
 

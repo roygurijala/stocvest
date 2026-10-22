@@ -762,7 +762,7 @@ only; curated megas appear on Strong quality / Monitor, not the front of Invest.
 **Scan universe (growth_led_3):** the hunt pond is a separate Dynamo item
 `position_scan_universe` (symbols + `generated_at`). Live `?refresh=1` **re-scores
 the same symbols** for up to 7 days. A new FMP sample is taken only when the pond
-is missing/stale, or when the weekly batch rebuilds it (`BATCH_DISCOVERY_MAX` ≈ 200).
+is missing/stale, or when the weekly batch rebuilds it (`BATCH_DISCOVERY_MAX` = 500).
 First live build still persists the curated 25 immediately, then mid-cap extras
 (`LIVE_DISCOVERY_MAX` ≈ 40). Scan compose is **scan-lite** (skips Polygon news
 pagination + sentiment prime) so the pond can finish inside the 180s Lambda.

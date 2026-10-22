@@ -18,7 +18,9 @@ No indicator math is invented here (see .cursorrules §8):
   ``target_position_pct`` when set, else personal-mode **conviction sleeves**
   (core 10–15 / standard 6–9 / vehicle 4–6 / exit 0–3; single-name max 15)
   mapped from verdict, stance, structure-broken, and fund-vehicle (never written
-  back to settings; operator-agreed policy, not ticker weights),
+  back to settings; operator-agreed policy, not ticker weights). Core winners
+  above the band stay Hold (concentration flagged); weaker sleeves and an
+  explicit ``target_position_pct`` still trim the excess,
 - the "long-term lot" test uses the model's existing >365-day rule.
 
 Everything network-touching is dependency-injected (``compose_fn``, ``snapshot_fn``,
@@ -39,6 +41,7 @@ from typing import Any, Awaitable, Callable
 
 from stocvest.api.services.portfolio_sleeve_policy import (
     SLEEVE_POLICY_SUMMARY,
+    PositionSleeve,
     SleevePolicy,
     resolve_sleeve_policy,
     scale_sleeve_policies,
@@ -175,6 +178,11 @@ def suggested_reduce_amount(
     return round(excess, 2)
 
 
+def _lets_core_winner_run(sleeve: SleevePolicy | None) -> bool:
+    """Core (bullish operating company) may sit above the band without a trim ticket."""
+    return sleeve is not None and sleeve.sleeve == PositionSleeve.CORE
+
+
 def apply_stance_sizing(
     *,
     action: ReviewAction,
@@ -183,12 +191,14 @@ def apply_stance_sizing(
     reduce_excess: float | None,
     market_value: float,
     cash_available: float | None = None,
+    let_winner_run: bool = False,
 ) -> tuple[ReviewAction, float | None, float | None, str | None]:
     """Stance overlay on gap math. Returns ``(action, add, reduce, extra_rationale)``.
 
     Uses existing desk actions only — no new numeric thresholds:
     - ``buy_more`` / constructive → fill the underweight gap (cash-capped add)
     - ``hold`` / ``buy_more`` + already over target → TRIM the excess only
+      (unless ``let_winner_run``: core sleeve stays HOLD; excess is a flag)
     - ``hold`` + under target (caution / thin R/R) → no add
     - ``trim`` → excess toward target, not to zero
     - ``sell`` → full market value, not a made-up 75%
@@ -205,6 +215,11 @@ def apply_stance_sizing(
                 extra = "No cash available to add toward target — holding rather than adding."
                 return ReviewAction.HOLD, None, None, extra
             if overweight:
+                if let_winner_run:
+                    extra = (
+                        "Already over the core sleeve — holding the winner rather than trimming."
+                    )
+                    return ReviewAction.HOLD, None, None, extra
                 extra = "Already over target weight — trimming the excess rather than adding."
                 return ReviewAction.TRIM, None, reduce_excess, extra
             extra = (
@@ -215,6 +230,11 @@ def apply_stance_sizing(
 
     if action == ReviewAction.HOLD:
         if overweight:
+            if let_winner_run:
+                extra = (
+                    "Over the core sleeve — holding the winner; concentration is flagged, not a trim."
+                )
+                return action, None, None, extra
             return ReviewAction.TRIM, None, reduce_excess, None
         return action, None, None, None
 
@@ -264,8 +284,9 @@ def sizing_reason(
 ) -> str:
     """Short deterministic sentence for why add/reduce is (or is not) set.
 
-    Does not change amounts — copy only. Sleeve bands: add toward the floor,
-    trim to the high. Explicit point target uses the old single-number copy.
+    Does not change amounts — copy only. Sleeve bands: add toward the floor;
+    trim to the high on standard / vehicle / exit. Core above the high stays
+    Hold. Explicit point target uses the old single-number copy.
     """
     has_add = suggested_add is not None and suggested_add > 0
     has_reduce = suggested_reduce is not None and suggested_reduce > 0
@@ -320,6 +341,8 @@ def sizing_reason(
                 f"Hold + caution: not adding toward {floor_label} "
                 f"(thin R/R). Gap to {gap_noun} would be {_fmt_gap_dollars(gap)}."
             )
+    if action == ReviewAction.HOLD and over and not has_reduce:
+        return f"Over {high_label} — letting the winner run; concentration flagged, not a trim."
     if action in (ReviewAction.HOLD, ReviewAction.TRIM) and over and has_reduce:
         return f"Over {high_label} — trimming the excess only."
     if action == ReviewAction.BUY_MORE and has_add:
@@ -923,6 +946,7 @@ async def build_portfolio_review(
                 reduce_excess=reduce_excess,
                 market_value=mkt_value,
                 cash_available=remaining_cash,
+                let_winner_run=_lets_core_winner_run(row_sleeve),
             )
             if sizing_note:
                 rationale.append(sizing_note)
@@ -957,6 +981,10 @@ async def build_portfolio_review(
             phrase = _target_weight_phrase(
                 row_target, used_default=target_is_default, sleeve=row_sleeve
             )
+            if _lets_core_winner_run(row_sleeve) and action == ReviewAction.HOLD:
+                tail = "— single-name concentration, not a trim while the thesis holds."
+            else:
+                tail = "— consider trimming to manage single-name risk."
             concentration.append(
                 ConcentrationFlag(
                     symbol=h.symbol,
@@ -964,7 +992,7 @@ async def build_portfolio_review(
                     target_pct=row_target,
                     message=(
                         f"{h.symbol} is {weight_pct:.1f}% of the portfolio, above {phrase} "
-                        "— consider trimming to manage single-name risk."
+                        f"{tail}"
                     ),
                 )
             )

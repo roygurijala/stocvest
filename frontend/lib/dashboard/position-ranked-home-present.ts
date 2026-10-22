@@ -55,6 +55,9 @@ export type PositionGemCandidate = {
   sectorTailwind: boolean;
   /** News/geo bullish — display only; does not define the gem badge. */
   catalyst: boolean;
+  /** Quality name off highs in a hostile tape — observational, not a bounce call. */
+  tapeSold: boolean;
+  regime: string;
 };
 
 export type GemListChange = {
@@ -77,6 +80,11 @@ export type PositionCandidatesResponse = {
   engineVersion?: string | null;
   listDelta: GemListChange[];
   universeGeneratedAt: string | null;
+  /** True when any scored name's scan-time regime is risk-off / avoid. */
+  tapeHostile: boolean;
+  /** Full-universe count before the display cap. */
+  tapeSoldCount: number;
+  tapeSold: PositionGemCandidate[];
 };
 
 export type PositionGemFilter = {
@@ -245,7 +253,9 @@ function parseCandidate(raw: unknown): PositionGemCandidate | null {
     actionLabel: r.action_label ? String(r.action_label) : null,
     growthLed: r.growth_led === true,
     sectorTailwind: r.sector_tailwind === true,
-    catalyst: r.catalyst === true
+    catalyst: r.catalyst === true,
+    tapeSold: r.tape_sold === true,
+    regime: String(r.regime ?? "").trim().toLowerCase()
   };
 }
 
@@ -277,7 +287,12 @@ export function parsePositionCandidates(json: unknown): PositionCandidatesRespon
     listDelta: Array.isArray(r.list_delta)
       ? (r.list_delta.map(parseListChange).filter((c): c is GemListChange => c != null) as GemListChange[])
       : [],
-    universeGeneratedAt: r.universe_generated_at ? String(r.universe_generated_at) : null
+    universeGeneratedAt: r.universe_generated_at ? String(r.universe_generated_at) : null,
+    tapeHostile: r.tape_hostile === true,
+    tapeSoldCount: numberOrNull(r.tape_sold_count) ?? 0,
+    tapeSold: Array.isArray(r.tape_sold)
+      ? (r.tape_sold.map(parseCandidate).filter((c): c is PositionGemCandidate => c != null) as PositionGemCandidate[])
+      : []
   };
 }
 
@@ -294,6 +309,26 @@ export function formatGemListDelta(changes: readonly GemListChange[] | null | un
     parts.push(exited.map((c) => `−${c.symbol} (${c.reason})`).join(", "));
   }
   return parts.length ? `Since last scan: ${parts.join("; ")}.` : null;
+}
+
+/** Must match ``TAPE_SOLD_WHY`` in ``position_tape_sold.py``. Observational, not a bounce call. */
+export const TAPE_SOLD_WHY =
+  "Quality name off its highs while the tape is risk-off — sold with the market, not a company break. Screening only, not a bounce forecast.";
+
+export const TAPE_SOLD_EMPTY =
+  "As of last scan, no quality names were off highs with the tape. Screening only, not a bounce forecast.";
+
+/** Hostile-tape strip on Invest — hidden in a calm tape, shown even when the list is empty. */
+export function shouldShowTapeSoldStrip(
+  response: PositionCandidatesResponse | null | undefined
+): boolean {
+  return Boolean(response?.tapeHostile && !response.degraded && !response.pending);
+}
+
+export function tapeSoldStripCountLabel(count: number, shown: number): string {
+  if (count <= 0) return "0 names";
+  if (shown < count) return `${shown} of ${count} names`;
+  return count === 1 ? "1 name" : `${count} names`;
 }
 
 /** Must match ``POSITION_SCAN_ENGINE_VERSION`` in ``position_scan.py``. */

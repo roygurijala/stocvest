@@ -4,14 +4,14 @@ Operator-agreed policy (not ticker weights). Conviction comes from signals the
 desk already computes (verdict, holder stance, structure-broken, fund vehicle).
 Risk is the band + a single-name cap. No Kelly / correlation math.
 
-Bands (add toward the floor, trim to the high, never above the cap):
+Bands (add toward the floor; trim to the high on weaker sleeves; core may run):
 
-    core      10–15%   bullish operating company (great-potential names may sit here)
+    core      10–15%   bullish operating company (winners may sit here and run above)
     standard   6–9%    hold / caution / intact but not bullish
     vehicle    4–6%    fund/ETF product
     exit       0–3%    bearish + defensive, or structure-broken (non-vehicle)
 
-    single-name max 15% (core high uses the cap)
+    single-name max 15% (core high uses the cap; overweight core is flagged, not trimmed)
 
 Constructive vs not still gates BUY_MORE vs HOLD — it does not shrink a bullish
 name into the 6–9% standard band.
@@ -46,7 +46,9 @@ SINGLE_NAME_MAX_PCT = 15.0
 SLEEVE_POLICY_SUMMARY = (
     "Conviction sleeves: core 10–15%, standard 6–9%, vehicle 4–6%, exit 0–3%; "
     "single-name max 15%. Add only below the sleeve floor; trim only above the "
-    "sleeve high. Sell still reduces the full position. Hold + caution does not add."
+    "sleeve high on standard / vehicle / exit. Core winners above the band stay "
+    "Hold (concentration flagged). Sell still reduces the full position. "
+    "Hold + caution does not add."
 )
 
 _SLEEVE_LABELS: dict[PositionSleeve, str] = {
