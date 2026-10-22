@@ -120,6 +120,7 @@ class GemCandidate:
     catalyst: bool = False
     tape_sold: bool = False
     regime: str = ""
+    session_tape: str = ""
 
     def to_api_dict(self) -> dict[str, Any]:
         body: dict[str, Any] = {
@@ -146,6 +147,7 @@ class GemCandidate:
             "catalyst": self.catalyst,
             "tape_sold": self.tape_sold,
             "regime": self.regime,
+            "session_tape": self.session_tape,
         }
         # PERSONAL-MODE: attach an explicit Buy / Watch / Don't-buy action derived
         # deterministically from the tier. Omitted entirely in product mode so the API
@@ -183,6 +185,7 @@ class GemCandidate:
             catalyst=bool(d.get("catalyst")),
             tape_sold=bool(d.get("tape_sold")),
             regime=str(d.get("regime") or "").strip().lower(),
+            session_tape=str(d.get("session_tape") or "").strip().lower(),
         )
 
 
@@ -279,7 +282,10 @@ class PositionScanSnapshot:
         rows = self.filtered(tier=tier, limit=limit)
         tape_rows = [c for c in self.candidates if c.tape_sold]
         tape_rows.sort(key=lambda c: (-c.rank, c.symbol))
-        tape_hostile = any((c.regime or "") in _AVOID_REGIMES for c in self.candidates)
+        tape_hostile = any(
+            (c.session_tape or "") == "bearish" or (c.regime or "") in _AVOID_REGIMES
+            for c in self.candidates
+        )
         return {
             "mode": "position",
             "tier": (tier or "gem").strip().lower(),
@@ -421,6 +427,7 @@ def build_candidate(features: CandidateFeatures, *, rs_bottom_quartile_threshold
         catalyst=has_catalyst(features),
         tape_sold=tape_sold,
         regime=features.regime,
+        session_tape=features.session_tape,
     )
 
 

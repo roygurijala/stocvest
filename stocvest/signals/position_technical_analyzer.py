@@ -173,6 +173,7 @@ class PositionTechnicalLayerResult:
     daily_sma50: Optional[float] = None
     daily_sma200: Optional[float] = None
     pct_from_52w_high: Optional[float] = None
+    pct_from_52w_high_session: Optional[float] = None
     range_position_pct: Optional[float] = None
     rs_vs_spy_6m_pct: Optional[float] = None
     golden_cross: bool = False
@@ -198,7 +199,6 @@ class PositionTechnicalAnalyzer:
         *,
         spy_weekly_bars: list[Bar] | None = None,
     ) -> PositionTechnicalLayerResult:
-        _ = snapshot
         weekly = aggregate_daily_to_weekly_bars(daily_bars, symbol)
         n_weekly = len(weekly)
 
@@ -237,6 +237,14 @@ class PositionTechnicalAnalyzer:
         pct_from_high: Optional[float] = None
         if range_high > 0:
             pct_from_high = (last - range_high) / range_high * 100.0
+        session_mark: Optional[float] = None
+        if snapshot is not None and snapshot.last_trade_price and snapshot.last_trade_price > 0:
+            session_mark = float(snapshot.last_trade_price)
+        elif d_last:
+            session_mark = d_last
+        pct_from_high_session: Optional[float] = None
+        if range_high > 0 and session_mark is not None:
+            pct_from_high_session = (session_mark - range_high) / range_high * 100.0
         range_pos = _range_position_pct(last, range_high, range_low)
 
         rs_pct: Optional[float] = None
@@ -408,6 +416,7 @@ class PositionTechnicalAnalyzer:
             daily_sma50=daily_sma50,
             daily_sma200=daily_sma200,
             pct_from_52w_high=pct_from_high,
+            pct_from_52w_high_session=pct_from_high_session,
             range_position_pct=range_pos,
             rs_vs_spy_6m_pct=rs_pct,
             golden_cross=gc,

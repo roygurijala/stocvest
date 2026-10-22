@@ -152,6 +152,11 @@ class CandidateFeatures:
     news_verdict: str = "neutral"
     geo_verdict: str = "neutral"
     structure_broken: bool = False
+    # Session infer_regime label from the macro ``Label {Bullish|Neutral|Bearish}`` chip.
+    # Distinct from long-horizon ``regime`` (neutralized on this desk).
+    session_tape: str = ""
+    # Live/daily mark vs the same 52-week high the weekly technical already uses.
+    pct_from_52w_high_session: float | None = None
 
 
 def _layer_row(body: dict[str, Any], layer: str) -> dict[str, Any]:
@@ -177,6 +182,15 @@ def _as_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _session_tape_from_macro_chips(chips: tuple[str, ...]) -> str:
+    """Existing MacroAnalyzer chip ``Label Bearish|Bullish|Neutral`` (infer_regime)."""
+    for chip in chips:
+        low = chip.strip().lower()
+        if low.startswith("label "):
+            return low[6:].strip()
+    return ""
 
 
 def _chip_tuple(value: Any) -> tuple[str, ...]:
@@ -263,6 +277,8 @@ def extract_candidate_features(body: dict[str, Any]) -> CandidateFeatures:
         news_verdict=str(news_row.get("verdict") or "neutral").strip().lower(),
         geo_verdict=str(geo_row.get("verdict") or "neutral").strip().lower(),
         structure_broken=body.get("signal_structure_broken") is True,
+        session_tape=_session_tape_from_macro_chips(_chip_tuple(macro_row.get("chips"))),
+        pct_from_52w_high_session=_as_float(tech_snap.get("pct_from_52w_high_session")),
     )
 
 

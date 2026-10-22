@@ -69,6 +69,7 @@ def _body(
     market_cap: float | None = None,
     regime: str = "sideways",
     pct_from_52w_high: float = -4.0,
+    macro_chips: list[str] | None = None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
         "symbol": symbol,
@@ -104,7 +105,13 @@ def _body(
                 },
             },
             {"layer": "sector", "score": 70 if sector_verdict == "bullish" else 55, "verdict": sector_verdict, "status": "available", "chips": []},
-            {"layer": "macro", "score": 52, "verdict": "neutral", "status": "available", "chips": []},
+            {
+                "layer": "macro",
+                "score": 52,
+                "verdict": "neutral",
+                "status": "available",
+                "chips": list(macro_chips or []),
+            },
         ],
     }
     if market_cap is not None:
@@ -478,6 +485,29 @@ def test_tape_sold_uses_full_universe_not_gem_board() -> None:
     assert gem["tape_sold_count"] == 2
     assert all(c["why"] == TAPE_SOLD_WHY for c in gem["tape_sold"])
     assert "AAPL" not in [c["symbol"] for c in gem["candidates"]]
+
+
+def test_session_bearish_label_marks_tape_hostile_when_regime_is_sideways() -> None:
+    """A same-day Nasdaq dump must surface even though position regime stays sideways."""
+    from stocvest.signals.position_tape_sold import TAPE_SOLD_WHY
+
+    sold = _body(
+        "AAPL",
+        fund_score=78,
+        rs=5.0,
+        regime="sideways",
+        pct_from_52w_high=-12.0,
+        macro_chips=["Label Bearish", "QQQ -3.40%"],
+    )
+    snap = PositionScanSnapshot(
+        generated_at=__import__("datetime").datetime(2026, 9, 8, tzinfo=__import__("datetime").timezone.utc),
+        universe_size=1,
+        candidates=rank_candidates([sold]),
+    )
+    out = snap.to_api_dict(tier="gem", limit=50)
+    assert out["tape_hostile"] is True
+    assert [c["symbol"] for c in out["tape_sold"]] == ["AAPL"]
+    assert out["tape_sold"][0]["why"] == TAPE_SOLD_WHY
 
 
 def test_tape_sold_empty_when_tape_is_calm() -> None:

@@ -58,6 +58,7 @@ def technical_indicator_snapshot_wire(res: Any, *, mode: str) -> dict[str, Any] 
             "daily_sma50",
             "daily_sma200",
             "pct_from_52w_high",
+            "pct_from_52w_high_session",
             "range_position_pct",
             "rs_vs_spy_6m_pct",
             "weekly_bars_analyzed",
