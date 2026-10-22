@@ -53,6 +53,26 @@ def test_calm_tape_never_qualifies() -> None:
     assert qualifies_tape_sold(_features(body)) is False
 
 
+def test_session_bearish_label_qualifies_when_long_horizon_regime_is_sideways() -> None:
+    """Position regime is neutralized; today's SPY/QQQ dump still prints Label Bearish."""
+    body = _off_highs_hostile()
+    body["regime"] = "sideways"
+    macro = next(row for row in body["layers"] if row["layer"] == "macro")
+    macro["chips"] = ["Label Bearish", "QQQ -3.10%", "Structural (long-horizon)"]
+    assert qualifies_tape_sold(_features(body)) is True
+
+
+def test_session_mark_off_highs_counts_when_weekly_close_is_still_near_high() -> None:
+    body = _off_highs_hostile()
+    body["regime"] = "sideways"
+    tech = body["layers"][1]
+    tech["indicator_snapshot"]["pct_from_52w_high"] = -2.0
+    tech["indicator_snapshot"]["pct_from_52w_high_session"] = -11.0
+    macro = next(row for row in body["layers"] if row["layer"] == "macro")
+    macro["chips"] = ["Label Bearish"]
+    assert qualifies_tape_sold(_features(body)) is True
+
+
 def test_near_high_band_is_not_off_highs() -> None:
     body = _off_highs_hostile()
     body["layers"][1]["indicator_snapshot"]["pct_from_52w_high"] = -4.0
