@@ -317,6 +317,34 @@ def test_apply_stance_sizing_hold_over_target_trims_excess_only():
     assert add_amt is None and reduce_amt == 180.0 and note is None
 
 
+def test_apply_stance_sizing_core_hold_overweight_stays_hold():
+    action, add_amt, reduce_amt, note = apply_stance_sizing(
+        action=ReviewAction.HOLD,
+        overweight=True,
+        add_gap=0.0,
+        reduce_excess=180.0,
+        market_value=1180.0,
+        let_winner_run=True,
+    )
+    assert action == ReviewAction.HOLD
+    assert add_amt is None and reduce_amt is None
+    assert note is not None and "winner" in note.lower()
+
+
+def test_apply_stance_sizing_core_buy_more_overweight_stays_hold():
+    action, add_amt, reduce_amt, note = apply_stance_sizing(
+        action=ReviewAction.BUY_MORE,
+        overweight=True,
+        add_gap=0.0,
+        reduce_excess=180.0,
+        market_value=1180.0,
+        let_winner_run=True,
+    )
+    assert action == ReviewAction.HOLD
+    assert add_amt is None and reduce_amt is None
+    assert note is not None and "winner" in note.lower()
+
+
 def test_apply_stance_sizing_hold_under_target_does_not_add():
     action, add_amt, reduce_amt, note = apply_stance_sizing(
         action=ReviewAction.HOLD,
@@ -475,6 +503,23 @@ def test_sizing_reason_in_band_core_sleeve():
         sleeve=sleeve_policy_for(PositionSleeve.CORE),
     )
     assert reason == "Inside the core 10–15% sleeve."
+
+
+def test_sizing_reason_core_overweight_lets_winner_run():
+    reason = sizing_reason(
+        action=ReviewAction.HOLD,
+        target_pct=15.0,
+        weight_pct=22.0,
+        suggested_add=None,
+        suggested_reduce=None,
+        portfolio_value=168000.0,
+        stance="constructive",
+        sleeve=sleeve_policy_for(PositionSleeve.CORE),
+    )
+    assert reason == (
+        "Over the core ~15.0% sleeve — letting the winner run; "
+        "concentration flagged, not a trim."
+    )
 
 
 # ── tax-lot hint ─────────────────────────────────────────────────────────────
@@ -891,8 +936,8 @@ def test_personal_default_uses_standard_sleeve_not_equal_weight():
     assert row.suggested_reduce_amount is not None and row.suggested_reduce_amount > 0
 
 
-def test_core_sleeve_trims_to_fifteen_not_equal_weight():
-    """A lone bullish name at 100% trims to the 15% core high, not an equal-weight split."""
+def test_core_sleeve_overweight_stays_hold_not_trim():
+    """A lone bullish name at 100% stays Hold — core winners may run above 15%."""
     holdings = (_holding("NVDA", [(1, 10.0, "2024-01-02")]),)
     settings = PortfolioSettings(cash_balance=0.0)
     prices = {"NVDA": _Snap(last_trade_price=100.0), "SPY": _Snap(last_trade_price=500.0)}
@@ -915,8 +960,13 @@ def test_core_sleeve_trims_to_fifteen_not_equal_weight():
     assert row.sleeve_low_pct == 10.0 and row.sleeve_high_pct == 15.0
     assert row.weight_pct == 100.0
     assert row.overweight is True
-    assert row.suggested_reduce_amount == pytest.approx(85.0, abs=0.02)
-    assert "core" in (row.sizing_reason or "")
+    assert row.action == ReviewAction.HOLD
+    assert row.suggested_reduce_amount is None
+    assert row.suggested_add_amount is None
+    assert "letting the winner run" in (row.sizing_reason or "")
+    assert review.concentration
+    assert review.concentration[0].symbol == "NVDA"
+    assert "not a trim" in review.concentration[0].message
 
 
 def test_vehicle_sleeve_trims_to_six():
@@ -1016,6 +1066,48 @@ def test_in_band_core_does_not_trim():
     assert nvda.suggested_add_amount is None
     assert nvda.suggested_reduce_amount is None
     assert "Inside the core" in (nvda.sizing_reason or "")
+
+
+def test_core_overweight_hold_does_not_force_standard_trim():
+    """Core at 20% stays Hold; an overweight standard name still trims."""
+    holdings = (
+        _holding("NVDA", [(20, 10.0, "2024-01-02")]),
+        _holding("CASHY", [(80, 10.0, "2024-01-02")]),
+    )
+    settings = PortfolioSettings(cash_balance=0.0)
+    prices = {
+        "NVDA": _Snap(last_trade_price=10.0),
+        "CASHY": _Snap(last_trade_price=10.0),
+        "SPY": _Snap(last_trade_price=500.0),
+    }
+    bodies = {
+        "NVDA": {"status": "ok", "signal_summary": "bullish"},
+        "CASHY": {"status": "ok", "signal_summary": "neutral"},
+    }
+    snap_fn, compose_fn, spy_bars_fn = _prices_and_compose(bodies, prices)
+    review = asyncio.run(
+        build_portfolio_review(
+            holdings=holdings,
+            settings=settings,
+            compose_fn=compose_fn,
+            snapshot_fn=snap_fn,
+            spy_bars_fn=spy_bars_fn,
+            scan_fn=lambda: [],
+            as_of=date(2026, 9, 13),
+            advice_enabled=True,
+        )
+    )
+    nvda = next(h for h in review.holdings if h.symbol == "NVDA")
+    cashy = next(h for h in review.holdings if h.symbol == "CASHY")
+    assert nvda.sleeve == "core"
+    assert nvda.weight_pct == 20.0
+    assert nvda.overweight is True
+    assert nvda.action == ReviewAction.HOLD
+    assert nvda.suggested_reduce_amount is None
+    assert cashy.sleeve == "standard"
+    assert cashy.overweight is True
+    assert cashy.action == ReviewAction.TRIM
+    assert cashy.suggested_reduce_amount is not None and cashy.suggested_reduce_amount > 0
 
 
 def test_explicit_target_wins_over_personal_default():

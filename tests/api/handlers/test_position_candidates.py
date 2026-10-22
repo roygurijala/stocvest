@@ -69,6 +69,31 @@ def test_requires_auth() -> None:
     assert res["statusCode"] == 401
 
 
+def test_tape_sold_rides_gem_tier_from_full_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET tier=gem still returns snapshot-level tape_sold (not the 15-name board)."""
+    sold = _candidate("AAPL", "strong", 82.0)
+    object.__setattr__(sold, "tape_sold", True)
+    object.__setattr__(sold, "regime", "risk_off")
+    snap = PositionScanSnapshot(
+        generated_at=datetime(2026, 9, 8, tzinfo=timezone.utc),
+        universe_size=500,
+        candidates=[
+            _candidate("HIGH", "gem", 88.0),
+            sold,
+        ],
+    )
+    monkeypatch.setattr(
+        "stocvest.api.services.position_scan.get_position_scan_snapshot_sync",
+        lambda *, force=False: (snap, True),
+    )
+    body = json.loads(position_candidates_handler(_event(), {})["body"])
+    assert body["tier"] == "gem"
+    assert [c["symbol"] for c in body["candidates"]] == ["HIGH"]
+    assert body["tape_hostile"] is True
+    assert body["tape_sold_count"] == 1
+    assert body["tape_sold"][0]["symbol"] == "AAPL"
+
+
 def test_default_returns_gem_tier(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_snapshot(monkeypatch)
     res = position_candidates_handler(_event(), {})
@@ -127,6 +152,9 @@ def test_miss_claims_once_then_polls_pending(monkeypatch: pytest.MonkeyPatch) ->
     second = json.loads(position_candidates_handler(_event(), {})["body"])
     assert first["pending"] is True and second["pending"] is True
     assert first["degraded"] is False
+    assert first["tape_hostile"] is False
+    assert first["tape_sold_count"] == 0
+    assert first["tape_sold"] == []
     assert kicks["n"] == 1
     reset_position_scan_store_for_tests(None)
 
@@ -267,3 +295,5 @@ def test_scan_failure_degrades_gracefully(monkeypatch: pytest.MonkeyPatch) -> No
     body = json.loads(res["body"])
     assert body["degraded"] is True
     assert body["candidates"] == []
+    assert body["tape_hostile"] is False
+    assert body["tape_sold"] == []

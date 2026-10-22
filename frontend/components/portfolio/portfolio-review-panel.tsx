@@ -421,6 +421,7 @@ function ActionBadge({ h }: { h: HoldingReview }) {
   const { colors } = useTheme();
   return (
     <span
+      data-testid={`review-action-${h.symbol}`}
       style={{
         background: actionColor(h.action, colors),
         color: "#fff",

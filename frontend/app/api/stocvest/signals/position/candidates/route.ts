@@ -12,7 +12,10 @@ const DEGRADED = {
   scan_generated_at: null,
   cached: false,
   degraded: true,
-  pending: false
+  pending: false,
+  tape_hostile: false,
+  tape_sold_count: 0,
+  tape_sold: []
 };
 
 /** Proxies GET /v1/signals/position/candidates for Client Components (ADR-004 POS-D15). */

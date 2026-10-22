@@ -6,7 +6,10 @@ import pytest
 
 from stocvest.api.services.position_scan import POSITION_SCAN_UNIVERSE_V1
 from stocvest.api.services.position_universe import (
+    BATCH_DISCOVERY_MAX,
+    DEFAULT_MAX_UNIVERSE,
     DISCOVERY_FETCH_LIMIT,
+    LIVE_DISCOVERY_MAX,
     assemble_universe,
     build_live_scan_universe,
     build_scan_universe,
@@ -30,6 +33,13 @@ def _row(sym, cap, price, vol, *, name="Some Co", is_etf=False, is_fund=False):
         "isEtf": is_etf,
         "isFund": is_fund,
     }
+
+
+def test_weekly_batch_walks_adr_universe_not_gem_board() -> None:
+    """Tape-sold (and gem hunt) score the ~500-name pond, not the 15-name board."""
+    assert DEFAULT_MAX_UNIVERSE == 500
+    assert BATCH_DISCOVERY_MAX == DEFAULT_MAX_UNIVERSE
+    assert LIVE_DISCOVERY_MAX < BATCH_DISCOVERY_MAX
 
 
 def test_assemble_filters_excludes_and_sorts_by_cap() -> None:

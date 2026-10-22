@@ -67,13 +67,15 @@ def _body(
     tech_verdict: str = "bullish",
     sector_verdict: str = "neutral",
     market_cap: float | None = None,
+    regime: str = "sideways",
+    pct_from_52w_high: float = -4.0,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
         "symbol": symbol,
         "score": 40,
         "verdict": "bullish",
         "signal_valid_days": 90,
-        "regime": "sideways",
+        "regime": regime,
         "position_fundamentals": {
             "score": fund_score,
             "verdict": "bullish",
@@ -95,7 +97,11 @@ def _body(
                 "verdict": tech_verdict,
                 "status": "available",
                 "chips": ["Above W-SMA200"],
-                "indicator_snapshot": {"mode": "position", "pct_from_52w_high": -4.0, "rs_vs_spy_6m_pct": rs},
+                "indicator_snapshot": {
+                    "mode": "position",
+                    "pct_from_52w_high": pct_from_52w_high,
+                    "rs_vs_spy_6m_pct": rs,
+                },
             },
             {"layer": "sector", "score": 70 if sector_verdict == "bullish" else 55, "verdict": sector_verdict, "status": "available", "chips": []},
             {"layer": "macro", "score": 52, "verdict": "neutral", "status": "available", "chips": []},
@@ -433,6 +439,81 @@ def test_gem_board_capped_at_15() -> None:
     gems_on_all = [c for c in all_rows["candidates"] if c["tier"] == "gem"]
     assert len(gems_on_all) == GEM_BOARD_LIMIT
     assert any(c["symbol"] == "LOWQ" for c in all_rows["candidates"])
+
+
+def test_tape_sold_uses_full_universe_not_gem_board() -> None:
+    """A quality mega sold off in a crash is on tape_sold even when gem-tier is empty of it."""
+    from stocvest.signals.position_tape_sold import TAPE_SOLD_WHY
+
+    gems = [
+        _body(f"G{i:02d}", fund_score=90 - i, rs=5.0, sector_verdict="bullish", market_cap=8e9)
+        for i in range(GEM_BOARD_LIMIT)
+    ]
+    sold_mega = _body(
+        "AAPL",
+        fund_score=78,
+        rs=5.0,
+        regime="risk_off",
+        pct_from_52w_high=-12.0,
+    )
+    sold_mid = _body(
+        "RKLB",
+        fund_score=80,
+        rs=5.0,
+        sector_verdict="bullish",
+        market_cap=8e9,
+        regime="risk_off",
+        pct_from_52w_high=-14.0,
+    )
+    snap = PositionScanSnapshot(
+        generated_at=__import__("datetime").datetime(2026, 9, 8, tzinfo=__import__("datetime").timezone.utc),
+        universe_size=len(gems) + 2,
+        candidates=rank_candidates(gems + [sold_mega, sold_mid]),
+    )
+    gem = snap.to_api_dict(tier="gem", limit=50)
+    assert gem["tape_hostile"] is True
+    tape_syms = [c["symbol"] for c in gem["tape_sold"]]
+    assert "AAPL" in tape_syms
+    assert "RKLB" in tape_syms
+    assert gem["tape_sold_count"] == 2
+    assert all(c["why"] == TAPE_SOLD_WHY for c in gem["tape_sold"])
+    assert "AAPL" not in [c["symbol"] for c in gem["candidates"]]
+
+
+def test_tape_sold_empty_when_tape_is_calm() -> None:
+    bodies = [_body("HIGH", fund_score=90, rs=5.0, sector_verdict="bullish", market_cap=8e9)]
+    snap = PositionScanSnapshot(
+        generated_at=__import__("datetime").datetime(2026, 9, 8, tzinfo=__import__("datetime").timezone.utc),
+        universe_size=1,
+        candidates=rank_candidates(bodies),
+    )
+    out = snap.to_api_dict(tier="all", limit=50)
+    assert out["tape_hostile"] is False
+    assert out["tape_sold"] == []
+    assert out["tape_sold_count"] == 0
+
+
+def test_tape_sold_display_cap_keeps_full_count() -> None:
+    bodies = [
+        _body(
+            f"S{i:02d}",
+            fund_score=80,
+            rs=5.0,
+            sector_verdict="bullish",
+            market_cap=8e9,
+            regime="risk_off",
+            pct_from_52w_high=-12.0,
+        )
+        for i in range(GEM_BOARD_LIMIT + 3)
+    ]
+    snap = PositionScanSnapshot(
+        generated_at=__import__("datetime").datetime(2026, 9, 8, tzinfo=__import__("datetime").timezone.utc),
+        universe_size=len(bodies),
+        candidates=rank_candidates(bodies),
+    )
+    out = snap.to_api_dict(tier="gem", limit=5)
+    assert out["tape_sold_count"] == len(bodies)
+    assert len(out["tape_sold"]) == GEM_BOARD_LIMIT
 
 
 def test_api_dict_action_gated_by_personal_mode(monkeypatch: pytest.MonkeyPatch) -> None:

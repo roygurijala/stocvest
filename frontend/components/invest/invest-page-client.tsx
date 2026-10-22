@@ -17,6 +17,10 @@ import {
   formatGemListDelta,
   isPositionScanUnavailable,
   POSITION_COMPARE_MAX,
+  shouldShowTapeSoldStrip,
+  TAPE_SOLD_EMPTY,
+  TAPE_SOLD_WHY,
+  tapeSoldStripCountLabel,
   positionActionColor,
   positionGemTierCopy,
   togglePositionCompareSelection,
@@ -181,6 +185,85 @@ export function InvestPageClient() {
           </form>
         </div>
       </header>
+
+      {response && shouldShowTapeSoldStrip(response) ? (
+        <section
+          data-testid="invest-tape-sold"
+          aria-label="Quality names sold with the tape"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: spacing[2],
+            background: colors.surface,
+            border: `1px solid ${colors.caution}`,
+            borderRadius: borderRadius.md,
+            padding: spacing[3]
+          }}
+        >
+          <div>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: "1.4px",
+                textTransform: "uppercase",
+                color: colors.caution
+              }}
+            >
+              Sold with the tape
+            </p>
+            <p style={{ margin: `${spacing[1]} 0 0`, fontSize: typography.scale.xs, color: colors.textMuted }}>
+              {TAPE_SOLD_WHY}
+              {` As of last scan · scored across ${response.universeSize} names, not the 15-name gem board.`}
+              {` ${tapeSoldStripCountLabel(response.tapeSoldCount, response.tapeSold.length)}.`}
+            </p>
+          </div>
+          {response.tapeSold.length === 0 ? (
+            <p data-testid="invest-tape-sold-empty" style={{ margin: 0, fontSize: typography.scale.sm, color: colors.textMuted }}>
+              {TAPE_SOLD_EMPTY}
+            </p>
+          ) : (
+            <ul
+              data-testid="invest-tape-sold-list"
+              style={{
+                listStyle: "none",
+                margin: 0,
+                padding: 0,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: spacing[2]
+              }}
+            >
+              {response.tapeSold.map((c) => (
+                <li key={c.symbol}>
+                  <Link
+                    href={dashboardTradingRoomHref(c.symbol, "position", { ref: "invest-tape-sold" })}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "baseline",
+                      gap: spacing[1],
+                      background: colors.background,
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: borderRadius.full,
+                      color: colors.text,
+                      fontSize: typography.scale.sm,
+                      fontWeight: 600,
+                      padding: `${spacing[1]} ${spacing[3]}`,
+                      textDecoration: "none"
+                    }}
+                  >
+                    {c.symbol}
+                    <span style={{ fontWeight: 500, color: colors.textMuted, fontSize: typography.scale.xs }}>
+                      {c.fundamentalsScore != null ? `F ${c.fundamentalsScore}` : "F —"}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       {/* Tier tabs + filters */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: spacing[2], alignItems: "center" }}>

@@ -968,6 +968,9 @@ def _pending_position_candidates(tier: str) -> dict[str, Any]:
             "cached": False,
             "degraded": False,
             "pending": True,
+            "tape_hostile": False,
+            "tape_sold_count": 0,
+            "tape_sold": [],
             "disclaimer": API_SIGNAL_DISCLAIMER,
         }
     )
@@ -985,6 +988,9 @@ def _degraded_position_candidates(tier: str) -> dict[str, Any]:
             "cached": False,
             "degraded": True,
             "pending": False,
+            "tape_hostile": False,
+            "tape_sold_count": 0,
+            "tape_sold": [],
             "disclaimer": API_SIGNAL_DISCLAIMER,
         }
     )

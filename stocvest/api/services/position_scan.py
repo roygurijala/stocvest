@@ -29,6 +29,7 @@ from stocvest.signals.position_gem_gates import (
     CandidateFeatures,
     TIER_GEM,
     TIER_INSUFFICIENT,
+    _AVOID_REGIMES,
     build_gem_why,
     compute_gem_rank,
     evaluate_gem_gates,
@@ -41,6 +42,7 @@ from stocvest.signals.position_gem_gates import (
     resolve_gem_tier,
     tier_sort_key,
 )
+from stocvest.signals.position_tape_sold import TAPE_SOLD_WHY, qualifies_tape_sold
 from stocvest.utils.config import get_settings
 from stocvest.utils.logging import get_logger
 
@@ -116,6 +118,8 @@ class GemCandidate:
     growth_led: bool = False
     sector_tailwind: bool = False
     catalyst: bool = False
+    tape_sold: bool = False
+    regime: str = ""
 
     def to_api_dict(self) -> dict[str, Any]:
         body: dict[str, Any] = {
@@ -140,6 +144,8 @@ class GemCandidate:
             "growth_led": self.growth_led,
             "sector_tailwind": self.sector_tailwind,
             "catalyst": self.catalyst,
+            "tape_sold": self.tape_sold,
+            "regime": self.regime,
         }
         # PERSONAL-MODE: attach an explicit Buy / Watch / Don't-buy action derived
         # deterministically from the tier. Omitted entirely in product mode so the API
@@ -175,6 +181,8 @@ class GemCandidate:
             growth_led=bool(d.get("growth_led")),
             sector_tailwind=bool(d.get("sector_tailwind")),
             catalyst=bool(d.get("catalyst")),
+            tape_sold=bool(d.get("tape_sold")),
+            regime=str(d.get("regime") or "").strip().lower(),
         )
 
 
@@ -269,6 +277,9 @@ class PositionScanSnapshot:
 
     def to_api_dict(self, *, tier: str = "gem", limit: int = 50, cached: bool = False) -> dict[str, Any]:
         rows = self.filtered(tier=tier, limit=limit)
+        tape_rows = [c for c in self.candidates if c.tape_sold]
+        tape_rows.sort(key=lambda c: (-c.rank, c.symbol))
+        tape_hostile = any((c.regime or "") in _AVOID_REGIMES for c in self.candidates)
         return {
             "mode": "position",
             "tier": (tier or "gem").strip().lower(),
@@ -284,6 +295,11 @@ class PositionScanSnapshot:
                 if self.universe_generated_at is not None
                 else None
             ),
+            "tape_hostile": tape_hostile,
+            "tape_sold_count": len(tape_rows),
+            "tape_sold": [
+                {**c.to_api_dict(), "why": TAPE_SOLD_WHY} for c in tape_rows[:GEM_BOARD_LIMIT]
+            ],
             "disclaimer": API_SIGNAL_DISCLAIMER,
         }
 
@@ -379,6 +395,7 @@ def build_candidate(features: CandidateFeatures, *, rs_bottom_quartile_threshold
     tier = resolve_gem_tier(features, gates)
     rank = compute_gem_rank(features)
     why = build_gem_why(features, gates, tier)
+    tape_sold = qualifies_tape_sold(features, gates)
     weak = features.pillars.get(features.weakest_pillar_id) if features.weakest_pillar_id else None
     return GemCandidate(
         symbol=features.symbol,
@@ -402,6 +419,8 @@ def build_candidate(features: CandidateFeatures, *, rs_bottom_quartile_threshold
         growth_led=is_growth_led(features),
         sector_tailwind=has_sector_tailwind(features),
         catalyst=has_catalyst(features),
+        tape_sold=tape_sold,
+        regime=features.regime,
     )
 
 
