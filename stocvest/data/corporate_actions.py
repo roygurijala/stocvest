@@ -33,6 +33,20 @@ class SplitEvent:
     def is_reverse(self) -> bool:
         return self.split_from > self.split_to
 
+    @property
+    def ratio(self) -> float:
+        """New shares per old share (``apply_stock_split`` convention)."""
+        return self.split_to / self.split_from
+
+    @property
+    def label(self) -> str:
+        to_s = str(int(self.split_to)) if self.split_to == int(self.split_to) else str(self.split_to)
+        from_s = (
+            str(int(self.split_from)) if self.split_from == int(self.split_from) else str(self.split_from)
+        )
+        kind = "reverse" if self.is_reverse else "forward"
+        return f"{to_s}-for-{from_s} {kind}"
+
 
 def _split_cache_key(start: date, end: date) -> str:
     return f"stocvest:splits:{start.isoformat()}:{end.isoformat()}"
@@ -176,6 +190,50 @@ async def symbols_with_frequent_reverse_splits(
         except Exception:
             pass
     return blocked
+
+
+async def fetch_splits_for_tickers(
+    client: PolygonClient,
+    tickers: list[str] | tuple[str, ...],
+    *,
+    start: date,
+    end: date,
+) -> list[SplitEvent]:
+    """Splits for the given tickers in ``[start, end]`` (inclusive). One page per ticker."""
+    events: list[SplitEvent] = []
+    seen: set[tuple[str, date, float, float]] = set()
+    for raw in tickers:
+        ticker = str(raw or "").strip().upper()
+        if not ticker:
+            continue
+        params: dict[str, str] = {
+            "ticker": ticker,
+            "execution_date.gte": start.isoformat(),
+            "execution_date.lte": end.isoformat(),
+            "limit": "100",
+            "sort": "execution_date",
+            "order": "desc",
+        }
+        try:
+            data = await client._get("/v3/reference/splits", params)  # noqa: SLF001
+        except Exception as exc:
+            _LOG.warning("corporate_actions ticker splits failed ticker=%s: %s", ticker, str(exc)[:200])
+            continue
+        rows = data.get("results") or []
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            ev = _parse_split_row(row)
+            if ev is None:
+                continue
+            key = (ev.ticker, ev.execution_date, ev.split_from, ev.split_to)
+            if key in seen:
+                continue
+            seen.add(key)
+            events.append(ev)
+    return events
 
 
 async def recent_split_symbols(

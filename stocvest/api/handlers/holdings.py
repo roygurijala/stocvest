@@ -13,6 +13,7 @@ Backs the STOCVEST-managed personal portfolio (distinct from the paused broker
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -58,7 +59,7 @@ def _symbol_from_event(event: LambdaEvent) -> str | None:
             rest = rk[len(prefix) :].split("?")[0].strip()
             # Strip a trailing action segment (e.g. ".../split").
             rest = rest.split("/")[0]
-            if rest and not rest.startswith("{") and rest not in ("sync", "settings", "ledger"):
+            if rest and not rest.startswith("{") and rest not in ("sync", "settings", "ledger", "pending-splits"):
                 return rest.upper()
     return None
 
@@ -78,7 +79,11 @@ def _parse_holding(payload: dict[str, Any]) -> PortfolioHolding:
         )
         for lot in holding.lots
     )
-    return PortfolioHolding(symbol=holding.symbol, lots=clean_lots)
+    return PortfolioHolding(
+        symbol=holding.symbol,
+        lots=clean_lots,
+        applied_split_dates=holding.applied_split_dates,
+    )
 
 
 def holdings_list_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -145,6 +150,12 @@ def holdings_upsert_handler(event: LambdaEvent, context: LambdaContext) -> dict[
             (h for h in store.list_holdings(request_context.user_id) if h.symbol == holding.symbol),
             None,
         )
+        if previous is not None and not holding.applied_split_dates:
+            holding = PortfolioHolding(
+                symbol=holding.symbol,
+                lots=holding.lots,
+                applied_split_dates=previous.applied_split_dates,
+            )
         # Stamp before upsert — writes wipe reviewCache.
         row, cached_at = _review_row_for_symbol(request_context.user_id, holding.symbol)
         stamp = advice_stamp_from_review_row(row, cached_at=cached_at)
@@ -241,12 +252,52 @@ def holdings_split_handler(event: LambdaEvent, context: LambdaContext) -> dict[s
     try:
         payload = parse_json_body(event)
         ratio = _split_ratio_from_body(payload)
+        execution_raw = payload.get("executionDate") or payload.get("execution_date")
+        execution_date = str(execution_raw).strip()[:10] if execution_raw else None
     except (TypeError, ValueError, KeyError) as exc:
         return bad_request(f"Invalid split: {exc}")
-    updated = get_holdings_store().apply_split(request_context.user_id, symbol, ratio)
+    try:
+        updated = get_holdings_store().apply_split(
+            request_context.user_id, symbol, ratio, execution_date=execution_date
+        )
+    except ValueError as exc:
+        return bad_request(f"Invalid split: {exc}")
     if updated is None:
         return not_found("Holding not found.")
     return ok(updated.to_api())
+
+
+def holdings_pending_splits_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
+    """Polygon splits on held names that have not been applied to lots yet."""
+    _ = context
+    request_context = build_request_context(event)
+    if not request_context.user_id:
+        return unauthorized("Authenticated user is required.")
+    holdings = get_holdings_store().list_holdings(request_context.user_id)
+    if not holdings:
+        return ok({"pendingSplits": [], "count": 0})
+    try:
+        from stocvest.api.services.pending_holding_splits import (
+            holding_split_window,
+            pending_splits_for_holdings,
+        )
+        from stocvest.data.corporate_actions import fetch_splits_for_tickers
+        from stocvest.data.polygon_client import PolygonClient
+        from stocvest.utils.config import get_settings
+
+        start, end = holding_split_window()
+        tickers = [h.symbol for h in holdings]
+
+        async def _load() -> list:
+            async with PolygonClient(api_key=get_settings().polygon_api_key) as client:
+                return await fetch_splits_for_tickers(client, tickers, start=start, end=end)
+
+        events = asyncio.run(_load())
+        pending = pending_splits_for_holdings(holdings, events)
+    except Exception as exc:
+        _LOG.warning("holdings pending-splits degraded: %s", str(exc)[:200])
+        return ok({"pendingSplits": [], "count": 0, "degraded": True})
+    return ok({"pendingSplits": [row.to_api() for row in pending], "count": len(pending)})
 
 
 def holdings_sale_handler(event: LambdaEvent, context: LambdaContext) -> dict[str, Any]:
@@ -374,6 +425,8 @@ def holdings_dispatch_handler(event: LambdaEvent, context: LambdaContext) -> dic
         return holdings_settings_put_handler(event, context)
     if rk == "GET /v1/holdings/ledger" or rk.startswith("GET /v1/holdings/ledger?"):
         return holdings_ledger_handler(event, context)
+    if rk == "GET /v1/holdings/pending-splits" or rk.startswith("GET /v1/holdings/pending-splits?"):
+        return holdings_pending_splits_handler(event, context)
     if rk == "GET /v1/holdings" or rk.startswith("GET /v1/holdings?"):
         return holdings_list_handler(event, context)
     if rk == "PUT /v1/holdings/sync":

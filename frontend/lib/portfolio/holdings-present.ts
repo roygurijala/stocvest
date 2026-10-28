@@ -140,3 +140,19 @@ export function suggestedAddAmount(
   if (gap <= 0) return 0;
   return round2(Math.min(gap, Math.max(0, cashAvailable)));
 }
+
+/** New-shares-per-old-share. Accepts `2`, `1/3`, or `1:3` (new:old). */
+export function parseSplitRatio(raw: string): number | null {
+  const s = raw.trim();
+  if (!s) return null;
+  const frac = s.match(/^(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)$/);
+  if (frac) {
+    const num = Number(frac[1]);
+    const den = Number(frac[2]);
+    if (!Number.isFinite(num) || !Number.isFinite(den) || num <= 0 || den <= 0) return null;
+    return num / den;
+  }
+  const n = Number(s);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}

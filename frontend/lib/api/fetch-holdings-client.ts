@@ -7,6 +7,7 @@ import { parsePortfolioLedger } from "@/lib/portfolio/advice-ledger-present";
 import type {
   Holding,
   HoldingInput,
+  PendingHoldingSplit,
   PortfolioLedgerResponse,
   PortfolioSettings
 } from "@/lib/portfolio/types";
@@ -98,16 +99,29 @@ export async function upsertHoldingClient(holding: HoldingInput): Promise<Upsert
  */
 export async function applyHoldingSplitClient(
   symbol: string,
-  ratio: number
+  ratio: number,
+  executionDate?: string
 ): Promise<Holding | null> {
+  const body: { ratio: number; executionDate?: string } = { ratio };
+  if (executionDate) body.executionDate = executionDate;
   const res = await fetch(`/api/stocvest/holdings/${encodeURIComponent(symbol)}/split`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ratio }),
+    body: JSON.stringify(body),
     cache: "no-store"
   }).catch(() => null);
   if (!res?.ok) return null;
   return parseJson<Holding>(res);
+}
+
+export async function fetchPendingHoldingSplitsClient(): Promise<PendingHoldingSplit[]> {
+  const res = await fetch("/api/stocvest/holdings/pending-splits", {
+    method: "GET",
+    cache: "no-store"
+  }).catch(() => null);
+  if (!res?.ok) return [];
+  const body = await parseJson<{ pendingSplits?: PendingHoldingSplit[] }>(res);
+  return Array.isArray(body?.pendingSplits) ? body.pendingSplits : [];
 }
 
 export async function deleteHoldingClient(symbol: string): Promise<boolean> {

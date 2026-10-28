@@ -18,6 +18,17 @@ export interface Holding {
   averageCost: number | null;
   totalCost: number;
   lots: HoldingLot[];
+  appliedSplitDates?: string[];
+}
+
+export interface PendingHoldingSplit {
+  symbol: string;
+  executionDate: string;
+  splitFrom: number;
+  splitTo: number;
+  ratio: number;
+  label: string;
+  isReverse: boolean;
 }
 
 /** What the client sends on upsert — the server derives totals. */

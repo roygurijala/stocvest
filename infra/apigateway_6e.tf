@@ -160,6 +160,7 @@ locals {
     "POST /v1/holdings/{symbol}/split" = { module_key = "holdings", authorizer = true }
     "POST /v1/holdings/{symbol}/sale"  = { module_key = "holdings", authorizer = true }
     "GET /v1/holdings/ledger"          = { module_key = "holdings", authorizer = true }
+    "GET /v1/holdings/pending-splits"  = { module_key = "holdings", authorizer = true }
 
     "GET /v1/portfolio-review" = { module_key = "portfolio_review", authorizer = true }
 
