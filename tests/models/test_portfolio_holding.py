@@ -158,6 +158,16 @@ def test_apply_stock_split_forward_preserves_total_cost_and_dates() -> None:
     assert by_id["b"].quantity == 10 and by_id["b"].cost_basis == 100.0
 
 
+def test_apply_stock_split_stamps_execution_date() -> None:
+    holding = PortfolioHolding.from_api(
+        {"symbol": "ETHA", "lots": [_lot(quantity=300, costBasis=20.0)]}
+    )
+    split = apply_stock_split(holding, ratio=1 / 3, execution_date="2026-10-06")
+    assert split.total_quantity == pytest.approx(100)
+    assert split.total_cost == pytest.approx(holding.total_cost)
+    assert split.applied_split_dates == ("2026-10-06",)
+
+
 def test_apply_stock_split_reverse() -> None:
     holding = PortfolioHolding.from_api(
         {"symbol": "AAPL", "lots": [_lot(quantity=100, costBasis=5.0)]}

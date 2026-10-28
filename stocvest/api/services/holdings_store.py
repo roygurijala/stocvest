@@ -36,7 +36,14 @@ class HoldingsStore(Protocol):
     def get_settings(self, user_id: str) -> PortfolioSettings: ...
     def save_settings(self, user_id: str, settings: PortfolioSettings) -> None: ...
     def iter_users_with_holdings(self) -> Iterator[str]: ...
-    def apply_split(self, user_id: str, symbol: str, ratio: float) -> PortfolioHolding | None: ...
+    def apply_split(
+        self,
+        user_id: str,
+        symbol: str,
+        ratio: float,
+        *,
+        execution_date: str | None = None,
+    ) -> PortfolioHolding | None: ...
 
     # Precomputed daily-review cache (PORTFOLIO-MGMT Slice 3b). The cached review lives
     # on the same per-user item as the holdings, so any holdings/settings write (a full
@@ -121,12 +128,19 @@ class InMemoryHoldingsStore:
             if holdings:
                 yield uid
 
-    def apply_split(self, user_id: str, symbol: str, ratio: float) -> PortfolioHolding | None:
+    def apply_split(
+        self,
+        user_id: str,
+        symbol: str,
+        ratio: float,
+        *,
+        execution_date: str | None = None,
+    ) -> PortfolioHolding | None:
         sym = symbol.strip().upper()
         held = next((h for h in self.list_holdings(user_id) if h.symbol == sym), None)
         if held is None:
             return None
-        adjusted = apply_stock_split(held, ratio=ratio)
+        adjusted = apply_stock_split(held, ratio=ratio, execution_date=execution_date)
         self.upsert_holding(user_id, adjusted)  # also drops the cache
         return adjusted
 
@@ -267,7 +281,14 @@ class DynamoDBHoldingsStore:
             if not last_key:
                 break
 
-    def apply_split(self, user_id: str, symbol: str, ratio: float) -> PortfolioHolding | None:
+    def apply_split(
+        self,
+        user_id: str,
+        symbol: str,
+        ratio: float,
+        *,
+        execution_date: str | None = None,
+    ) -> PortfolioHolding | None:
         sym = symbol.strip().upper()
         item = self._get_item(user_id)
         settings = PortfolioSettings.from_dynamo_item(item.get(self.settings_key))
@@ -275,7 +296,7 @@ class DynamoDBHoldingsStore:
         held = next((h for h in current if h.symbol == sym), None)
         if held is None:
             return None
-        adjusted = apply_stock_split(held, ratio=ratio)
+        adjusted = apply_stock_split(held, ratio=ratio, execution_date=execution_date)
         rest = tuple(h for h in current if h.symbol != sym)
         self._put_item(user_id, holdings=_dedupe(rest + (adjusted,)), settings=settings)
         return adjusted

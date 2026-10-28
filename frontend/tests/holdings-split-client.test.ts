@@ -36,6 +36,18 @@ describe("applyHoldingSplitClient", () => {
     expect(result?.totalQuantity).toBe(20);
   });
 
+  test("POSTs executionDate when a pending split is applied", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ symbol: "ETHA", totalQuantity: 100, lots: [] })
+    });
+    await applyHoldingSplitClient("ETHA", 1 / 3, "2026-10-06");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      ratio: 1 / 3,
+      executionDate: "2026-10-06"
+    });
+  });
+
   test("returns null on a non-ok response", async () => {
     fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({}) });
     expect(await applyHoldingSplitClient("AAPL", 2)).toBeNull();

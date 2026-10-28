@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from stocvest.data.corporate_actions import SplitEvent, _parse_split_row
 
 
@@ -35,3 +37,11 @@ def test_parse_split_row_forward() -> None:
 def test_split_event_properties() -> None:
     ev = SplitEvent(ticker="X", execution_date=date(2026, 1, 1), split_from=10.0, split_to=1.0)
     assert ev.is_reverse is True
+    assert ev.ratio == pytest.approx(0.1)
+    assert ev.label == "1-for-10 reverse"
+
+
+def test_etha_one_for_three_label() -> None:
+    ev = SplitEvent(ticker="ETHA", execution_date=date(2026, 10, 6), split_from=3.0, split_to=1.0)
+    assert ev.ratio == pytest.approx(1 / 3)
+    assert ev.label == "1-for-3 reverse"

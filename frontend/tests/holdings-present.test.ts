@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildPortfolioView,
+  parseSplitRatio,
   portfolioHoldingDeepDiveHref,
   suggestedAddAmount
 } from "@/lib/portfolio/holdings-present";
@@ -88,5 +89,22 @@ describe("suggestedAddAmount", () => {
 
   test("returns 0 when already at/over target", () => {
     expect(suggestedAddAmount(1500, 10000, 10, 5000)).toBe(0);
+  });
+});
+
+describe("parseSplitRatio", () => {
+  test("reads a 1-for-3 reverse as new:old", () => {
+    expect(parseSplitRatio("1:3")).toBeCloseTo(1 / 3);
+    expect(parseSplitRatio("1/3")).toBeCloseTo(1 / 3);
+  });
+
+  test("reads a forward split number", () => {
+    expect(parseSplitRatio("2")).toBe(2);
+  });
+
+  test("rejects junk", () => {
+    expect(parseSplitRatio("")).toBeNull();
+    expect(parseSplitRatio("0")).toBeNull();
+    expect(parseSplitRatio("abc")).toBeNull();
   });
 });

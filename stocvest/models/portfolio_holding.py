@@ -36,6 +36,23 @@ def _to_decimals(value: Any) -> Any:
     return value
 
 
+def _coerce_applied_split_dates(raw: Any) -> tuple[str, ...]:
+    if not isinstance(raw, list):
+        return ()
+    dates: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        try:
+            day = _coerce_iso_date(item)
+        except ValueError:
+            continue
+        if day in seen:
+            continue
+        seen.add(day)
+        dates.append(day)
+    return tuple(sorted(dates))
+
+
 def _coerce_iso_date(raw: Any) -> str:
     """Normalize a purchase date to an ISO ``YYYY-MM-DD`` string; raise on garbage."""
     if isinstance(raw, (datetime, date)):
@@ -113,6 +130,9 @@ class PortfolioHolding:
 
     symbol: str
     lots: tuple[HoldingLot, ...] = field(default_factory=tuple)
+    # ISO YYYY-MM-DD execution dates already applied — so a later Polygon
+    # pending-split pass does not double-adjust the same corp action.
+    applied_split_dates: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def total_quantity(self) -> float:
@@ -135,19 +155,24 @@ class PortfolioHolding:
         return min(lot.purchase_date for lot in self.lots)
 
     def to_api(self) -> dict[str, Any]:
-        return {
+        body: dict[str, Any] = {
             "symbol": self.symbol,
             "totalQuantity": self.total_quantity,
             "averageCost": self.average_cost,
             "totalCost": self.total_cost,
             "lots": [lot.to_api() for lot in self.lots],
         }
+        if self.applied_split_dates:
+            body["appliedSplitDates"] = list(self.applied_split_dates)
+        return body
 
     def to_dynamo_item(self) -> dict[str, Any]:
-        # Persist only the durable fields (symbol + lots); derived values recomputed on read.
-        return _to_decimals(
-            {"symbol": self.symbol, "lots": [lot.to_api() for lot in self.lots]}
-        )
+        # Persist only the durable fields (symbol + lots + applied splits);
+        # derived qty/cost recomputed on read.
+        item: dict[str, Any] = {"symbol": self.symbol, "lots": [lot.to_api() for lot in self.lots]}
+        if self.applied_split_dates:
+            item["appliedSplitDates"] = list(self.applied_split_dates)
+        return _to_decimals(item)
 
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> PortfolioHolding:
@@ -162,14 +187,23 @@ class PortfolioHolding:
             raise ValueError("at least one valid lot is required.")
         if len(lots) > MAX_LOTS_PER_SYMBOL:
             raise ValueError(f"a symbol may have at most {MAX_LOTS_PER_SYMBOL} lots.")
-        return cls(symbol=symbol, lots=lots)
+        return cls(
+            symbol=symbol,
+            lots=lots,
+            applied_split_dates=_coerce_applied_split_dates(raw.get("appliedSplitDates")),
+        )
 
     @classmethod
     def from_dynamo_item(cls, item: dict[str, Any]) -> PortfolioHolding:
         return cls.from_api(item)
 
 
-def apply_stock_split(holding: PortfolioHolding, *, ratio: float) -> PortfolioHolding:
+def apply_stock_split(
+    holding: PortfolioHolding,
+    *,
+    ratio: float,
+    execution_date: str | None = None,
+) -> PortfolioHolding:
     """Return a new holding with every lot adjusted for a stock split.
 
     ``ratio`` is new-shares-per-old-share: a **2:1** forward split is ``2.0`` (shares
@@ -197,7 +231,19 @@ def apply_stock_split(holding: PortfolioHolding, *, ratio: float) -> PortfolioHo
                 note=lot.note,
             )
         )
-    return PortfolioHolding(symbol=holding.symbol, lots=tuple(adjusted))
+    applied = list(holding.applied_split_dates)
+    if execution_date:
+        try:
+            day = _coerce_iso_date(execution_date)
+        except ValueError as exc:
+            raise ValueError("executionDate must be an ISO date.") from exc
+        if day not in applied:
+            applied.append(day)
+    return PortfolioHolding(
+        symbol=holding.symbol,
+        lots=tuple(adjusted),
+        applied_split_dates=tuple(sorted(applied)),
+    )
 
 
 DEFAULT_BENCHMARK_SYMBOL = "SPY"

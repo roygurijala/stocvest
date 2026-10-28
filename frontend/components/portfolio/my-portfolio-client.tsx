@@ -9,6 +9,7 @@ import { fetchBffSnapshotsBatched, lookupSnapshot } from "@/lib/api/fetch-bff-sn
 import {
   applyHoldingSplitClient,
   deleteHoldingClient,
+  fetchPendingHoldingSplitsClient,
   fetchPortfolioLedgerClient,
   loadPortfolioBundleClient,
   recordHoldingSaleClient,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/portfolio/advice-ledger-present";
 import {
   buildPortfolioView,
+  parseSplitRatio,
   portfolioHoldingDeepDiveHref,
   type PortfolioView
 } from "@/lib/portfolio/holdings-present";
@@ -36,6 +38,7 @@ import {
   DEFAULT_PORTFOLIO_SETTINGS,
   type Holding,
   type HoldingLot,
+  type PendingHoldingSplit,
   type PortfolioLedgerResponse,
   type PortfolioSettings
 } from "@/lib/portfolio/types";
@@ -125,6 +128,8 @@ export function MyPortfolioClient() {
   const [saleError, setSaleError] = useState<string | null>(null);
   const [recordingSale, setRecordingSale] = useState(false);
   const [ledger, setLedger] = useState<PortfolioLedgerResponse | null>(null);
+  const [pendingSplits, setPendingSplits] = useState<PendingHoldingSplit[]>([]);
+  const [applyingPending, setApplyingPending] = useState<string | null>(null);
 
   // Editable settings mirror (so typing doesn't fire saves).
   const [cashInput, setCashInput] = useState("0");
@@ -144,6 +149,7 @@ export function MyPortfolioClient() {
     }
     const nextLedger = await fetchPortfolioLedgerClient();
     setLedger(nextLedger);
+    setPendingSplits(await fetchPendingHoldingSplitsClient());
     setLoading(false);
   }, []);
 
@@ -288,9 +294,9 @@ export function MyPortfolioClient() {
   async function handleApplySplit() {
     if (!splitFor) return;
     setSplitError(null);
-    const ratio = Number(splitRatio);
-    if (!Number.isFinite(ratio) || ratio <= 0) {
-      setSplitError("Enter a ratio greater than 0 (e.g. 2 for a 2:1 split, 0.1 for a 1:10 reverse).");
+    const ratio = parseSplitRatio(splitRatio);
+    if (ratio == null) {
+      setSplitError("Enter new shares per old share — 2 for a 2:1, or 1:3 / 1/3 for a reverse.");
       return;
     }
     setApplyingSplit(true);
@@ -302,6 +308,19 @@ export function MyPortfolioClient() {
     }
     setSplitFor(null);
     setSplitRatio("2");
+    await reload();
+  }
+
+  async function handleApplyPendingSplit(row: PendingHoldingSplit) {
+    if (applyingPending) return;
+    setApplyingPending(row.symbol);
+    setSplitError(null);
+    const updated = await applyHoldingSplitClient(row.symbol, row.ratio, row.executionDate);
+    setApplyingPending(null);
+    if (!updated) {
+      setSplitError(`Could not apply the ${row.symbol} ${row.label} split.`);
+      return;
+    }
     await reload();
   }
 
@@ -421,6 +440,51 @@ export function MyPortfolioClient() {
           <button type="button" style={btn("ghost")} onClick={() => void reload()}>
             Retry
           </button>
+        </div>
+      ) : null}
+
+      {pendingSplits.length > 0 ? (
+        <div
+          data-testid="pending-splits"
+          role="status"
+          style={{
+            ...card,
+            border: `1px solid ${colors.accent}`
+          }}
+        >
+          <div style={{ fontSize: typography.scale.sm, color: colors.text, fontWeight: 600, marginBottom: spacing[2] }}>
+            Stock split not applied yet
+          </div>
+          <p style={{ fontSize: typography.scale.xs, color: colors.textMuted, margin: `0 0 ${spacing[3]}` }}>
+            Live price is already split-adjusted. Apply the corp action so share count and cost
+            basis stay honest. Total dollars invested do not change.
+          </p>
+          {pendingSplits.map((row) => (
+            <div
+              key={`${row.symbol}-${row.executionDate}`}
+              data-testid={`pending-split-${row.symbol}`}
+              style={{
+                display: "flex",
+                gap: spacing[2],
+                alignItems: "center",
+                flexWrap: "wrap",
+                marginBottom: spacing[2]
+              }}
+            >
+              <span style={{ fontSize: typography.scale.sm, color: colors.text }}>
+                {row.symbol} {row.label} on {row.executionDate}
+              </span>
+              <button
+                type="button"
+                data-testid={`pending-split-apply-${row.symbol}`}
+                style={btn("primary")}
+                disabled={applyingPending === row.symbol}
+                onClick={() => void handleApplyPendingSplit(row)}
+              >
+                {applyingPending === row.symbol ? "Applying…" : "Apply split"}
+              </button>
+            </div>
+          ))}
         </div>
       ) : null}
 
@@ -758,13 +822,15 @@ export function MyPortfolioClient() {
             Record a stock split for {splitFor}
           </div>
           <p style={{ fontSize: typography.scale.xs, color: colors.textMuted, margin: `0 0 ${spacing[3]}` }}>
-            Enter new shares per old share: <strong>2</strong> for a 2:1 forward split, <strong>3</strong> for 3:1,
-            or <strong>0.1</strong> for a 1:10 reverse split. Your total cost and purchase dates stay the same — only
-            the share count and per-share cost adjust.
+            Enter new shares per old share: <strong>2</strong> for a 2:1 forward, or{" "}
+            <strong>1:3</strong> / <strong>1/3</strong> for a 1-for-3 reverse. A 1:3 reverse is not{" "}
+            <strong>3</strong> — that would triple shares. Total cost and purchase dates stay the same.
           </p>
           <div style={{ display: "flex", gap: spacing[2], alignItems: "flex-end", flexWrap: "wrap" }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 4, width: 160 }}>
-              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>Ratio (new : old)</span>
+              <span style={{ fontSize: typography.scale.xs, color: colors.textMuted }}>
+                New per old (2, 1:3, or 1/3)
+              </span>
               <input
                 data-testid="split-ratio"
                 style={input}

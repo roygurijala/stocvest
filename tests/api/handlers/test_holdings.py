@@ -12,6 +12,7 @@ from stocvest.api.handlers.holdings import (
     holdings_sale_handler,
     holdings_settings_get_handler,
     holdings_settings_put_handler,
+    holdings_pending_splits_handler,
     holdings_split_handler,
     holdings_sync_handler,
     holdings_upsert_handler,
@@ -176,6 +177,67 @@ def test_split_forward_adjusts_lots() -> None:
     assert body["averageCost"] == 91.0
     assert body["totalCost"] == 1820.0  # unchanged
     assert body["lots"][0]["purchaseDate"] == "2024-06-10"  # holding period preserved
+
+
+def test_split_stamps_execution_date() -> None:
+    holdings_upsert_handler(_event("u-h-11b", _holding_payload("ETHA")), {})
+    resp = holdings_split_handler(
+        _event(
+            "u-h-11b",
+            {"numerator": 1, "denominator": 3, "executionDate": "2026-10-06"},
+            pathParameters={"symbol": "ETHA"},
+        ),
+        {},
+    )
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert body["totalQuantity"] == pytest.approx(10 / 3)
+    assert body["appliedSplitDates"] == ["2026-10-06"]
+
+
+def test_upsert_keeps_applied_split_dates() -> None:
+    holdings_upsert_handler(_event("u-h-11c", _holding_payload("ETHA")), {})
+    holdings_split_handler(
+        _event(
+            "u-h-11c",
+            {"ratio": 1 / 3, "executionDate": "2026-10-06"},
+            pathParameters={"symbol": "ETHA"},
+        ),
+        {},
+    )
+    listed = json.loads(holdings_list_handler(_event("u-h-11c"), {})["body"])
+    qty = listed[0]["totalQuantity"]
+    upsert = holdings_upsert_handler(
+        _event(
+            "u-h-11c",
+            {
+                "symbol": "ETHA",
+                "lots": [
+                    {
+                        "lotId": "ETHA-l1",
+                        "quantity": qty,
+                        "costBasis": listed[0]["averageCost"],
+                        "purchaseDate": "2024-06-10",
+                    }
+                ],
+            },
+        ),
+        {},
+    )
+    assert json.loads(upsert["body"])["appliedSplitDates"] == ["2026-10-06"]
+
+
+def test_pending_splits_empty_book() -> None:
+    resp = holdings_pending_splits_handler(_event("u-empty-ps"), {})
+    assert resp["statusCode"] == 200
+    assert json.loads(resp["body"]) == {"pendingSplits": [], "count": 0}
+
+
+def test_dispatch_routes_pending_splits() -> None:
+    event = _event("u-ps-1", routeKey="GET /v1/holdings/pending-splits")
+    resp = holdings_dispatch_handler(event, {})
+    assert resp["statusCode"] == 200
+    assert json.loads(resp["body"])["pendingSplits"] == []
 
 
 def test_split_reverse_via_numerator_denominator() -> None:
