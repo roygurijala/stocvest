@@ -14,8 +14,10 @@ from stocvest.models.portfolio_advice_ledger import (
     PortfolioLedgerEvent,
     advice_outcome,
     apply_sale,
+    KIND_BUY,
     added_quantity,
     added_cost,
+    plan_undebited_buy_cash_backfill,
     collapse_review_episodes,
     follow_through,
     ledger_summary,
@@ -85,6 +87,33 @@ def test_added_cost_uses_new_lot_spend_not_average() -> None:
     assert added_cost(None, held) == 200.0
     assert added_cost(held, more) == 110.0
     assert added_cost(held, held) == 0.0
+
+
+def test_undebited_buy_cash_backfill_spends_once_and_floors() -> None:
+    buy = PortfolioLedgerEvent(
+        event_id="b1",
+        user_id="u1",
+        kind=KIND_BUY,
+        symbol="AAPL",
+        occurred_at="2026-10-01",
+        quantity=10,
+        cost_basis_per_share=182.0,
+    )
+    cash, stamped = plan_undebited_buy_cash_backfill((buy,), 5000.0)
+    assert cash == pytest.approx(3180.0)
+    assert stamped[0].cash_debited == pytest.approx(1820.0)
+
+    again, restamped = plan_undebited_buy_cash_backfill(stamped, cash)
+    assert again == pytest.approx(3180.0)
+    assert restamped == ()
+
+    floor, partial = plan_undebited_buy_cash_backfill((buy,), 100.0)
+    assert floor == 0.0
+    assert partial[0].cash_debited == pytest.approx(100.0)
+
+    zero, none = plan_undebited_buy_cash_backfill((buy,), 0.0)
+    assert zero == 0.0
+    assert none == ()
 
 
 def test_review_snapshots_skip_same_day_duplicate() -> None:

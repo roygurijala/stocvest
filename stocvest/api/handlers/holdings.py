@@ -174,20 +174,24 @@ def holdings_upsert_handler(event: LambdaEvent, context: LambdaContext) -> dict[
         stamp = advice_stamp_from_review_row(row, cached_at=cached_at)
         store.upsert_holding(uid, holding)
         cash_debited = None
-        spend = added_cost(previous, holding) if debit_cash else 0.0
-        if spend > 0:
-            settings = store.get_settings(uid)
-            paid = round(min(spend, settings.cash_balance), 2)
-            if paid > 0:
-                store.save_settings(
-                    uid,
-                    PortfolioSettings(
-                        cash_balance=round(settings.cash_balance - paid, 2),
-                        target_position_pct=settings.target_position_pct,
-                        benchmark_symbol=settings.benchmark_symbol,
-                    ),
-                )
-                cash_debited = paid
+        if added_quantity(previous, holding) > 0:
+            # 0 means "considered, do not backfill" — None is legacy (pre-debit) only.
+            cash_debited = 0.0
+            if debit_cash:
+                spend = added_cost(previous, holding)
+                if spend > 0:
+                    settings = store.get_settings(uid)
+                    paid = round(min(spend, settings.cash_balance), 2)
+                    if paid > 0:
+                        store.save_settings(
+                            uid,
+                            PortfolioSettings(
+                                cash_balance=round(settings.cash_balance - paid, 2),
+                                target_position_pct=settings.target_position_pct,
+                                benchmark_symbol=settings.benchmark_symbol,
+                            ),
+                        )
+                    cash_debited = paid
         _record_buy_if_added(uid, previous, holding, stamp=stamp, cash_debited=cash_debited)
         return ok(holding.to_api())
     except (TypeError, ValueError, KeyError) as exc:
@@ -223,7 +227,9 @@ def holdings_settings_get_handler(event: LambdaEvent, context: LambdaContext) ->
     request_context = build_request_context(event)
     if not request_context.user_id:
         return unauthorized("Authenticated user is required.")
-    settings = get_holdings_store().get_settings(request_context.user_id)
+    from stocvest.api.services.cash_buy_backfill import apply_undebited_buy_cash_backfill
+
+    settings = apply_undebited_buy_cash_backfill(request_context.user_id)
     return ok(settings.to_api())
 
 
