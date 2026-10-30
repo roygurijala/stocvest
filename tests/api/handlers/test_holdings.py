@@ -22,8 +22,10 @@ from stocvest.api.services.holdings_store import (
     reset_holdings_store_for_tests,
 )
 from stocvest.api.services.portfolio_advice_ledger import (
+    get_portfolio_advice_ledger_store,
     reset_portfolio_advice_ledger_store_for_tests,
 )
+from stocvest.models.portfolio_advice_ledger import KIND_BUY, PortfolioLedgerEvent
 
 pytestmark = pytest.mark.unit
 
@@ -202,6 +204,28 @@ def test_buy_debit_floors_cash_at_zero() -> None:
     assert buys[-1]["cashDebited"] == pytest.approx(100.0)
 
 
+def test_settings_get_backfills_undebited_buy_cash_once() -> None:
+    holdings_settings_put_handler(_event("u-backfill", {"cashBalance": 5000}), {})
+    get_portfolio_advice_ledger_store().append(
+        PortfolioLedgerEvent(
+            event_id="b-undebited",
+            user_id="u-backfill",
+            kind=KIND_BUY,
+            symbol="AAPL",
+            occurred_at="2026-10-01",
+            quantity=10,
+            cost_basis_per_share=182.0,
+        )
+    )
+    first = json.loads(holdings_settings_get_handler(_event("u-backfill"), {})["body"])
+    assert first["cashBalance"] == pytest.approx(3180.0)
+    second = json.loads(holdings_settings_get_handler(_event("u-backfill"), {})["body"])
+    assert second["cashBalance"] == pytest.approx(3180.0)
+    ledger = json.loads(holdings_ledger_handler(_event("u-backfill"), {})["body"])
+    buys = [e for e in ledger["events"] if e["kind"] == "buy"]
+    assert buys[-1]["cashDebited"] == pytest.approx(1820.0)
+
+
 def test_buy_debit_cash_false_leaves_balance() -> None:
     holdings_settings_put_handler(_event("u-buy-skip", {"cashBalance": 5000}), {})
     payload = _holding_payload("AAPL")
@@ -211,7 +235,7 @@ def test_buy_debit_cash_false_leaves_balance() -> None:
     assert cash["cashBalance"] == 5000.0
     ledger = json.loads(holdings_ledger_handler(_event("u-buy-skip"), {})["body"])
     buys = [e for e in ledger["events"] if e["kind"] == "buy"]
-    assert buys[-1]["cashDebited"] is None
+    assert buys[-1]["cashDebited"] == 0.0
 
 
 def test_settings_rejects_bad_target_pct() -> None:

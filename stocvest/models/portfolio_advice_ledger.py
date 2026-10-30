@@ -182,6 +182,46 @@ def added_cost(previous: PortfolioHolding | None, updated: PortfolioHolding) -> 
     return delta if delta > 0 else 0.0
 
 
+def buy_event_spend(event: PortfolioLedgerEvent) -> float:
+    """Cost of a ledger buy: quantity × cost basis (falls back to price)."""
+    if event.kind != KIND_BUY:
+        return 0.0
+    qty = float(event.quantity or 0.0)
+    px = event.cost_basis_per_share
+    if px is None:
+        px = event.price_per_share
+    if qty <= 0 or px is None or px < 0:
+        return 0.0
+    return round(qty * px, 2)
+
+
+def plan_undebited_buy_cash_backfill(
+    events: tuple[PortfolioLedgerEvent, ...],
+    cash_balance: float,
+) -> tuple[float, tuple[PortfolioLedgerEvent, ...]]:
+    """Spend cash for buy events that never stamped ``cash_debited``.
+
+    One-shot: every pending buy is stamped (paid amount, possibly 0 once cash
+    hits the floor) so a later GET cannot subtract twice. Floors cash at 0.
+    """
+    cash = round(max(0.0, float(cash_balance)), 2)
+    pending = [
+        event
+        for event in events
+        if event.kind == KIND_BUY and event.cash_debited is None and buy_event_spend(event) > 0
+    ]
+    if not pending or cash <= 0:
+        return cash, ()
+    remaining = cash
+    stamped: list[PortfolioLedgerEvent] = []
+    for event in pending:
+        spend = buy_event_spend(event)
+        paid = round(min(spend, remaining), 2)
+        remaining = round(remaining - paid, 2)
+        stamped.append(dataclass_replace(event, cash_debited=paid))
+    return remaining, tuple(stamped)
+
+
 @dataclass(frozen=True)
 class PortfolioLedgerEvent:
     event_id: str
