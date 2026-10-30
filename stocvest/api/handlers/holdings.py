@@ -185,11 +185,7 @@ def holdings_upsert_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                     if paid > 0:
                         store.save_settings(
                             uid,
-                            PortfolioSettings(
-                                cash_balance=round(settings.cash_balance - paid, 2),
-                                target_position_pct=settings.target_position_pct,
-                                benchmark_symbol=settings.benchmark_symbol,
-                            ),
+                            settings.with_cash(settings.cash_balance - paid, revert_backfill=True),
                         )
                     cash_debited = paid
         _record_buy_if_added(uid, previous, holding, stamp=stamp, cash_debited=cash_debited)
@@ -242,7 +238,14 @@ def holdings_settings_put_handler(event: LambdaEvent, context: LambdaContext) ->
         payload = parse_json_body(event)
         if payload.get("userId") is not None or payload.get("user_id") is not None:
             raise ValueError("Do not submit user id; identity is taken from your session.")
-        settings = PortfolioSettings.from_api(payload)
+        incoming = PortfolioSettings.from_api(payload)
+        existing = get_holdings_store().get_settings(request_context.user_id)
+        settings = PortfolioSettings(
+            cash_balance=incoming.cash_balance,
+            target_position_pct=incoming.target_position_pct,
+            benchmark_symbol=incoming.benchmark_symbol,
+            cash_backfill_reverted=existing.cash_backfill_reverted,
+        )
         get_holdings_store().save_settings(request_context.user_id, settings)
         return ok(settings.to_api())
     except (TypeError, ValueError, KeyError) as exc:
@@ -378,12 +381,7 @@ def holdings_sale_handler(event: LambdaEvent, context: LambdaContext) -> dict[st
     if credit_cash:
         settings = store.get_settings(uid)
         store.save_settings(
-            uid,
-            PortfolioSettings(
-                cash_balance=round(settings.cash_balance + proceeds, 2),
-                target_position_pct=settings.target_position_pct,
-                benchmark_symbol=settings.benchmark_symbol,
-            ),
+            uid, settings.with_cash(settings.cash_balance + proceeds, revert_backfill=True)
         )
         cash_credited = proceeds
 

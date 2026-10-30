@@ -123,6 +123,13 @@ def test_settings_round_trip_through_dynamo_item() -> None:
     s = PortfolioSettings(cash_balance=2500.0, target_position_pct=8.0, benchmark_symbol="IWM")
     restored = PortfolioSettings.from_dynamo_item(s.to_dynamo_item())
     assert restored == s
+    flagged = PortfolioSettings(
+        cash_balance=0.0,
+        benchmark_symbol="SPY",
+        cash_backfill_reverted=True,
+    )
+    assert "cashBackfillReverted" not in flagged.to_api()
+    assert PortfolioSettings.from_dynamo_item(flagged.to_dynamo_item()) == flagged
 
 
 @pytest.mark.parametrize(

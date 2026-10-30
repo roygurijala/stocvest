@@ -17,6 +17,7 @@ from stocvest.models.portfolio_advice_ledger import (
     KIND_BUY,
     added_quantity,
     added_cost,
+    buy_cash_debit_refund,
     plan_undebited_buy_cash_backfill,
     collapse_review_episodes,
     follow_through,
@@ -114,6 +115,30 @@ def test_undebited_buy_cash_backfill_spends_once_and_floors() -> None:
     zero, none = plan_undebited_buy_cash_backfill((buy,), 0.0)
     assert zero == 0.0
     assert none == ()
+
+
+def test_buy_cash_debit_refund_sums_stamped_spends() -> None:
+    buy = PortfolioLedgerEvent(
+        event_id="b1",
+        user_id="u1",
+        kind=KIND_BUY,
+        symbol="AAPL",
+        occurred_at="2026-10-01",
+        quantity=10,
+        cost_basis_per_share=182.0,
+        cash_debited=1820.0,
+    )
+    skipped = PortfolioLedgerEvent(
+        event_id="b2",
+        user_id="u1",
+        kind=KIND_BUY,
+        symbol="MSFT",
+        occurred_at="2026-10-02",
+        quantity=5,
+        cost_basis_per_share=400.0,
+        cash_debited=0.0,
+    )
+    assert buy_cash_debit_refund((buy, skipped)) == pytest.approx(1820.0)
 
 
 def test_review_snapshots_skip_same_day_duplicate() -> None:
