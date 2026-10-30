@@ -144,10 +144,74 @@ def test_settings_default_get_then_put_roundtrip() -> None:
 
 
 def test_settings_preserved_across_holdings_writes() -> None:
-    holdings_settings_put_handler(_event("u-h-7", {"cashBalance": 1000}), {})
-    holdings_upsert_handler(_event("u-h-7", _holding_payload("AAPL")), {})
-    got = holdings_settings_get_handler(_event("u-h-7"), {})
-    assert json.loads(got["body"])["cashBalance"] == 1000.0
+    holdings_settings_put_handler(
+        _event("u-h-7", {"cashBalance": 1000, "targetPositionPct": 8, "benchmarkSymbol": "QQQ"}),
+        {},
+    )
+    payload = _holding_payload("AAPL")
+    payload["debitCash"] = False
+    holdings_upsert_handler(_event("u-h-7", payload), {})
+    got = json.loads(holdings_settings_get_handler(_event("u-h-7"), {})["body"])
+    assert got["cashBalance"] == 1000.0
+    assert got["targetPositionPct"] == 8.0
+    assert got["benchmarkSymbol"] == "QQQ"
+
+
+def test_buy_debits_cash_for_added_shares() -> None:
+    holdings_settings_put_handler(_event("u-buy-cash", {"cashBalance": 5000}), {})
+    holdings_upsert_handler(_event("u-buy-cash", _holding_payload("AAPL")), {})  # 10 @ 182
+    cash = json.loads(holdings_settings_get_handler(_event("u-buy-cash"), {})["body"])
+    assert cash["cashBalance"] == pytest.approx(3180.0)
+    ledger = json.loads(holdings_ledger_handler(_event("u-buy-cash"), {})["body"])
+    buys = [e for e in ledger["events"] if e["kind"] == "buy"]
+    assert buys[-1]["cashDebited"] == pytest.approx(1820.0)
+
+    # Same-quantity re-save does not debit again.
+    holdings_upsert_handler(_event("u-buy-cash", _holding_payload("AAPL")), {})
+    cash = json.loads(holdings_settings_get_handler(_event("u-buy-cash"), {})["body"])
+    assert cash["cashBalance"] == pytest.approx(3180.0)
+
+    more = {
+        "symbol": "AAPL",
+        "lots": [
+            _holding_payload("AAPL")["lots"][0],
+            {
+                "lotId": "AAPL-l2",
+                "quantity": 2,
+                "costBasis": 195.0,
+                "purchaseDate": "2026-10-30",
+            },
+        ],
+    }
+    holdings_upsert_handler(_event("u-buy-cash", more), {})
+    cash = json.loads(holdings_settings_get_handler(_event("u-buy-cash"), {})["body"])
+    assert cash["cashBalance"] == pytest.approx(2790.0)
+    ledger = json.loads(holdings_ledger_handler(_event("u-buy-cash"), {})["body"])
+    buys = [e for e in ledger["events"] if e["kind"] == "buy"]
+    assert buys[-1]["cashDebited"] == pytest.approx(390.0)
+    assert buys[-1]["quantity"] == 2
+
+
+def test_buy_debit_floors_cash_at_zero() -> None:
+    holdings_settings_put_handler(_event("u-buy-floor", {"cashBalance": 100}), {})
+    holdings_upsert_handler(_event("u-buy-floor", _holding_payload("AAPL")), {})
+    cash = json.loads(holdings_settings_get_handler(_event("u-buy-floor"), {})["body"])
+    assert cash["cashBalance"] == 0.0
+    ledger = json.loads(holdings_ledger_handler(_event("u-buy-floor"), {})["body"])
+    buys = [e for e in ledger["events"] if e["kind"] == "buy"]
+    assert buys[-1]["cashDebited"] == pytest.approx(100.0)
+
+
+def test_buy_debit_cash_false_leaves_balance() -> None:
+    holdings_settings_put_handler(_event("u-buy-skip", {"cashBalance": 5000}), {})
+    payload = _holding_payload("AAPL")
+    payload["debitCash"] = False
+    holdings_upsert_handler(_event("u-buy-skip", payload), {})
+    cash = json.loads(holdings_settings_get_handler(_event("u-buy-skip"), {})["body"])
+    assert cash["cashBalance"] == 5000.0
+    ledger = json.loads(holdings_ledger_handler(_event("u-buy-skip"), {})["body"])
+    buys = [e for e in ledger["events"] if e["kind"] == "buy"]
+    assert buys[-1]["cashDebited"] is None
 
 
 def test_settings_rejects_bad_target_pct() -> None:

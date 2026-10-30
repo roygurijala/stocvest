@@ -80,6 +80,19 @@ describe("upsertHoldingClient", () => {
     }
   });
 
+  test("forwards debitCash on the PUT body so a buy can spend cash", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ symbol: "ARKQ", totalQuantity: 92, averageCost: 91.86, lots: [] })
+    });
+
+    await upsertHoldingClient({ ...INPUT, debitCash: true });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual({ ...INPUT, debitCash: true });
+  });
+
   test("returns a connection message when the request never reaches the server", async () => {
     fetchMock.mockRejectedValueOnce(new Error("network"));
 

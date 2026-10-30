@@ -34,6 +34,7 @@ function review(partial: Partial<PortfolioLedgerEvent>): PortfolioLedgerEvent {
     realizedPlPct: null,
     remainingQuantity: null,
     cashCredited: null,
+    cashDebited: null,
     adviceAction: "hold",
     adviceGeneratedAt: "2026-08-01T12:00:00Z",
     adviceVerdict: "bullish",

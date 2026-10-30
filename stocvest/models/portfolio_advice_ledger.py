@@ -169,6 +169,19 @@ def added_quantity(previous: PortfolioHolding | None, updated: PortfolioHolding)
     return delta if delta > _QTY_EPS else 0.0
 
 
+def added_cost(previous: PortfolioHolding | None, updated: PortfolioHolding) -> float:
+    """Cost of shares added on an upsert (new symbol or a quantity increase).
+
+    Uses the change in lot total cost, floored at 0, so a same-quantity re-save
+    (notes / cost-basis edit) spends nothing. Rounded to cents to match cash.
+    """
+    if added_quantity(previous, updated) <= 0:
+        return 0.0
+    prev_cost = previous.total_cost if previous is not None else 0.0
+    delta = round(updated.total_cost - prev_cost, 2)
+    return delta if delta > 0 else 0.0
+
+
 @dataclass(frozen=True)
 class PortfolioLedgerEvent:
     event_id: str
@@ -185,6 +198,7 @@ class PortfolioLedgerEvent:
     remaining_quantity: float | None = None
     lot_ids: tuple[str, ...] = field(default_factory=tuple)
     cash_credited: float | None = None
+    cash_debited: float | None = None
 
     advice_action: str | None = None
     advice_generated_at: str | None = None
@@ -220,6 +234,7 @@ class PortfolioLedgerEvent:
             "remainingQuantity": self.remaining_quantity,
             "lotIds": list(self.lot_ids),
             "cashCredited": self.cash_credited,
+            "cashDebited": self.cash_debited,
             "adviceAction": self.advice_action,
             "adviceGeneratedAt": self.advice_generated_at,
             "adviceReviewSource": self.advice_review_source,
@@ -299,6 +314,7 @@ class PortfolioLedgerEvent:
             ),
             lot_ids=lot_ids,
             cash_credited=_opt_float(item.get("cashCredited") or item.get("cash_credited")),
+            cash_debited=_opt_float(item.get("cashDebited") or item.get("cash_debited")),
             advice_action=_opt_str(item.get("adviceAction") or item.get("advice_action")),
             advice_generated_at=_opt_str(
                 item.get("adviceGeneratedAt") or item.get("advice_generated_at")

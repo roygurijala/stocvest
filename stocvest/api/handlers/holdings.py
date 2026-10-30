@@ -31,6 +31,7 @@ from stocvest.models.portfolio_advice_ledger import (
     KIND_BUY,
     KIND_SALE,
     PortfolioLedgerEvent,
+    added_cost,
     added_quantity,
     advice_stamp_from_review_row,
     apply_sale,
@@ -62,6 +63,14 @@ def _symbol_from_event(event: LambdaEvent) -> str | None:
             if rest and not rest.startswith("{") and rest not in ("sync", "settings", "ledger", "pending-splits"):
                 return rest.upper()
     return None
+
+
+def _as_flag(raw: Any, *, default: bool) -> bool:
+    if raw is None:
+        return default
+    if isinstance(raw, str):
+        return raw.strip().lower() not in ("0", "false", "no", "")
+    return bool(raw)
 
 
 def _parse_holding(payload: dict[str, Any]) -> PortfolioHolding:
@@ -111,6 +120,7 @@ def _record_buy_if_added(
     holding: PortfolioHolding,
     *,
     stamp: dict[str, Any] | None = None,
+    cash_debited: float | None = None,
 ) -> None:
     delta = added_quantity(previous, holding)
     if delta <= 0:
@@ -132,6 +142,7 @@ def _record_buy_if_added(
         price_per_share=holding.average_cost,
         cost_basis_per_share=holding.average_cost,
         remaining_quantity=holding.total_quantity,
+        cash_debited=cash_debited,
         **stamp,
     )
     get_portfolio_advice_ledger_store().append(event)
@@ -144,10 +155,12 @@ def holdings_upsert_handler(event: LambdaEvent, context: LambdaContext) -> dict[
         return unauthorized("Authenticated user is required.")
     try:
         payload = parse_json_body(event)
+        debit_cash = _as_flag(payload.get("debitCash", payload.get("debit_cash")), default=True)
         holding = _parse_holding(payload)
         store = get_holdings_store()
+        uid = request_context.user_id
         previous = next(
-            (h for h in store.list_holdings(request_context.user_id) if h.symbol == holding.symbol),
+            (h for h in store.list_holdings(uid) if h.symbol == holding.symbol),
             None,
         )
         if previous is not None and not holding.applied_split_dates:
@@ -157,10 +170,25 @@ def holdings_upsert_handler(event: LambdaEvent, context: LambdaContext) -> dict[
                 applied_split_dates=previous.applied_split_dates,
             )
         # Stamp before upsert — writes wipe reviewCache.
-        row, cached_at = _review_row_for_symbol(request_context.user_id, holding.symbol)
+        row, cached_at = _review_row_for_symbol(uid, holding.symbol)
         stamp = advice_stamp_from_review_row(row, cached_at=cached_at)
-        store.upsert_holding(request_context.user_id, holding)
-        _record_buy_if_added(request_context.user_id, previous, holding, stamp=stamp)
+        store.upsert_holding(uid, holding)
+        cash_debited = None
+        spend = added_cost(previous, holding) if debit_cash else 0.0
+        if spend > 0:
+            settings = store.get_settings(uid)
+            paid = round(min(spend, settings.cash_balance), 2)
+            if paid > 0:
+                store.save_settings(
+                    uid,
+                    PortfolioSettings(
+                        cash_balance=round(settings.cash_balance - paid, 2),
+                        target_position_pct=settings.target_position_pct,
+                        benchmark_symbol=settings.benchmark_symbol,
+                    ),
+                )
+                cash_debited = paid
+        _record_buy_if_added(uid, previous, holding, stamp=stamp, cash_debited=cash_debited)
         return ok(holding.to_api())
     except (TypeError, ValueError, KeyError) as exc:
         return bad_request(f"Invalid holding: {exc}")
@@ -318,9 +346,7 @@ def holdings_sale_handler(event: LambdaEvent, context: LambdaContext) -> dict[st
         if price < 0:
             raise ValueError("salePrice must be >= 0.")
         sold_at = str(payload.get("soldAt") or payload.get("occurredAt") or "").strip()
-        credit_cash = payload.get("creditCash", True)
-        if isinstance(credit_cash, str):
-            credit_cash = credit_cash.strip().lower() not in ("0", "false", "no")
+        credit_cash = _as_flag(payload.get("creditCash", payload.get("credit_cash")), default=True)
     except (TypeError, ValueError, KeyError) as exc:
         return bad_request(f"Invalid sale: {exc}")
 

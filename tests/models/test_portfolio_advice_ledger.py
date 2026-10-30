@@ -15,6 +15,7 @@ from stocvest.models.portfolio_advice_ledger import (
     advice_outcome,
     apply_sale,
     added_quantity,
+    added_cost,
     collapse_review_episodes,
     follow_through,
     ledger_summary,
@@ -76,6 +77,14 @@ def test_added_quantity_detects_new_and_increase() -> None:
     assert added_quantity(None, held) == 10
     assert added_quantity(held, more) == 5
     assert added_quantity(held, held) == 0
+
+
+def test_added_cost_uses_new_lot_spend_not_average() -> None:
+    held = _holding(("a", 10, 20.0, "2024-01-01"))
+    more = _holding(("a", 10, 20.0, "2024-01-01"), ("b", 5, 22.0, "2026-01-01"))
+    assert added_cost(None, held) == 200.0
+    assert added_cost(held, more) == 110.0
+    assert added_cost(held, held) == 0.0
 
 
 def test_review_snapshots_skip_same_day_duplicate() -> None:
