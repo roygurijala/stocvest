@@ -38,6 +38,7 @@ function parseEvent(row: Record<string, unknown>): PortfolioLedgerEvent | null {
     realizedPlPct: num(row.realizedPlPct),
     remainingQuantity: num(row.remainingQuantity),
     cashCredited: num(row.cashCredited),
+    cashDebited: num(row.cashDebited),
     adviceAction: str(row.adviceAction),
     adviceGeneratedAt: str(row.adviceGeneratedAt),
     adviceVerdict: str(row.adviceVerdict),

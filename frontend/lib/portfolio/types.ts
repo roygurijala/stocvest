@@ -35,6 +35,8 @@ export interface PendingHoldingSplit {
 export interface HoldingInput {
   symbol: string;
   lots: HoldingLot[];
+  /** Spend added-share cost from cashBalance. Defaults true on the server. */
+  debitCash?: boolean;
 }
 
 export interface PortfolioSettings {
@@ -65,6 +67,7 @@ export interface PortfolioLedgerEvent {
   realizedPlPct: number | null;
   remainingQuantity: number | null;
   cashCredited: number | null;
+  cashDebited: number | null;
   adviceAction: string | null;
   adviceGeneratedAt: string | null;
   adviceVerdict: string | null;

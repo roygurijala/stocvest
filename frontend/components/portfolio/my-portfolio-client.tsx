@@ -125,6 +125,7 @@ export function MyPortfolioClient() {
   const [salePrice, setSalePrice] = useState("");
   const [saleDate, setSaleDate] = useState("");
   const [saleCreditCash, setSaleCreditCash] = useState(true);
+  const [debitCash, setDebitCash] = useState(true);
   const [saleError, setSaleError] = useState<string | null>(null);
   const [recordingSale, setRecordingSale] = useState(false);
   const [ledger, setLedger] = useState<PortfolioLedgerResponse | null>(null);
@@ -266,7 +267,7 @@ export function MyPortfolioClient() {
       return;
     }
     setSavingHolding(true);
-    const result = await upsertHoldingClient({ symbol, lots });
+    const result = await upsertHoldingClient({ symbol, lots, debitCash });
     setSavingHolding(false);
     if (!result.ok) {
       setFormError(result.message);
@@ -608,7 +609,10 @@ export function MyPortfolioClient() {
             data-testid="add-holding"
             type="button"
             style={btn("primary")}
-            onClick={() => setDraft({ symbol: "", lots: [emptyLotDraft()], existing: false })}
+            onClick={() => {
+              setDebitCash(true);
+              setDraft({ symbol: "", lots: [emptyLotDraft()], existing: false });
+            }}
           >
             + Add holding
           </button>
@@ -665,7 +669,10 @@ export function MyPortfolioClient() {
                         style={{ ...btn("ghost"), marginRight: spacing[2] }}
                         onClick={() => {
                           const h = holdings.find((x) => x.symbol === r.symbol);
-                          if (h) setDraft(draftFromHolding(h));
+                          if (h) {
+                            setDebitCash(true);
+                            setDraft(draftFromHolding(h));
+                          }
                         }}
                       >
                         Edit
@@ -969,6 +976,25 @@ export function MyPortfolioClient() {
           >
             + Add another lot
           </button>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: spacing[2],
+              fontSize: typography.scale.xs,
+              color: colors.text,
+              marginTop: spacing[3]
+            }}
+          >
+            <input
+              data-testid="holding-debit-cash"
+              type="checkbox"
+              checked={debitCash}
+              onChange={(e) => setDebitCash(e.target.checked)}
+            />
+            Pay from cash
+          </label>
 
           {formError ? (
             <div style={{ color: colors.bearish, fontSize: typography.scale.sm, marginTop: spacing[2] }}>
