@@ -245,6 +245,7 @@ def holdings_settings_put_handler(event: LambdaEvent, context: LambdaContext) ->
             target_position_pct=incoming.target_position_pct,
             benchmark_symbol=incoming.benchmark_symbol,
             cash_backfill_reverted=existing.cash_backfill_reverted,
+            cash_tape_rebuilt=existing.cash_tape_rebuilt,
         )
         get_holdings_store().save_settings(request_context.user_id, settings)
         return ok(settings.to_api())

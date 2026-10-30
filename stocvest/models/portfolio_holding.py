@@ -269,6 +269,9 @@ class PortfolioSettings:
     # Internal: the 2026-10-30 GET backfill subtracted every unstamped buy from
     # leftover cash. After we restore that leftover, this flag stops a second pass.
     cash_backfill_reverted: bool = False
+    # Internal: GET rebuilt cash from sale credits minus live pay-from-cash buys
+    # so the stamp-sum restore is not left as leftover.
+    cash_tape_rebuilt: bool = False
 
     def to_api(self) -> dict[str, Any]:
         return {
@@ -281,6 +284,8 @@ class PortfolioSettings:
         item = self.to_api()
         if self.cash_backfill_reverted:
             item["cashBackfillReverted"] = True
+        if self.cash_tape_rebuilt:
+            item["cashTapeRebuilt"] = True
         return _to_decimals(item)
 
     def with_cash(self, cash_balance: float, *, revert_backfill: bool = False) -> PortfolioSettings:
@@ -289,6 +294,7 @@ class PortfolioSettings:
             target_position_pct=self.target_position_pct,
             benchmark_symbol=self.benchmark_symbol,
             cash_backfill_reverted=self.cash_backfill_reverted or revert_backfill,
+            cash_tape_rebuilt=self.cash_tape_rebuilt,
         )
 
     @classmethod
@@ -314,11 +320,13 @@ class PortfolioSettings:
             raise ValueError("benchmarkSymbol must be a plain ticker.")
 
         reverted_raw = raw.get("cashBackfillReverted", raw.get("cash_backfill_reverted"))
+        tape_raw = raw.get("cashTapeRebuilt", raw.get("cash_tape_rebuilt"))
         return cls(
             cash_balance=round(cash, 2),
             target_position_pct=(round(target, 4) if target is not None else None),
             benchmark_symbol=benchmark,
             cash_backfill_reverted=bool(reverted_raw),
+            cash_tape_rebuilt=bool(tape_raw),
         )
 
     @classmethod

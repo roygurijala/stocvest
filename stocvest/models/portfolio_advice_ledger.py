@@ -208,6 +208,45 @@ def buy_cash_debit_refund(events: tuple[PortfolioLedgerEvent, ...]) -> float:
     return round(total, 2)
 
 
+# Debit-on-buy shipped 2026-10-30 (#312). Buys dated before that are seeded lots.
+_DEBIT_ON_BUY_DAY = "2026-10-30"
+
+
+def live_cash_buy_spend(events: tuple[PortfolioLedgerEvent, ...]) -> float:
+    """Pay-from-cash buys after debit-on-buy shipped (not seeded lots)."""
+    total = 0.0
+    for event in events:
+        if event.kind != KIND_BUY:
+            continue
+        paid = event.cash_debited
+        if paid is None or paid <= 0:
+            continue
+        if (event.occurred_at or "") < _DEBIT_ON_BUY_DAY:
+            continue
+        total += float(paid)
+    return round(total, 2)
+
+
+def sale_cash_credits(events: tuple[PortfolioLedgerEvent, ...]) -> float:
+    total = 0.0
+    for event in events:
+        if event.kind != KIND_SALE:
+            continue
+        credited = event.cash_credited
+        if credited is None or credited <= 0:
+            continue
+        total += float(credited)
+    return round(total, 2)
+
+
+def reconstruct_book_cash(events: tuple[PortfolioLedgerEvent, ...]) -> float:
+    """Leftover from the tape: credited sales minus later pay-from-cash buys.
+
+    Seeded lots are already owned and do not spend cash. Floored at 0.
+    """
+    return round(max(0.0, sale_cash_credits(events) - live_cash_buy_spend(events)), 2)
+
+
 def plan_undebited_buy_cash_backfill(
     events: tuple[PortfolioLedgerEvent, ...],
     cash_balance: float,

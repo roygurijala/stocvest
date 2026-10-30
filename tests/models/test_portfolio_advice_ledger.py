@@ -18,7 +18,9 @@ from stocvest.models.portfolio_advice_ledger import (
     added_quantity,
     added_cost,
     buy_cash_debit_refund,
+    live_cash_buy_spend,
     plan_undebited_buy_cash_backfill,
+    reconstruct_book_cash,
     collapse_review_episodes,
     follow_through,
     ledger_summary,
@@ -139,6 +141,42 @@ def test_buy_cash_debit_refund_sums_stamped_spends() -> None:
         cash_debited=0.0,
     )
     assert buy_cash_debit_refund((buy, skipped)) == pytest.approx(1820.0)
+
+
+def test_reconstruct_book_cash_is_sales_minus_live_buys() -> None:
+    seed = PortfolioLedgerEvent(
+        event_id="b1",
+        user_id="u1",
+        kind=KIND_BUY,
+        symbol="AAPL",
+        occurred_at="2026-10-01",
+        quantity=10,
+        cost_basis_per_share=182.0,
+        cash_debited=1820.0,
+    )
+    live = PortfolioLedgerEvent(
+        event_id="b2",
+        user_id="u1",
+        kind=KIND_BUY,
+        symbol="MSFT",
+        occurred_at="2026-10-30",
+        quantity=1,
+        cost_basis_per_share=200.0,
+        cash_debited=200.0,
+    )
+    sale = PortfolioLedgerEvent(
+        event_id="s1",
+        user_id="u1",
+        kind=KIND_SALE,
+        symbol="NVDA",
+        occurred_at="2026-09-01",
+        quantity=2,
+        price_per_share=400.0,
+        cash_credited=800.0,
+    )
+    assert live_cash_buy_spend((seed, live, sale)) == pytest.approx(200.0)
+    assert reconstruct_book_cash((seed, live, sale)) == pytest.approx(600.0)
+    assert reconstruct_book_cash((seed,)) == 0.0
 
 
 def test_review_snapshots_skip_same_day_duplicate() -> None:
