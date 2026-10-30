@@ -266,6 +266,9 @@ class PortfolioSettings:
     cash_balance: float = 0.0
     target_position_pct: float | None = None
     benchmark_symbol: str = DEFAULT_BENCHMARK_SYMBOL
+    # Internal: the 2026-10-30 GET backfill subtracted every unstamped buy from
+    # leftover cash. After we restore that leftover, this flag stops a second pass.
+    cash_backfill_reverted: bool = False
 
     def to_api(self) -> dict[str, Any]:
         return {
@@ -275,7 +278,18 @@ class PortfolioSettings:
         }
 
     def to_dynamo_item(self) -> dict[str, Any]:
-        return _to_decimals(self.to_api())
+        item = self.to_api()
+        if self.cash_backfill_reverted:
+            item["cashBackfillReverted"] = True
+        return _to_decimals(item)
+
+    def with_cash(self, cash_balance: float, *, revert_backfill: bool = False) -> PortfolioSettings:
+        return PortfolioSettings(
+            cash_balance=round(max(0.0, cash_balance), 2),
+            target_position_pct=self.target_position_pct,
+            benchmark_symbol=self.benchmark_symbol,
+            cash_backfill_reverted=self.cash_backfill_reverted or revert_backfill,
+        )
 
     @classmethod
     def from_api(cls, raw: dict[str, Any] | None) -> PortfolioSettings:
@@ -299,10 +313,12 @@ class PortfolioSettings:
         if not benchmark or not benchmark.replace(".", "").isalnum():
             raise ValueError("benchmarkSymbol must be a plain ticker.")
 
+        reverted_raw = raw.get("cashBackfillReverted", raw.get("cash_backfill_reverted"))
         return cls(
             cash_balance=round(cash, 2),
             target_position_pct=(round(target, 4) if target is not None else None),
             benchmark_symbol=benchmark,
+            cash_backfill_reverted=bool(reverted_raw),
         )
 
     @classmethod

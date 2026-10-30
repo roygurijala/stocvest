@@ -204,26 +204,62 @@ def test_buy_debit_floors_cash_at_zero() -> None:
     assert buys[-1]["cashDebited"] == pytest.approx(100.0)
 
 
-def test_settings_get_backfills_undebited_buy_cash_once() -> None:
-    holdings_settings_put_handler(_event("u-backfill", {"cashBalance": 5000}), {})
+def test_settings_get_restores_leftover_cash_drained_by_backfill() -> None:
+    holdings_settings_put_handler(_event("u-backfill", {"cashBalance": 0}), {})
     get_portfolio_advice_ledger_store().append(
         PortfolioLedgerEvent(
-            event_id="b-undebited",
+            event_id="b-drained",
             user_id="u-backfill",
             kind=KIND_BUY,
             symbol="AAPL",
             occurred_at="2026-10-01",
             quantity=10,
             cost_basis_per_share=182.0,
+            cash_debited=1820.0,
         )
     )
     first = json.loads(holdings_settings_get_handler(_event("u-backfill"), {})["body"])
-    assert first["cashBalance"] == pytest.approx(3180.0)
+    assert first["cashBalance"] == pytest.approx(1820.0)
     second = json.loads(holdings_settings_get_handler(_event("u-backfill"), {})["body"])
-    assert second["cashBalance"] == pytest.approx(3180.0)
-    ledger = json.loads(holdings_ledger_handler(_event("u-backfill"), {})["body"])
-    buys = [e for e in ledger["events"] if e["kind"] == "buy"]
-    assert buys[-1]["cashDebited"] == pytest.approx(1820.0)
+    assert second["cashBalance"] == pytest.approx(1820.0)
+
+
+def test_settings_get_does_not_refund_when_cash_still_positive() -> None:
+    holdings_settings_put_handler(_event("u-keep", {"cashBalance": 3180}), {})
+    get_portfolio_advice_ledger_store().append(
+        PortfolioLedgerEvent(
+            event_id="b-live",
+            user_id="u-keep",
+            kind=KIND_BUY,
+            symbol="AAPL",
+            occurred_at="2026-10-30",
+            quantity=10,
+            cost_basis_per_share=182.0,
+            cash_debited=1820.0,
+        )
+    )
+    got = json.loads(holdings_settings_get_handler(_event("u-keep"), {})["body"])
+    assert got["cashBalance"] == pytest.approx(3180.0)
+
+
+def test_settings_put_after_restore_does_not_refund_again() -> None:
+    holdings_settings_put_handler(_event("u-put-flag", {"cashBalance": 0}), {})
+    get_portfolio_advice_ledger_store().append(
+        PortfolioLedgerEvent(
+            event_id="b-flag",
+            user_id="u-put-flag",
+            kind=KIND_BUY,
+            symbol="AAPL",
+            occurred_at="2026-10-01",
+            quantity=10,
+            cost_basis_per_share=182.0,
+            cash_debited=1820.0,
+        )
+    )
+    json.loads(holdings_settings_get_handler(_event("u-put-flag"), {})["body"])
+    holdings_settings_put_handler(_event("u-put-flag", {"cashBalance": 50}), {})
+    got = json.loads(holdings_settings_get_handler(_event("u-put-flag"), {})["body"])
+    assert got["cashBalance"] == pytest.approx(50.0)
 
 
 def test_buy_debit_cash_false_leaves_balance() -> None:

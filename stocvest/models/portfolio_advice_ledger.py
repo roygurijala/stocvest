@@ -195,6 +195,19 @@ def buy_event_spend(event: PortfolioLedgerEvent) -> float:
     return round(qty * px, 2)
 
 
+def buy_cash_debit_refund(events: tuple[PortfolioLedgerEvent, ...]) -> float:
+    """Sum of buy ``cash_debited`` stamps (what the 2026-10-30 backfill took from leftover)."""
+    total = 0.0
+    for event in events:
+        if event.kind != KIND_BUY:
+            continue
+        paid = event.cash_debited
+        if paid is None or paid <= 0:
+            continue
+        total += float(paid)
+    return round(total, 2)
+
+
 def plan_undebited_buy_cash_backfill(
     events: tuple[PortfolioLedgerEvent, ...],
     cash_balance: float,
