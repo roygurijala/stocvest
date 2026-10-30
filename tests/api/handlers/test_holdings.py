@@ -25,7 +25,7 @@ from stocvest.api.services.portfolio_advice_ledger import (
     get_portfolio_advice_ledger_store,
     reset_portfolio_advice_ledger_store_for_tests,
 )
-from stocvest.models.portfolio_advice_ledger import KIND_BUY, PortfolioLedgerEvent
+from stocvest.models.portfolio_advice_ledger import KIND_BUY, KIND_SALE, PortfolioLedgerEvent
 
 pytestmark = pytest.mark.unit
 
@@ -204,12 +204,13 @@ def test_buy_debit_floors_cash_at_zero() -> None:
     assert buys[-1]["cashDebited"] == pytest.approx(100.0)
 
 
-def test_settings_get_restores_leftover_cash_drained_by_backfill() -> None:
-    holdings_settings_put_handler(_event("u-backfill", {"cashBalance": 0}), {})
-    get_portfolio_advice_ledger_store().append(
+def test_settings_get_rebuilds_stamp_sum_into_sale_minus_live_buy() -> None:
+    holdings_settings_put_handler(_event("u-tape", {"cashBalance": 2020}), {})
+    ledger = get_portfolio_advice_ledger_store()
+    ledger.append(
         PortfolioLedgerEvent(
-            event_id="b-drained",
-            user_id="u-backfill",
+            event_id="b-seed",
+            user_id="u-tape",
             kind=KIND_BUY,
             symbol="AAPL",
             occurred_at="2026-10-01",
@@ -218,13 +219,37 @@ def test_settings_get_restores_leftover_cash_drained_by_backfill() -> None:
             cash_debited=1820.0,
         )
     )
-    first = json.loads(holdings_settings_get_handler(_event("u-backfill"), {})["body"])
-    assert first["cashBalance"] == pytest.approx(1820.0)
-    second = json.loads(holdings_settings_get_handler(_event("u-backfill"), {})["body"])
-    assert second["cashBalance"] == pytest.approx(1820.0)
+    ledger.append(
+        PortfolioLedgerEvent(
+            event_id="b-live",
+            user_id="u-tape",
+            kind=KIND_BUY,
+            symbol="MSFT",
+            occurred_at="2026-10-30",
+            quantity=1,
+            cost_basis_per_share=200.0,
+            cash_debited=200.0,
+        )
+    )
+    ledger.append(
+        PortfolioLedgerEvent(
+            event_id="s-credit",
+            user_id="u-tape",
+            kind=KIND_SALE,
+            symbol="NVDA",
+            occurred_at="2026-09-01",
+            quantity=2,
+            price_per_share=400.0,
+            cash_credited=800.0,
+        )
+    )
+    first = json.loads(holdings_settings_get_handler(_event("u-tape"), {})["body"])
+    assert first["cashBalance"] == pytest.approx(600.0)
+    second = json.loads(holdings_settings_get_handler(_event("u-tape"), {})["body"])
+    assert second["cashBalance"] == pytest.approx(600.0)
 
 
-def test_settings_get_does_not_refund_when_cash_still_positive() -> None:
+def test_settings_get_keeps_typed_leftover_that_is_not_the_stamp_sum() -> None:
     holdings_settings_put_handler(_event("u-keep", {"cashBalance": 3180}), {})
     get_portfolio_advice_ledger_store().append(
         PortfolioLedgerEvent(
@@ -242,8 +267,8 @@ def test_settings_get_does_not_refund_when_cash_still_positive() -> None:
     assert got["cashBalance"] == pytest.approx(3180.0)
 
 
-def test_settings_put_after_restore_does_not_refund_again() -> None:
-    holdings_settings_put_handler(_event("u-put-flag", {"cashBalance": 0}), {})
+def test_settings_put_after_tape_rebuild_is_kept() -> None:
+    holdings_settings_put_handler(_event("u-put-flag", {"cashBalance": 1820}), {})
     get_portfolio_advice_ledger_store().append(
         PortfolioLedgerEvent(
             event_id="b-flag",
